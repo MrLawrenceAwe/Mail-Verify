@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const HOST = 'local.yahoo_code_fill';
-let targetTab, busy = false, filling = false, timer, deadline, revision = 0;
+let targetTab, busy = false, filling = false, timer, deadline, revision = 0, renderedCodes;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 async function native(request) {
   let response;
@@ -108,6 +108,9 @@ function scheduleRefresh() {
   if (!filling && Date.now() < deadline) timer = setTimeout(refresh, 8000);
 }
 function render(codes) {
+  const key = JSON.stringify(codes);
+  if (key === renderedCodes) return;
+  renderedCodes = key;
   $('codes').replaceChildren();
   for (const item of codes) {
     const card = document.createElement('article'); card.className = 'card';
@@ -124,7 +127,7 @@ async function refresh() {
   if (busy || filling) return;
   clearTimeout(timer); busy = true; $('refresh').disabled = true; $('disconnect').disabled = true;
   const requestRevision = revision;
-  status('Checking recent Yahoo emails…');
+  status('Checking recent Yahoo emails… This may take up to 25 seconds.');
   try {
     const result = await native({action:'codes'});
     if (!filling && requestRevision === revision) {
@@ -147,7 +150,7 @@ $('connectForm').addEventListener('submit', async event => {
 });
 $('disconnect').addEventListener('click', async () => {
   clearTimeout(timer); deadline = 0; revision++; $('disconnect').disabled = true;
-  try { await native({action:'disconnect'}); $('codes').replaceChildren(); $('mailbox').hidden = true; $('setup').hidden = false; status('Yahoo credentials removed from this Mac’s Keychain.'); }
+  try { await native({action:'disconnect'}); $('codes').replaceChildren(); renderedCodes = undefined; $('mailbox').hidden = true; $('setup').hidden = false; status('Yahoo credentials removed from this Mac’s Keychain.'); }
   catch (error) { status(error.message, true); }
   finally { $('disconnect').disabled = false; }
 });

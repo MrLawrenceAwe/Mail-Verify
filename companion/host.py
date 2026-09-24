@@ -8,6 +8,7 @@ from html.parser import HTMLParser
 import imaplib
 import json
 import re
+import signal
 import socket
 import ssl
 import struct
@@ -17,6 +18,8 @@ import time
 SERVICE = b'local.yahoo_code_fill'
 ACCOUNT = b'mailbox'
 MAX_AGE = 600
+CHECK_TIMEOUT = 25
+FETCH_BATCH = 5
 CODE = r'(?<![\w.+-])\d{4,8}(?!\w|[.-]\d)'
 PURPOSE = r'(?:verification|security|authentication|confirmation|login|sign[ -]?in|one[ -]?time|access)'
 LABEL = r'(?:code|passcode|otp|pin)'
@@ -127,31 +130,60 @@ def connect(credentials):
 
 
 def recent_codes(credentials):
-    with connect(credentials) as conn:
+    conn = connect(credentials)
+    try:
         status, _ = conn.select('INBOX', readonly=True)
         if status != 'OK': raise UserError('Yahoo could not open your inbox.')
         since = time.strftime('%d-%b-%Y', time.gmtime(time.time()-86400))
         status, data = conn.uid('search', None, 'SINCE', since)
         if status != 'OK': raise UserError('Yahoo could not search your inbox.')
-        results = []
-        for uid in reversed(data[0].split()[-30:]):
-            status, metadata = conn.uid('fetch', uid, '(INTERNALDATE RFC822.SIZE)')
-            if status != 'OK': continue
-            header = b' '.join(x for x in metadata if isinstance(x, bytes))
-            date = imaplib.Internaldate2tuple(header)
-            size = re.search(rb'RFC822.SIZE (\d+)', header)
-            if not date or not size or int(size.group(1)) > 1_000_000: continue
+        uids = data[0].split()[-30:]
+        if not uids: return []
+        status, metadata = conn.uid('fetch', b','.join(uids), '(UID INTERNALDATE RFC822.SIZE)')
+        if status != 'OK': raise UserError('Yahoo could not inspect recent messages.')
+        eligible = {}
+        now = time.time()
+        for entry in metadata:
+            if not isinstance(entry, bytes): continue
+            uid = re.search(rb'\bUID (\d+)\b', entry)
+            date = imaplib.Internaldate2tuple(entry)
+            size = re.search(rb'\bRFC822.SIZE (\d+)\b', entry)
+            if not uid or not date or not size or int(size.group(1)) > 1_000_000: continue
             received = time.mktime(date)
-            if not 0 <= time.time()-received <= MAX_AGE: continue
-            status, body = conn.uid('fetch', uid, '(BODY.PEEK[])')
+            if 0 <= now - received <= MAX_AGE: eligible[uid.group(1)] = received
+        candidates = [uid for uid in reversed(uids) if uid in eligible]
+        results = []
+        for start in range(0, len(candidates), FETCH_BATCH):
+            batch = candidates[start:start + FETCH_BATCH]
+            status, body = conn.uid('fetch', b','.join(batch), '(UID BODY.PEEK[])')
             if status != 'OK': continue
-            raw = next((x[1] for x in body if isinstance(x, tuple)), None)
-            found = extract_codes(raw) if raw else None
-            if found:
-                found['receivedAt'] = int(received * 1000)
-                results.append(found)
-            if len(results) == 5: break
+            messages = {}
+            for entry in body:
+                if not isinstance(entry, tuple): continue
+                uid = re.search(rb'\bUID (\d+)\b', entry[0])
+                if uid: messages[uid.group(1)] = entry[1]
+            for uid in batch:
+                found = extract_codes(messages[uid]) if uid in messages else None
+                if found:
+                    found['receivedAt'] = int(eligible[uid] * 1000)
+                    results.append(found)
+                if len(results) == 5: return results
         return results
+    finally:
+        try: conn.shutdown()
+        except OSError: pass
+
+
+def timed_recent_codes(credentials):
+    def timeout(_signum, _frame):
+        raise UserError('Yahoo took too long to respond. Try checking again.')
+    previous = signal.signal(signal.SIGALRM, timeout)
+    signal.setitimer(signal.ITIMER_REAL, CHECK_TIMEOUT)
+    try:
+        return recent_codes(credentials)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def handle(request):
@@ -175,7 +207,7 @@ def handle(request):
     if action == 'codes':
         credentials = keychain('get')
         if not credentials: raise UserError('Connect Yahoo Mail first.')
-        return {'codes': recent_codes(credentials)}
+        return {'codes': timed_recent_codes(credentials)}
     raise UserError('Unsupported request.')
 
 
