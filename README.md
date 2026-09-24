@@ -32,7 +32,7 @@ Closing the popup stops checking. Reopen it or press **Check for a code** to try
 - This first version requires opening the toolbar popup; it does not automatically detect every code field or show a system keyboard suggestion.
 - One Yahoo account. Inbox only, the latest 30 messages from the date search, and codes received within the last 10 minutes. Spam and other folders are excluded.
 - Recognises numeric codes of 4–8 digits when the code is directly labelled by common English phrases such as “Your code is” or “Security code:”. Messages containing multiple candidate codes are omitted. Some formats, languages, and alphanumeric codes are not supported yet.
-- Supports ordinary input fields and common split-digit forms on HTTPS pages when the fields have a code-related label or attribute. Unlabelled fields, embedded cross-origin forms, and unusual custom widgets may not work.
+- Supports ordinary input fields and common split-digit forms on HTTPS pages when the fields have a verification-related label or attribute. A generic “code” label is deliberately insufficient because it may refer to a coupon or other code. Unlabelled fields, embedded cross-origin forms, and unusual custom widgets may not work.
 - Sender and subject are provided for your review. The prototype does not authenticate a sender or automatically establish which website owns a code. It never selects a code for you.
 - Yahoo may restrict app-password generation for some accounts. If Yahoo does not offer one, this connection method cannot be completed for that account.
 - Tested with synthetic email and form cases plus the installed native bridge. A live Yahoo login and a real Chrome extension fill still need account setup and manual validation.
