@@ -22,7 +22,7 @@ If reinstalling or setting up another Mac, first double-click **Install Companio
 
 1. Ask the website to send an email code.
 2. Click its verification-code field, then open **Yahoo Code Fill** from the Chrome toolbar.
-3. The extension checks your Yahoo inbox. While waiting for a code, it checks about every 8 seconds for up to 2 minutes while the popup remains open. A slow Yahoo response may delay a check. Press **Check for a code** to interrupt a slow check and retry.
+3. The extension checks your Yahoo inbox. While waiting for a code, it checks about every 8 seconds for up to 2 minutes while the popup remains open. A slow Yahoo response may delay a check; the next check starts at least 2 seconds after it finishes. Press **Check for a code** to interrupt a slow check and retry.
 4. Review the sender, subject, and destination website. Click **Fill on [website]** for the right email.
 
 Closing the popup stops checking. Reopen it or press **Check for a code** to try again. The extension does not click Submit, although some websites submit automatically when all digits are entered.
@@ -30,7 +30,7 @@ Closing the popup stops checking. Reopen it or press **Check for a code** to try
 ## Current limits
 
 - This first version requires opening the toolbar popup; it does not automatically detect every code field or show a system keyboard suggestion.
-- One Yahoo account. Inbox only, the latest 30 messages from the date search, and codes received within the last 10 minutes. Spam and other folders are excluded.
+- One Yahoo account. Inbox only, the latest 30 messages on the first check, and codes received within the last 10 minutes. Spam and other folders are excluded.
 - Recognises numeric codes of 4–8 digits when the code is directly labelled by common English phrases such as “Your code is” or “Security code:”. Messages containing multiple candidate codes are omitted. Some formats, languages, and alphanumeric codes are not supported yet.
 - Supports ordinary input fields and common split-digit forms on HTTPS pages when the fields have a verification-related label or attribute. A generic “code” label is deliberately insufficient because it may refer to a coupon or other code. Unlabelled fields, embedded cross-origin forms, and unusual custom widgets may not work.
 - Sender and subject are provided for your review. The prototype does not authenticate a sender or automatically establish which website owns a code. It never selects a code for you.

@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const HOST = 'local.yahoo_code_fill';
 let targetTab, busy = false, filling = false, disconnecting = false, timer, deadline, revision = 0, renderedCodes;
-let mailPort, pendingCodes;
+let mailPort, pendingRequest;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 async function native(request) {
   let response;
@@ -20,9 +20,9 @@ function closeMailPort() {
   const port = mailPort;
   mailPort = undefined;
   if (port) port.disconnect();
-  if (pendingCodes) {
-    pendingCodes.reject(new Error('Check interrupted.'));
-    pendingCodes = undefined;
+  if (pendingRequest) {
+    pendingRequest.reject(new Error('Check interrupted.'));
+    pendingRequest = undefined;
   }
 }
 function abortCheck() {
@@ -30,34 +30,38 @@ function abortCheck() {
   busy = false;
   closeMailPort();
 }
-function getCodes() {
+function mailRequest(action) {
   if (!mailPort) {
     try { mailPort = chrome.runtime.connectNative(HOST); }
     catch { throw new Error('Mac companion unavailable. Run the companion installer, then reopen this popup.'); }
     const port = mailPort;
     port.onMessage.addListener(response => {
       if (mailPort !== port) return;
-      const pending = pendingCodes;
-      pendingCodes = undefined;
+      const pending = pendingRequest;
+      pendingRequest = undefined;
       if (!pending) return;
-      if (response?.ok) pending.resolve(response.codes);
+      if (response?.ok) pending.resolve(response);
       else pending.reject(new Error(response?.error || 'Unexpected companion response.'));
     });
     port.onDisconnect.addListener(() => {
       if (mailPort !== port) return;
       mailPort = undefined;
-      if (pendingCodes) {
-        pendingCodes.reject(new Error('Mac companion disconnected. Try checking again.'));
-        pendingCodes = undefined;
+      if (pendingRequest) {
+        const message = pendingRequest.action === 'status'
+          ? 'Mac companion unavailable. Run the companion installer, then reopen this popup.'
+          : 'Mac companion disconnected. Try checking again.';
+        pendingRequest.reject(new Error(message));
+        pendingRequest = undefined;
       }
     });
   }
   return new Promise((resolve, reject) => {
-    pendingCodes = {resolve, reject};
-    try { mailPort.postMessage({action:'codes'}); }
+    pendingRequest = {action, resolve, reject};
+    try { mailPort.postMessage({action}); }
     catch { closeMailPort(); }
   });
 }
+async function getCodes() { return (await mailRequest('codes')).codes; }
 function fillCode(code) {
   // Executed only after a user click, in the top frame of the selected HTTPS tab.
   const visible = el => {
@@ -191,7 +195,7 @@ async function refresh() {
       busy = false;
       $('refresh').disabled = filling || disconnecting;
       $('disconnect').disabled = filling || disconnecting;
-      scheduleRefresh(failed ? 8000 : Math.max(0, 8000 - (Date.now() - startedAt)));
+      scheduleRefresh(failed ? 8000 : Math.max(2000, 8000 - (Date.now() - startedAt)));
     }
   }
 }
@@ -220,7 +224,7 @@ $('disconnect').addEventListener('click', async () => {
   if (tab?.url?.startsWith('https://')) targetTab = tab;
   $('destination').textContent = targetTab ? new URL(targetTab.url).hostname : 'an HTTPS sign-in page';
   try {
-    const result = await native({action:'status'});
+    const result = await mailRequest('status');
     if (result.email) connected(result.email);
     else { $('setup').hidden = false; status('Connect once. No Yahoo tab needed.'); }
   } catch (error) { $('missing').hidden = true; status(error.message, true); $('missing').hidden = false; }

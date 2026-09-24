@@ -65,7 +65,7 @@ function checkUnchangedCards() {
 }
 async function checkPortReuseAndInterruption() {
   const ports=[];
-  const context={HOST:'local.yahoo_code_fill', mailPort:undefined, pendingCodes:undefined, revision:0, busy:true,
+  const context={HOST:'local.yahoo_code_fill', mailPort:undefined, pendingRequest:undefined, revision:0, busy:true,
     chrome:{runtime:{connectNative:()=>{
       const port={messages:[], onMessage:{addListener(fn){port.message=fn}}, onDisconnect:{addListener(fn){port.disconnected=fn}},
         postMessage(message){port.messages.push(message)}, disconnect(){port.disconnected()}};
@@ -74,7 +74,13 @@ async function checkPortReuseAndInterruption() {
   };
   vm.createContext(context);
   vm.runInContext(portSource,context);
+  const status=context.mailRequest('status');
+  assert.equal(ports[0].messages[0].action,'status');
+  ports[0].message({ok:true,email:'test@yahoo.com'});
+  assert.equal((await status).email,'test@yahoo.com');
   const first=context.getCodes();
+  assert.equal(ports.length,1,'startup and checks should reuse one native host');
+  assert.equal(ports[0].messages[1].action,'codes');
   ports[0].message({ok:true,codes:[{code:'123456'}]});
   assert.equal((await first)[0].code,'123456');
   const second=context.getCodes();
@@ -108,7 +114,7 @@ async function checkManualRetry() {
   assert.equal(controls.disconnect.disabled,false);
 }
 async function checkPollTiming() {
-  for (const [duration, expected] of [[3000,5000],[10000,0]]) {
+  for (const [duration, expected] of [[3000,5000],[10000,2000]]) {
     let now=1000, delay;
     const controls={refresh:{disabled:false},disconnect:{disabled:false}};
     const context={busy:false,filling:false,disconnecting:false,revision:0,timer:null,deadline:121000,
@@ -117,7 +123,7 @@ async function checkPollTiming() {
     vm.createContext(context);
     vm.runInContext(refreshSource,context);
     await context.refresh();
-    assert.equal(delay,expected,'next check should be scheduled from the previous start');
+    assert.equal(delay,expected,'slow checks should leave a short pause before polling again');
   }
 }
 (async()=>{

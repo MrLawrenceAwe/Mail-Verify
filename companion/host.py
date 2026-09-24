@@ -134,11 +134,13 @@ class MailSession:
         self.credentials = credentials
         self.conn = None
         self.last_uid = None
+        self.mailbox_count = 0
         self.codes = {}
 
     def close(self):
         conn, self.conn = self.conn, None
         self.last_uid = None
+        self.mailbox_count = 0
         self.codes.clear()
         if conn:
             try: conn.shutdown()
@@ -148,26 +150,36 @@ class MailSession:
         try:
             if self.conn is None:
                 self.conn = connect(self.credentials)
-                status, _ = self.conn.select('INBOX', readonly=True)
+                status, count = self.conn.select('INBOX', readonly=True)
                 if status != 'OK': raise UserError('Yahoo could not open your inbox.')
-            if self.last_uid is None:
-                since = time.strftime('%d-%b-%Y', time.gmtime(time.time()-86400))
-                status, data = self.conn.uid('search', None, 'SINCE', since)
-            else:
-                status, data = self.conn.uid('search', None, 'UID', f'{self.last_uid + 1}:*')
-            if status != 'OK': raise UserError('Yahoo could not search your inbox.')
-            all_uids = data[0].split()
-            # UID ranges ending in * can return the previous last UID when no new mail exists.
-            if self.last_uid is not None:
-                all_uids = [uid for uid in all_uids if int(uid) > self.last_uid]
-            uids = all_uids[-30:]
-            if all_uids: self.last_uid = int(all_uids[-1])
+                self.mailbox_count = int(count[0])
             now = time.time()
             self.codes = {uid: item for uid, item in self.codes.items()
                           if 0 <= now - item['receivedAt'] / 1000 <= MAX_AGE}
+            if self.last_uid is None:
+                # Sequence numbers let the server return only the newest 30
+                # messages instead of every UID received during the past day.
+                if not self.mailbox_count:
+                    self.last_uid = 0
+                    return self._results()
+                first = max(1, self.mailbox_count - 29)
+                status, metadata = self.conn.fetch(f'{first}:{self.mailbox_count}', '(UID INTERNALDATE RFC822.SIZE)')
+                if status != 'OK': raise UserError('Yahoo could not inspect recent messages.')
+                uids = [match.group(1) for entry in metadata if isinstance(entry, bytes)
+                        if (match := re.search(rb'\bUID (\d+)\b', entry))]
+                self.last_uid = max(map(int, uids), default=0)
+            else:
+                status, data = self.conn.uid('search', None, 'UID', f'{self.last_uid + 1}:*')
+                if status != 'OK': raise UserError('Yahoo could not search your inbox.')
+                all_uids = data[0].split()
+                # UID ranges ending in * can return the previous last UID when no new mail exists.
+                all_uids = [uid for uid in all_uids if int(uid) > self.last_uid]
+                uids = all_uids[-30:]
+                if all_uids: self.last_uid = int(all_uids[-1])
+                if uids:
+                    status, metadata = self.conn.uid('fetch', b','.join(uids), '(UID INTERNALDATE RFC822.SIZE)')
+                    if status != 'OK': raise UserError('Yahoo could not inspect recent messages.')
             if not uids: return self._results()
-            status, metadata = self.conn.uid('fetch', b','.join(uids), '(UID INTERNALDATE RFC822.SIZE)')
-            if status != 'OK': raise UserError('Yahoo could not inspect recent messages.')
             eligible = {}
             for entry in metadata:
                 if not isinstance(entry, bytes): continue

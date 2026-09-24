@@ -68,12 +68,17 @@ class ExtractionTests(unittest.TestCase):
 
     def test_recent_codes_batches_fetches_and_keeps_newest_first(self):
         class FakeConnection:
-            def __init__(self): self.fetches=[]; self.searches=[]; self.closed=False; self.count=12
-            def select(self, *_args, **_kwargs): return 'OK', []
+            def __init__(self): self.fetches=[]; self.searches=[]; self.sequence_fetches=[]; self.closed=False; self.count=12
+            def select(self, *_args, **_kwargs): return 'OK', [str(self.count).encode()]
+            def fetch(self, sequence, _parts):
+                self.sequence_fetches.append(sequence)
+                first, last = map(int, sequence.split(':'))
+                date = host.imaplib.Time2Internaldate(time.time()-60).encode()
+                return 'OK', [b'1 (UID '+str(uid).encode()+b' INTERNALDATE '+date+b' RFC822.SIZE 100)' for uid in range(first, last+1)]
             def uid(self, command, *args):
                 if command == 'search':
                     self.searches.append(args)
-                    ids = range(1, self.count + 1) if args[1] == 'SINCE' else range(min(int(args[2].split(':')[0]), self.count), self.count + 1)
+                    ids = range(min(int(args[2].split(':')[0]), self.count), self.count + 1)
                     return 'OK', [b' '.join(str(i).encode() for i in ids)]
                 self.fetches.append(args)
                 uids = args[0].split(b',')
@@ -90,18 +95,34 @@ class ExtractionTests(unittest.TestCase):
             session=host.MailSession({'email':'test@yahoo.com','password':'unused'})
             codes=session.recent_codes()
             self.assertEqual(session.recent_codes(),codes)
-            self.assertEqual(len(conn.fetches),2,'unchanged mail should not be fetched again')
+            self.assertEqual(len(conn.fetches),1,'unchanged mail should not be fetched again')
             conn.count=13
             self.assertEqual(session.recent_codes()[0]['code'],'100013')
+            self.assertEqual(conn.fetches[1][0],b'13')
             self.assertEqual(conn.fetches[2][0],b'13')
-            self.assertEqual(conn.fetches[3][0],b'13')
             session.close()
         self.assertEqual([item['code'] for item in codes],['100012','100011','100010','100009','100008'])
-        self.assertEqual(len(conn.fetches),4)
-        self.assertEqual(conn.fetches[0][0],b'1,2,3,4,5,6,7,8,9,10,11,12')
-        self.assertEqual(conn.fetches[1][0],b'12,11,10,9,8')
-        self.assertEqual(conn.searches[1],(None,'UID','13:*'))
+        self.assertEqual(len(conn.fetches),3)
+        self.assertEqual(conn.sequence_fetches,['1:12'])
+        self.assertEqual(conn.fetches[0][0],b'12,11,10,9,8')
+        self.assertEqual(conn.searches[0],(None,'UID','13:*'))
         self.assertTrue(conn.closed)
+
+    def test_initial_scan_is_bounded_to_newest_30_messages(self):
+        class FakeConnection:
+            def select(self, *_args, **_kwargs): return 'OK', [b'10000']
+            def fetch(self, sequence, _parts):
+                self.sequence = sequence
+                date = host.imaplib.Time2Internaldate(time.time()-3600).encode()
+                return 'OK', [b'1 (UID '+str(uid).encode()+b' INTERNALDATE '+date+b' RFC822.SIZE 100)' for uid in range(9971,10001)]
+            def uid(self, *_args): raise AssertionError('No UID search or body fetch is needed for old mail')
+            def shutdown(self): pass
+        conn=FakeConnection()
+        with patch.object(host,'connect',return_value=conn):
+            session=host.MailSession({'email':'test@yahoo.com','password':'unused'})
+            self.assertEqual(session.recent_codes(),[])
+        self.assertEqual(conn.sequence,'9971:10000')
+        self.assertEqual(session.last_uid,10000)
 
     def test_whole_check_times_out(self):
         with patch.object(host,'CHECK_TIMEOUT',0.01), patch.object(host.MailSession,'recent_codes',side_effect=lambda: time.sleep(0.2)):
