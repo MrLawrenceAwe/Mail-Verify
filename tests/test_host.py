@@ -63,15 +63,18 @@ class ExtractionTests(unittest.TestCase):
         with self.assertRaises(ValueError):host.read_message(io.BytesIO(struct.pack('=I',10)+b'{}'))
     def test_configure_does_not_store_failed_login(self):
         with patch.object(host,'connect',side_effect=host.imaplib.IMAP4.error()), patch.object(host,'keychain') as keychain:
-            with self.assertRaises(host.imaplib.IMAP4.error):host.handle({'action':'configure','email':'test@yahoo.com','password':'abcdefghijklmnop'})
+            with self.assertRaises(host.imaplib.IMAP4.error):host.handle({'action':'configure','email':'test@yahoo.com','password':'abcdefghijklmnop'},host.MailSession(None))
             keychain.assert_not_called()
 
     def test_recent_codes_batches_fetches_and_keeps_newest_first(self):
         class FakeConnection:
-            def __init__(self): self.fetches=[]; self.closed=False
+            def __init__(self): self.fetches=[]; self.searches=[]; self.closed=False; self.count=12
             def select(self, *_args, **_kwargs): return 'OK', []
             def uid(self, command, *args):
-                if command == 'search': return 'OK', [b' '.join(str(i).encode() for i in range(1, 13))]
+                if command == 'search':
+                    self.searches.append(args)
+                    ids = range(1, self.count + 1) if args[1] == 'SINCE' else range(min(int(args[2].split(':')[0]), self.count), self.count + 1)
+                    return 'OK', [b' '.join(str(i).encode() for i in ids)]
                 self.fetches.append(args)
                 uids = args[0].split(b',')
                 if 'INTERNALDATE' in args[1]:
@@ -84,16 +87,25 @@ class ExtractionTests(unittest.TestCase):
             return self.message('Your verification code is '+str(int(uid)+100000)+'.')
         conn=FakeConnection()
         with patch.object(host,'connect',return_value=conn):
-            codes=host.recent_codes({'email':'test@yahoo.com','password':'unused'})
+            session=host.MailSession({'email':'test@yahoo.com','password':'unused'})
+            codes=session.recent_codes()
+            self.assertEqual(session.recent_codes(),codes)
+            self.assertEqual(len(conn.fetches),2,'unchanged mail should not be fetched again')
+            conn.count=13
+            self.assertEqual(session.recent_codes()[0]['code'],'100013')
+            self.assertEqual(conn.fetches[2][0],b'13')
+            self.assertEqual(conn.fetches[3][0],b'13')
+            session.close()
         self.assertEqual([item['code'] for item in codes],['100012','100011','100010','100009','100008'])
-        self.assertEqual(len(conn.fetches),2)
+        self.assertEqual(len(conn.fetches),4)
         self.assertEqual(conn.fetches[0][0],b'1,2,3,4,5,6,7,8,9,10,11,12')
         self.assertEqual(conn.fetches[1][0],b'12,11,10,9,8')
+        self.assertEqual(conn.searches[1],(None,'UID','13:*'))
         self.assertTrue(conn.closed)
 
     def test_whole_check_times_out(self):
-        with patch.object(host,'CHECK_TIMEOUT',0.01), patch.object(host,'recent_codes',side_effect=lambda _credentials: time.sleep(0.2)):
+        with patch.object(host,'CHECK_TIMEOUT',0.01), patch.object(host.MailSession,'recent_codes',side_effect=lambda: time.sleep(0.2)):
             with self.assertRaisesRegex(host.UserError,'too long'):
-                host.timed_recent_codes({})
+                host.timed_check(host.MailSession({}))
 
 if __name__=='__main__': unittest.main()

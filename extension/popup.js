@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 const HOST = 'local.yahoo_code_fill';
-let targetTab, busy = false, filling = false, timer, deadline, revision = 0, renderedCodes;
+let targetTab, busy = false, filling = false, disconnecting = false, timer, deadline, revision = 0, renderedCodes;
+let mailPort, pendingCodes;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 async function native(request) {
   let response;
@@ -14,6 +15,48 @@ function connected(email) {
   $('account').textContent = email;
   deadline = Date.now() + 120000;
   refresh();
+}
+function closeMailPort() {
+  const port = mailPort;
+  mailPort = undefined;
+  if (port) port.disconnect();
+  if (pendingCodes) {
+    pendingCodes.reject(new Error('Check interrupted.'));
+    pendingCodes = undefined;
+  }
+}
+function abortCheck() {
+  revision++;
+  busy = false;
+  closeMailPort();
+}
+function getCodes() {
+  if (!mailPort) {
+    try { mailPort = chrome.runtime.connectNative(HOST); }
+    catch { throw new Error('Mac companion unavailable. Run the companion installer, then reopen this popup.'); }
+    const port = mailPort;
+    port.onMessage.addListener(response => {
+      if (mailPort !== port) return;
+      const pending = pendingCodes;
+      pendingCodes = undefined;
+      if (!pending) return;
+      if (response?.ok) pending.resolve(response.codes);
+      else pending.reject(new Error(response?.error || 'Unexpected companion response.'));
+    });
+    port.onDisconnect.addListener(() => {
+      if (mailPort !== port) return;
+      mailPort = undefined;
+      if (pendingCodes) {
+        pendingCodes.reject(new Error('Mac companion disconnected. Try checking again.'));
+        pendingCodes = undefined;
+      }
+    });
+  }
+  return new Promise((resolve, reject) => {
+    pendingCodes = {resolve, reject};
+    try { mailPort.postMessage({action:'codes'}); }
+    catch { closeMailPort(); }
+  });
 }
 function fillCode(code) {
   // Executed only after a user click, in the top frame of the selected HTTPS tab.
@@ -76,7 +119,7 @@ function fillCode(code) {
 async function fill(item, button) {
   if (filling) return;
   filling = true;
-  revision++;
+  abortCheck();
   clearTimeout(timer);
   $('refresh').disabled = true;
   $('disconnect').disabled = true;
@@ -90,6 +133,7 @@ async function fill(item, button) {
     const [{result}] = await chrome.scripting.executeScript({target:{tabId:targetTab.id}, func:fillCode, args:[item.code]});
     if (!result?.ok) throw new Error(result?.error || 'Could not fill this page.');
     deadline = 0;
+    closeMailPort();
     status('Code filled. The website may continue automatically.');
     button.textContent = 'Filled';
   } catch (error) {
@@ -103,9 +147,10 @@ async function fill(item, button) {
     scheduleRefresh();
   }
 }
-function scheduleRefresh() {
+function scheduleRefresh(delay = 8000) {
   clearTimeout(timer);
-  if (!filling && Date.now() < deadline) timer = setTimeout(refresh, 8000);
+  if (!filling && !disconnecting && Date.now() < deadline) timer = setTimeout(refresh, delay);
+  else if (Date.now() >= deadline) closeMailPort();
 }
 function render(codes) {
   const key = JSON.stringify(codes);
@@ -124,20 +169,30 @@ function render(codes) {
   }
 }
 async function refresh() {
-  if (busy || filling) return;
-  clearTimeout(timer); busy = true; $('refresh').disabled = true; $('disconnect').disabled = true;
-  const requestRevision = revision;
+  if (filling || disconnecting) return;
+  if (busy) abortCheck();
+  clearTimeout(timer); busy = true;
+  const requestRevision = ++revision;
+  const startedAt = Date.now();
+  let failed = false;
   status('Checking recent Yahoo emails… This may take up to 25 seconds.');
   try {
-    const result = await native({action:'codes'});
+    const codes = await getCodes();
     if (!filling && requestRevision === revision) {
-      render(result.codes);
-      status(result.codes.length ? 'Choose the code for this website. Checking for newer codes…' : 'No recent code yet. Request one on the website; keep this popup open.');
+      render(codes);
+      status(codes.length ? 'Choose the code for this website. Checking for newer codes…' : 'No recent code yet. Request one on the website; keep this popup open.');
     }
-  } catch (error) { if (!filling && requestRevision === revision) status(error.message, true); }
+  } catch (error) {
+    failed = true;
+    if (!filling && requestRevision === revision) status(error.message, true);
+  }
   finally {
-    busy = false; $('refresh').disabled = filling; $('disconnect').disabled = filling;
-    scheduleRefresh();
+    if (requestRevision === revision) {
+      busy = false;
+      $('refresh').disabled = filling || disconnecting;
+      $('disconnect').disabled = filling || disconnecting;
+      scheduleRefresh(failed ? 8000 : Math.max(0, 8000 - (Date.now() - startedAt)));
+    }
   }
 }
 $('refresh').addEventListener('click', () => { deadline = Date.now()+120000; refresh(); });
@@ -149,10 +204,15 @@ $('connectForm').addEventListener('submit', async event => {
   finally { $('connect').disabled = false; }
 });
 $('disconnect').addEventListener('click', async () => {
-  clearTimeout(timer); deadline = 0; revision++; $('disconnect').disabled = true;
+  clearTimeout(timer); deadline = 0; disconnecting = true; abortCheck();
+  $('refresh').disabled = true; $('disconnect').disabled = true;
   try { await native({action:'disconnect'}); $('codes').replaceChildren(); renderedCodes = undefined; $('mailbox').hidden = true; $('setup').hidden = false; status('Yahoo credentials removed from this Mac’s Keychain.'); }
-  catch (error) { status(error.message, true); }
-  finally { $('disconnect').disabled = false; }
+  catch (error) { status(error.message, true); deadline = Date.now() + 120000; }
+  finally {
+    disconnecting = false;
+    $('refresh').disabled = false; $('disconnect').disabled = false;
+    if (deadline) scheduleRefresh();
+  }
 });
 (async () => {
   $('extensionId').value = chrome.runtime.id;
