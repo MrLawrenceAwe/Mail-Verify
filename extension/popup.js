@@ -25,8 +25,8 @@ function fillCode(code) {
   };
   const readInputs = () => [...document.querySelectorAll('input')].filter(visible);
   const inputs = readInputs();
-  const hint = el => [el.autocomplete, el.name, el.id, el.placeholder, el.getAttribute('aria-label'), ...[...(el.labels || [])].map(l => l.textContent)].join(' ');
-  const otp = el => /one-time-code|verification|security.?code|passcode|otp|auth.?code|confirmation.?code/i.test(hint(el));
+  const hints = el => [el.autocomplete, el.name, el.id, el.placeholder, el.getAttribute('aria-label'), ...[...(el.labels || [])].map(l => l.textContent)];
+  const otp = el => hints(el).some(value => /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|code)(?:$|[^\w])/i.test(value || ''));
   const eligible = el => ['text', 'tel', 'number', 'password', ''].includes(el.type);
   const focused = document.activeElement;
   const candidates = inputs.filter(el => eligible(el) && otp(el));

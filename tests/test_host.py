@@ -23,6 +23,14 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(host.extract_codes(self.message('Use 123456 to sign in.',subject='Welcome'))['code'],'123456')
     def test_html(self):
         self.assertEqual(host.extract_codes(self.message('<p>Your security code is</p><b>123456</b>',subtype='html'))['code'],'123456')
+    def test_html_code_split_across_spans(self):
+        self.assertEqual(host.extract_codes(self.message('<p>Your verification code is <span>123</span><span>456</span></p>',subtype='html'))['code'],'123456')
+        self.assertEqual(host.extract_codes(self.message('<span>Your verification code is</span><span>123456</span>',subtype='html'))['code'],'123456')
+    def test_hidden_html_code_ignored(self):
+        for hidden in ('style="display:none"', 'style="visibility: hidden"', 'hidden', 'aria-hidden="true"'):
+            with self.subTest(hidden=hidden):
+                body=f'<div {hidden}><p>Your code is 111111</p></div><p>Your code is 222222</p>'
+                self.assertEqual(host.extract_codes(self.message(body,subtype='html'))['code'],'222222')
     def test_ambiguous(self):
         self.assertIsNone(host.extract_codes(self.message('Your verification code is 123456 or 654321')))
     def test_parenthesized_alternative_is_ambiguous(self):
