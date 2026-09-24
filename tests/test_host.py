@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import struct
 import sys
+import time
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'companion'))
@@ -64,5 +65,35 @@ class ExtractionTests(unittest.TestCase):
         with patch.object(host,'connect',side_effect=host.imaplib.IMAP4.error()), patch.object(host,'keychain') as keychain:
             with self.assertRaises(host.imaplib.IMAP4.error):host.handle({'action':'configure','email':'test@yahoo.com','password':'abcdefghijklmnop'})
             keychain.assert_not_called()
+
+    def test_recent_codes_batches_fetches_and_keeps_newest_first(self):
+        class FakeConnection:
+            def __init__(self): self.fetches=[]; self.closed=False
+            def select(self, *_args, **_kwargs): return 'OK', []
+            def uid(self, command, *args):
+                if command == 'search': return 'OK', [b' '.join(str(i).encode() for i in range(1, 13))]
+                self.fetches.append(args)
+                uids = args[0].split(b',')
+                if 'INTERNALDATE' in args[1]:
+                    date = host.imaplib.Time2Internaldate(time.time()-60).encode()
+                    return 'OK', [b'1 (UID '+uid+b' INTERNALDATE '+date+b' RFC822.SIZE 100)' for uid in uids]
+                return 'OK', [(b'1 (UID '+uid+b' BODY[] {80}',
+                               self_message(uid)) for uid in uids]
+            def shutdown(self): self.closed=True
+        def self_message(uid):
+            return self.message('Your verification code is '+str(int(uid)+100000)+'.')
+        conn=FakeConnection()
+        with patch.object(host,'connect',return_value=conn):
+            codes=host.recent_codes({'email':'test@yahoo.com','password':'unused'})
+        self.assertEqual([item['code'] for item in codes],['100012','100011','100010','100009','100008'])
+        self.assertEqual(len(conn.fetches),2)
+        self.assertEqual(conn.fetches[0][0],b'1,2,3,4,5,6,7,8,9,10,11,12')
+        self.assertEqual(conn.fetches[1][0],b'12,11,10,9,8')
+        self.assertTrue(conn.closed)
+
+    def test_whole_check_times_out(self):
+        with patch.object(host,'CHECK_TIMEOUT',0.01), patch.object(host,'recent_codes',side_effect=lambda _credentials: time.sleep(0.2)):
+            with self.assertRaisesRegex(host.UserError,'too long'):
+                host.timed_recent_codes({})
 
 if __name__=='__main__': unittest.main()

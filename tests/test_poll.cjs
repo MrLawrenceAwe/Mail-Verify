@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../extension/popup.js'), 'utf8');
 const fillSource = source.slice(source.indexOf('async function fill('), source.indexOf('function render('));
+const renderSource = source.slice(source.indexOf('function render('), source.indexOf('async function refresh('));
 const refreshSource = source.slice(source.indexOf('async function refresh('), source.indexOf("$('refresh').addEventListener"));
 async function check(codes, timeLeft, failure=false) {
   const controls = {refresh:{disabled:false}, disconnect:{disabled:false}};
@@ -46,6 +47,20 @@ async function checkFillDuringRefresh(fail=false) {
   assert.equal(scheduled.size,fail ? 1 : 0,'polling should resume only after a failed fill');
   assert.equal(button.disabled,fail ? false : true);
 }
+function checkUnchangedCards() {
+  let replacements = 0;
+  const codesNode = {replaceChildren(){replacements++}, append(){}};
+  const document = {createElement:()=>({append(){},addEventListener(){},className:'',textContent:''})};
+  const context = {renderedCodes:undefined, targetTab:null, document, $:id=>id==='codes'?codesNode:null, JSON};
+  vm.createContext(context);
+  vm.runInContext(renderSource,context);
+  const codes = [{code:'123456',sender:'sender@example.com',subject:'Sign in',receivedAt:1}];
+  context.render(codes);
+  context.render([{...codes[0]}]);
+  assert.equal(replacements,1,'unchanged results should retain existing cards and focus');
+  context.render([{...codes[0],code:'654321'}]);
+  assert.equal(replacements,2,'new results should update the cards');
+}
 (async()=>{
   assert.equal((await check([{code:'111111'}],120000)).length,1,'an older visible code must not stop polling');
   assert.equal((await check([],120000)).length,1,'poll when no code is visible');
@@ -53,5 +68,6 @@ async function checkFillDuringRefresh(fail=false) {
   assert.equal((await check([],120000,true)).length,1,'retry after a temporary mail error');
   await checkFillDuringRefresh();
   await checkFillDuringRefresh(true);
-  console.log('6 polling and fill-race cases passed.');
+  checkUnchangedCards();
+  console.log('7 polling, fill-race, and card-update cases passed.');
 })().catch(error=>{console.error(error);process.exitCode=1});
