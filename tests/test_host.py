@@ -25,6 +25,9 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(host.extract_codes(self.message('<p>Your security code is</p><b>123456</b>',subtype='html'))['code'],'123456')
     def test_ambiguous(self):
         self.assertIsNone(host.extract_codes(self.message('Your verification code is 123456 or 654321')))
+    def test_parenthesized_alternative_is_ambiguous(self):
+        self.assertIsNone(host.extract_codes(self.message('Your verification code is 123456 (or 654321).')))
+        self.assertIsNone(host.extract_codes(self.message('Your verification code is 123456, or 654321.')))
     def test_ordinary_numbers(self):
         self.assertIsNone(host.extract_codes(self.message('Order 482913 has shipped.',subject='Receipt')))
     def test_sign_in_subject_does_not_label_order_number(self):

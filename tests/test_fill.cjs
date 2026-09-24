@@ -21,7 +21,9 @@ function run(inputs, activeElement=null) {
 }
 let a=new Input({autocomplete:'one-time-code'});
 assert.equal(run([a]).ok,true);assert.equal(a.value,'123456');assert.deepEqual(a.events,['input','change']);
-a=new Input();assert.equal(run([a],a).ok,true);
+a=new Input();assert.equal(run([a],a).ok,false);
+const search=new Input({name:'search',placeholder:'Search products'});
+assert.equal(run([search],search).ok,false);
 const password=new Input({type:'password',name:'password'});
 const codeField=new Input({name:'verification_code'});
 assert.equal(run([password,codeField],password).ok,true);
@@ -47,4 +49,4 @@ const rerenderCtx={document:{querySelectorAll:()=>current,activeElement:original
 vm.createContext(rerenderCtx);vm.runInContext(fn,rerenderCtx);
 assert.equal(rerenderCtx.fillCode('123456').ok,true);
 assert.equal(current.map(x=>x.value).join(''),'123456');
-console.log('12 form-fill cases passed.');
+console.log('Form-fill cases passed.');

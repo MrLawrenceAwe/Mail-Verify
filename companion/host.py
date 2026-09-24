@@ -66,8 +66,8 @@ def extract_codes(raw):
         for pattern in CODE_PATTERNS:
             for match in pattern.finditer(text):
                 codes.add(match.group('code'))
-                # "Your code is 123456 or 654321" offers two choices.
-                alternative = re.match(rf'\s*(?:or|/)\s*(?P<code>{CODE})', text[match.end():], re.I)
+                # Adjacent alternatives, including "123456 (or 654321)", are ambiguous.
+                alternative = re.match(rf'\s*(?:[,([]\s*)*(?:or|/)\s*(?P<code>{CODE})', text[match.end():], re.I)
                 if alternative: codes.add(alternative.group('code'))
     # Ambiguous messages are deliberately omitted instead of guessing.
     if len(codes) != 1: return None
