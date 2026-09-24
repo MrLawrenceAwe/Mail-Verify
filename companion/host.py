@@ -18,6 +18,7 @@ import time
 SERVICE = b'local.yahoo_code_fill'
 ACCOUNT = b'mailbox'
 MAX_AGE = 600
+MAX_FUTURE_SKEW = 120
 CHECK_TIMEOUT = 25
 FETCH_BATCH = 5
 CODE = r'(?<![\w.+-])\d{4,8}(?!\w|[.-]\d)'
@@ -188,7 +189,8 @@ class MailSession:
                 size = re.search(rb'\bRFC822.SIZE (\d+)\b', entry)
                 if not uid or not date or not size or int(size.group(1)) > 1_000_000: continue
                 received = time.mktime(date)
-                if 0 <= now - received <= MAX_AGE: eligible[uid.group(1)] = received
+                if -MAX_FUTURE_SKEW <= now - received <= MAX_AGE:
+                    eligible[uid.group(1)] = min(received, now)
             candidates = [uid for uid in reversed(uids) if uid in eligible]
             new_found = 0
             for start in range(0, len(candidates), FETCH_BATCH):

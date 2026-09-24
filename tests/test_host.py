@@ -124,6 +124,28 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(conn.sequence,'9971:10000')
         self.assertEqual(session.last_uid,10000)
 
+    def test_future_internaldate_does_not_permanently_skip_code(self):
+        class FakeConnection:
+            def __init__(self): self.body_fetches=0
+            def select(self, *_args, **_kwargs): return 'OK', [b'1']
+            def fetch(self, *_args):
+                future = host.imaplib.Time2Internaldate(time.time()+60).encode()
+                return 'OK', [b'1 (UID 10 INTERNALDATE '+future+b' RFC822.SIZE 100)']
+            def uid(self, command, *_args):
+                if command == 'search': return 'OK', [b'']
+                self.body_fetches += 1
+                return 'OK', [(b'1 (UID 10 BODY[] {100}', self_message)]
+            def shutdown(self): pass
+        self_message = self.message('Your verification code is 482913.')
+        conn = FakeConnection()
+        with patch.object(host, 'connect', return_value=conn):
+            session = host.MailSession({'email':'test@yahoo.com','password':'unused'})
+            first = session.recent_codes()
+            self.assertEqual(first[0]['code'], '482913')
+            self.assertLessEqual(first[0]['receivedAt'], int(time.time()*1000))
+            self.assertEqual(session.recent_codes(), first)
+        self.assertEqual(conn.body_fetches, 1)
+
     def test_whole_check_times_out(self):
         with patch.object(host,'CHECK_TIMEOUT',0.01), patch.object(host.MailSession,'recent_codes',side_effect=lambda: time.sleep(0.2)):
             with self.assertRaisesRegex(host.UserError,'too long'):
