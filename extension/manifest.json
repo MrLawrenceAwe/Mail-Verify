@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Yahoo Code Fill",
+  "version": "0.1.1",
+  "description": "Retrieve recent Yahoo email verification codes locally and fill them with a click.",
+  "permissions": [
+    "nativeMessaging",
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Find a Yahoo verification code"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz9O0M+wj5pu3u3t3+79ljQaQpdy4v/OLlCEHnc4uKNS10szhjccxQxx585+qiRXEXNd9MzJiO1r5HfvLzqVSeKI8s2D80y9Ehgb7M0VhCHr/nHziZcsSALWp6kp/uE6KTPzT/Qzctw2CY7YcnySR1CTQSm5wiLLiLWvTkKmkBb1AfMPUS+gPT/gC+N27Vx1rjy0X/N5aV/ikE54C4qV6AqZfnfYMaOh63/hvaxTwW0L6/fB3xK/bQI812JTMdGgfsiueZHMHqNPzdMWf6DS+1UPLeSKIv7hg9/2w2tnLbuJKWudbx62kdNMD0SR3hRArPcMY7L4kyEOKjcT7vGH1ywIDAQAB"
+}
