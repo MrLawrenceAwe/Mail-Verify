@@ -22,7 +22,7 @@ If reinstalling or setting up another Mac, first double-click **Install Companio
 
 1. Ask the website to send an email code.
 2. Click its verification-code field, then open **Yahoo Code Fill** from the Chrome toolbar.
-3. The extension checks your Yahoo inbox. While waiting for a code, it checks every 8 seconds for up to 2 minutes while the popup remains open.
+3. The extension checks your Yahoo inbox. While waiting for a code, it checks about every 8 seconds for up to 2 minutes while the popup remains open. A slow Yahoo response may delay a check. Press **Check for a code** to interrupt a slow check and retry.
 4. Review the sender, subject, and destination website. Click **Fill on [website]** for the right email.
 
 Closing the popup stops checking. Reopen it or press **Check for a code** to try again. The extension does not click Submit, although some websites submit automatically when all digits are entered.
@@ -43,7 +43,7 @@ Email access goes directly from your Mac to `imap.mail.yahoo.com:993` over TLS. 
 
 The extension requests `nativeMessaging`, `activeTab`, and `scripting`. Clicking the extension grants temporary access to the active tab. It has no blanket access to all websites, no analytics, and no AI integration. Codes remain in popup memory and are sent to the chosen page only when you click Fill. Once filled, that website can read the code.
 
-Chrome starts the companion on demand; no background login item, public server, or open network listener is installed. Native messaging is restricted to this extension ID.
+Chrome starts the companion on demand and keeps it connected while the popup is open. It reuses the Yahoo connection and checks only newly arrived messages after the first scan. Closing the popup ends the connection. No background login item, public server, or open network listener is installed. Native messaging is restricted to this extension ID.
 
 ## Disconnect or uninstall
 

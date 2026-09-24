@@ -129,64 +129,95 @@ def connect(credentials):
         raise
 
 
-def recent_codes(credentials):
-    conn = connect(credentials)
-    try:
-        status, _ = conn.select('INBOX', readonly=True)
-        if status != 'OK': raise UserError('Yahoo could not open your inbox.')
-        since = time.strftime('%d-%b-%Y', time.gmtime(time.time()-86400))
-        status, data = conn.uid('search', None, 'SINCE', since)
-        if status != 'OK': raise UserError('Yahoo could not search your inbox.')
-        uids = data[0].split()[-30:]
-        if not uids: return []
-        status, metadata = conn.uid('fetch', b','.join(uids), '(UID INTERNALDATE RFC822.SIZE)')
-        if status != 'OK': raise UserError('Yahoo could not inspect recent messages.')
-        eligible = {}
-        now = time.time()
-        for entry in metadata:
-            if not isinstance(entry, bytes): continue
-            uid = re.search(rb'\bUID (\d+)\b', entry)
-            date = imaplib.Internaldate2tuple(entry)
-            size = re.search(rb'\bRFC822.SIZE (\d+)\b', entry)
-            if not uid or not date or not size or int(size.group(1)) > 1_000_000: continue
-            received = time.mktime(date)
-            if 0 <= now - received <= MAX_AGE: eligible[uid.group(1)] = received
-        candidates = [uid for uid in reversed(uids) if uid in eligible]
-        results = []
-        for start in range(0, len(candidates), FETCH_BATCH):
-            batch = candidates[start:start + FETCH_BATCH]
-            status, body = conn.uid('fetch', b','.join(batch), '(UID BODY.PEEK[])')
-            if status != 'OK': continue
-            messages = {}
-            for entry in body:
-                if not isinstance(entry, tuple): continue
-                uid = re.search(rb'\bUID (\d+)\b', entry[0])
-                if uid: messages[uid.group(1)] = entry[1]
-            for uid in batch:
-                found = extract_codes(messages[uid]) if uid in messages else None
-                if found:
-                    found['receivedAt'] = int(eligible[uid] * 1000)
-                    results.append(found)
-                if len(results) == 5: return results
-        return results
-    finally:
-        try: conn.shutdown()
-        except OSError: pass
+class MailSession:
+    def __init__(self, credentials):
+        self.credentials = credentials
+        self.conn = None
+        self.last_uid = None
+        self.codes = {}
+
+    def close(self):
+        conn, self.conn = self.conn, None
+        self.last_uid = None
+        self.codes.clear()
+        if conn:
+            try: conn.shutdown()
+            except (OSError, imaplib.IMAP4.error): pass
+
+    def recent_codes(self):
+        try:
+            if self.conn is None:
+                self.conn = connect(self.credentials)
+                status, _ = self.conn.select('INBOX', readonly=True)
+                if status != 'OK': raise UserError('Yahoo could not open your inbox.')
+            if self.last_uid is None:
+                since = time.strftime('%d-%b-%Y', time.gmtime(time.time()-86400))
+                status, data = self.conn.uid('search', None, 'SINCE', since)
+            else:
+                status, data = self.conn.uid('search', None, 'UID', f'{self.last_uid + 1}:*')
+            if status != 'OK': raise UserError('Yahoo could not search your inbox.')
+            all_uids = data[0].split()
+            # UID ranges ending in * can return the previous last UID when no new mail exists.
+            if self.last_uid is not None:
+                all_uids = [uid for uid in all_uids if int(uid) > self.last_uid]
+            uids = all_uids[-30:]
+            if all_uids: self.last_uid = int(all_uids[-1])
+            now = time.time()
+            self.codes = {uid: item for uid, item in self.codes.items()
+                          if 0 <= now - item['receivedAt'] / 1000 <= MAX_AGE}
+            if not uids: return self._results()
+            status, metadata = self.conn.uid('fetch', b','.join(uids), '(UID INTERNALDATE RFC822.SIZE)')
+            if status != 'OK': raise UserError('Yahoo could not inspect recent messages.')
+            eligible = {}
+            for entry in metadata:
+                if not isinstance(entry, bytes): continue
+                uid = re.search(rb'\bUID (\d+)\b', entry)
+                date = imaplib.Internaldate2tuple(entry)
+                size = re.search(rb'\bRFC822.SIZE (\d+)\b', entry)
+                if not uid or not date or not size or int(size.group(1)) > 1_000_000: continue
+                received = time.mktime(date)
+                if 0 <= now - received <= MAX_AGE: eligible[uid.group(1)] = received
+            candidates = [uid for uid in reversed(uids) if uid in eligible]
+            new_found = 0
+            for start in range(0, len(candidates), FETCH_BATCH):
+                batch = candidates[start:start + FETCH_BATCH]
+                status, body = self.conn.uid('fetch', b','.join(batch), '(UID BODY.PEEK[])')
+                if status != 'OK': raise UserError('Yahoo could not read recent messages.')
+                messages = {}
+                for entry in body:
+                    if not isinstance(entry, tuple): continue
+                    uid = re.search(rb'\bUID (\d+)\b', entry[0])
+                    if uid: messages[uid.group(1)] = entry[1]
+                for uid in batch:
+                    found = extract_codes(messages[uid]) if uid in messages else None
+                    if found:
+                        found['receivedAt'] = int(eligible[uid] * 1000)
+                        self.codes[int(uid)] = found
+                        new_found += 1
+                    if new_found == 5: break
+                if new_found == 5: break
+            return self._results()
+        except Exception:
+            self.close()
+            raise
+
+    def _results(self):
+        return [item for _, item in sorted(self.codes.items(), reverse=True)[:5]]
 
 
-def timed_recent_codes(credentials):
+def timed_check(session):
     def timeout(_signum, _frame):
         raise UserError('Yahoo took too long to respond. Try checking again.')
     previous = signal.signal(signal.SIGALRM, timeout)
     signal.setitimer(signal.ITIMER_REAL, CHECK_TIMEOUT)
     try:
-        return recent_codes(credentials)
+        return session.recent_codes()
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
 
 
-def handle(request):
+def handle(request, session):
     if not isinstance(request, dict): raise UserError('Invalid request.')
     action = request.get('action')
     if action == 'status':
@@ -194,6 +225,8 @@ def handle(request):
         return {'email': credentials['email'] if credentials else None}
     if action == 'disconnect':
         keychain('delete')
+        session.close()
+        session.credentials = None
         return {'disconnected': True}
     if action == 'configure':
         address = request.get('email', '').strip()
@@ -203,11 +236,14 @@ def handle(request):
         credentials = {'email': address, 'password': password}
         with connect(credentials): pass
         keychain('set', credentials)
+        session.close()
+        session.credentials = credentials
         return {'email': address}
     if action == 'codes':
-        credentials = keychain('get')
-        if not credentials: raise UserError('Connect Yahoo Mail first.')
-        return {'codes': timed_recent_codes(credentials)}
+        if session.credentials is None:
+            session.credentials = keychain('get')
+        if not session.credentials: raise UserError('Connect Yahoo Mail first.')
+        return {'codes': timed_check(session)}
     raise UserError('Unsupported request.')
 
 
@@ -223,16 +259,21 @@ def read_message(stream):
 
 
 def main():
+    session = MailSession(None)
     try:
-        request = read_message(sys.stdin.buffer)
-        if request is None: return
-        response = {'ok': True, **handle(request)}
-    except UserError as exc: response = {'ok': False, 'error': str(exc)}
-    except imaplib.IMAP4.error: response = {'ok': False, 'error': 'Yahoo rejected the connection. Check your email and app password, then reconnect.'}
-    except (OSError, socket.timeout): response = {'ok': False, 'error': 'Could not reach Yahoo Mail or the local Keychain. Check your connection and try again.'}
-    except Exception: response = {'ok': False, 'error': 'The local companion could not complete this request.'}
-    payload = json.dumps(response).encode()
-    sys.stdout.buffer.write(struct.pack('=I', len(payload)) + payload)
-    sys.stdout.buffer.flush()
+        while True:
+            try:
+                request = read_message(sys.stdin.buffer)
+                if request is None: break
+                response = {'ok': True, **handle(request, session)}
+            except UserError as exc: response = {'ok': False, 'error': str(exc)}
+            except imaplib.IMAP4.error: response = {'ok': False, 'error': 'Yahoo rejected the connection. Check your email and app password, then reconnect.'}
+            except (OSError, socket.timeout): response = {'ok': False, 'error': 'Could not reach Yahoo Mail or the local Keychain. Check your connection and try again.'}
+            except Exception: response = {'ok': False, 'error': 'The local companion could not complete this request.'}
+            payload = json.dumps(response).encode()
+            sys.stdout.buffer.write(struct.pack('=I', len(payload)) + payload)
+            sys.stdout.buffer.flush()
+    finally:
+        session.close()
 
 if __name__ == '__main__': main()
