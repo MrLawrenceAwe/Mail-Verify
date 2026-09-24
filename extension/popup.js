@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const HOST = 'local.yahoo_code_fill';
-let targetTab, busy = false, timer, deadline;
+let targetTab, busy = false, filling = false, timer, deadline, revision = 0;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 async function native(request) {
   let response;
@@ -26,7 +26,8 @@ function fillCode(code) {
   const readInputs = () => [...document.querySelectorAll('input')].filter(visible);
   const inputs = readInputs();
   const hints = el => [el.autocomplete, el.name, el.id, el.placeholder, el.getAttribute('aria-label'), ...[...(el.labels || [])].map(l => l.textContent)];
-  const otp = el => hints(el).some(value => /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|code)(?:$|[^\w])/i.test(value || ''));
+  // A bare "code" may mean a coupon, referral, or product code.
+  const otp = el => hints(el).some(value => /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|sign[-_ ]?in[-_ ]?code|login[-_ ]?code)(?:$|[^\w])/i.test(value || ''));
   const eligible = el => ['text', 'tel', 'number', 'password', ''].includes(el.type);
   const focused = document.activeElement;
   const candidates = inputs.filter(el => eligible(el) && otp(el));
@@ -73,7 +74,14 @@ function fillCode(code) {
   return {ok:true};
 }
 async function fill(item, button) {
-  button.disabled = true;
+  if (filling) return;
+  filling = true;
+  revision++;
+  clearTimeout(timer);
+  $('refresh').disabled = true;
+  $('disconnect').disabled = true;
+  const buttons = [...$('codes').querySelectorAll('button')];
+  for (const control of buttons) control.disabled = true;
   try {
     if (Date.now() - item.receivedAt > 600000) throw new Error('This code is too old. Request a new code.');
     const current = await chrome.tabs.get(targetTab.id);
@@ -81,10 +89,23 @@ async function fill(item, button) {
     if (active?.id !== targetTab.id || current.url !== targetTab.url) throw new Error('The page changed. Reopen Code Fill on the intended page.');
     const [{result}] = await chrome.scripting.executeScript({target:{tabId:targetTab.id}, func:fillCode, args:[item.code]});
     if (!result?.ok) throw new Error(result?.error || 'Could not fill this page.');
-    clearTimeout(timer); deadline = 0;
+    deadline = 0;
     status('Code filled. The website may continue automatically.');
     button.textContent = 'Filled';
-  } catch (error) { status(error.message, true); button.disabled = false; }
+  } catch (error) {
+    status(error.message, true);
+    for (const control of buttons) control.disabled = false;
+  } finally {
+    filling = false;
+    revision++;
+    $('refresh').disabled = busy;
+    $('disconnect').disabled = busy;
+    scheduleRefresh();
+  }
+}
+function scheduleRefresh() {
+  clearTimeout(timer);
+  if (!filling && Date.now() < deadline) timer = setTimeout(refresh, 8000);
 }
 function render(codes) {
   $('codes').replaceChildren();
@@ -100,17 +121,20 @@ function render(codes) {
   }
 }
 async function refresh() {
-  if (busy) return;
+  if (busy || filling) return;
   clearTimeout(timer); busy = true; $('refresh').disabled = true; $('disconnect').disabled = true;
+  const requestRevision = revision;
   status('Checking recent Yahoo emails…');
   try {
     const result = await native({action:'codes'});
-    render(result.codes);
-    status(result.codes.length ? 'Choose the code for this website. Checking for newer codes…' : 'No recent code yet. Request one on the website; keep this popup open.');
-  } catch (error) { status(error.message, true); }
+    if (!filling && requestRevision === revision) {
+      render(result.codes);
+      status(result.codes.length ? 'Choose the code for this website. Checking for newer codes…' : 'No recent code yet. Request one on the website; keep this popup open.');
+    }
+  } catch (error) { if (!filling && requestRevision === revision) status(error.message, true); }
   finally {
-    busy = false; $('refresh').disabled = false; $('disconnect').disabled = false;
-    if (Date.now() < deadline) timer = setTimeout(refresh, 8000);
+    busy = false; $('refresh').disabled = filling; $('disconnect').disabled = filling;
+    scheduleRefresh();
   }
 }
 $('refresh').addEventListener('click', () => { deadline = Date.now()+120000; refresh(); });
@@ -122,7 +146,7 @@ $('connectForm').addEventListener('submit', async event => {
   finally { $('connect').disabled = false; }
 });
 $('disconnect').addEventListener('click', async () => {
-  clearTimeout(timer); $('disconnect').disabled = true;
+  clearTimeout(timer); deadline = 0; revision++; $('disconnect').disabled = true;
   try { await native({action:'disconnect'}); $('codes').replaceChildren(); $('mailbox').hidden = true; $('setup').hidden = false; status('Yahoo credentials removed from this Mac’s Keychain.'); }
   catch (error) { status(error.message, true); }
   finally { $('disconnect').disabled = false; }
