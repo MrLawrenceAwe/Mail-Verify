@@ -31,18 +31,28 @@ class UserError(Exception):
     pass
 
 class TextHTML(HTMLParser):
+    BLOCK_TAGS = {'br', 'p', 'div', 'td', 'tr', 'li', 'table', 'section', 'article', 'h1', 'h2', 'h3'}
+    VOID_TAGS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'}
+    INLINE_BREAK = '\x1f'
     def __init__(self):
         super().__init__()
         self.parts = []
-        self.hidden = 0
+        self.stack = []
     def handle_starttag(self, tag, attrs):
-        if tag in ('script', 'style'): self.hidden += 1
-        if tag in ('br', 'p', 'div', 'td'): self.parts.append(' ')
+        attrs = dict(attrs)
+        style = attrs.get('style') or ''
+        hidden = (self.stack[-1][1] if self.stack else False) or tag in ('script', 'style', 'template') or 'hidden' in attrs or (attrs.get('aria-hidden') or '').lower() == 'true' or bool(re.search(r'(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\b', style, re.I))
+        if not hidden and tag in self.BLOCK_TAGS: self.parts.append(' ')
+        if tag not in self.VOID_TAGS: self.stack.append((tag, hidden))
     def handle_endtag(self, tag):
-        if tag in ('script', 'style'): self.hidden = max(0, self.hidden - 1)
-        self.parts.append(' ')
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                hidden = self.stack[index][1]
+                del self.stack[index:]
+                if not hidden: self.parts.append(' ' if tag in self.BLOCK_TAGS else self.INLINE_BREAK)
+                break
     def handle_data(self, data):
-        if not self.hidden: self.parts.append(data)
+        if not self.stack or not self.stack[-1][1]: self.parts.append(data)
 
 def extract_codes(raw):
     msg = email.message_from_bytes(raw, policy=policy.default)
@@ -56,6 +66,7 @@ def extract_codes(raw):
             parser = TextHTML()
             parser.feed(value)
             value = ''.join(parser.parts)
+            value = re.sub(r'(?<=\d)\x1f(?=\d)', '', value).replace(TextHTML.INLINE_BREAK, ' ')
         texts.append(value)
     subject = str(msg.get('Subject', ''))
     codes = set()
