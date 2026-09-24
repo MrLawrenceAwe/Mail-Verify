@@ -30,11 +30,9 @@ function fillCode(code) {
   const eligible = el => ['text', 'tel', 'number', 'password', ''].includes(el.type);
   const focused = document.activeElement;
   const candidates = inputs.filter(el => eligible(el) && otp(el));
-  const focusedInput = inputs.includes(focused) && eligible(focused) ? focused : null;
-  // A focused password or unrelated field must not override a labelled code field.
-  let first = focusedInput && otp(focusedInput) ? focusedInput
-    : candidates.length === 1 ? candidates[0]
-    : candidates.length === 0 && focusedInput?.type !== 'password' ? focusedInput : null;
+  const focusedCodeInput = inputs.includes(focused) && eligible(focused) && otp(focused) ? focused : null;
+  // Focus alone does not identify a code field; it may be a search or account input.
+  let first = focusedCodeInput || (candidates.length === 1 ? candidates[0] : null);
   let fields;
   if (first && first.maxLength === 1) {
     fields = inputs.filter(el => el.maxLength === 1 && eligible(el) && el.form === first.form && el.parentElement === first.parentElement);
