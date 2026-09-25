@@ -119,6 +119,11 @@ export function createPopup({
   }
   async function checkForCodes() {
     if (filling || removingAccount) return;
+    if (clock.now() >= pollDeadline) {
+      clearTimeout(pollTimer);
+      closeSession();
+      return;
+    }
     if (checking) abortCheck();
     clearTimeout(pollTimer);
     checking = true;

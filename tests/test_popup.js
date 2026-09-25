@@ -136,6 +136,19 @@ test("stops polling after the deadline", async () => {
   assert.equal(scheduled.size, 0, "stop after the polling deadline");
 });
 
+test("does not start a scheduled check after the deadline", async () => {
+  const { scheduled, state } = await setup();
+  let requests = 0;
+  state.fetchCodes = async () => {
+    requests++;
+    return [];
+  };
+  state.now += 120001;
+  await [...scheduled.values()][0].callback();
+  assert.equal(requests, 0);
+  assert.equal(state.closes, 1);
+});
+
 test("retries temporary mail errors", async () => {
   const { controls, scheduled, state } = await setup();
   state.fetchCodes = async () => {
