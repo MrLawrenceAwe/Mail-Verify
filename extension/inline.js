@@ -114,11 +114,13 @@ export function startInlinePicker() {
     if (checking || !host || document.hidden || !locate().ok) return;
     checking = true;
     const current = generation;
+    let checkFailed = false;
     if (!results.childElementCount) status.textContent = "Checking Yahoo Mail…";
     try {
       const response = await chrome.runtime.sendMessage({ type: "yahoo-inline-codes" });
       if (current !== generation || !host) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check Yahoo.");
+      checkFailed = !!response.warnings?.length;
       for (const item of response.codes) knownUids.add(codeIdentity(item));
       const codes = freshCodes(response.codes, requestStartedAt, Date.now(), excludedUids);
       // Preserve keyboard focus on unchanged suggestions during polling.
@@ -149,15 +151,18 @@ export function startInlinePicker() {
           results.append(button);
         }
       }
-      status.textContent = codes.length ? location.hostname : "Waiting for a Yahoo email code…";
+      status.textContent = response.warnings?.length
+        ? `Could not check: ${response.warnings.join("; ")}`
+        : codes.length ? location.hostname : "Waiting for a Yahoo email code…";
     } catch (error) {
+      checkFailed = true;
       if (current === generation && host) status.textContent = error.message;
     } finally {
       checking = false;
       if (host) position();
       if (host && Date.now() < deadline)
         timer = setTimeout(check, current === generation ? 2000 : 0);
-      else if (host && !results.childElementCount) status.textContent = "No code found. Click ↻ to check again.";
+      else if (host && !results.childElementCount && !checkFailed) status.textContent = "No code found. Click ↻ to check again.";
     }
   }
   function scan(refresh = true) {

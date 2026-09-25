@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { registerInlineRequests } from "../extension/background.js";
 
-function setup() {
+function setup(nativeResponse = { ok: true, codes: [] }) {
   let listener, onMessage, checks = 0, closed = 0, idle;
   const chrome = {
     runtime: {
@@ -13,7 +13,7 @@ function setup() {
         return {
           onMessage: { addListener(fn) { onMessage = fn; } },
           onDisconnect: { addListener() {} },
-          postMessage() { queueMicrotask(() => onMessage({ ok: true, codes: [] })); },
+          postMessage() { queueMicrotask(() => onMessage(nativeResponse)); },
           disconnect() { closed++; },
         };
       },
@@ -47,4 +47,10 @@ test("automatic checks reuse the connection and close it after polling stops", a
   assert.equal(fixture.closed, 1);
   await fixture.request();
   assert.equal(fixture.checks, 2);
+});
+
+test("automatic checks pass partial account warnings to the picker", async () => {
+  const warnings = ["one@yahoo.com: Yahoo took too long to respond."];
+  const result = await setup({ ok: true, codes: [], warnings }).request();
+  assert.deepEqual(result, { ok: true, codes: [], warnings });
 });

@@ -181,6 +181,25 @@ class CodeExtractionTests(unittest.TestCase):
         )
         self.assertEqual(extract_code(m.as_bytes())["code"], "123456")
 
+    def test_attached_email_cannot_supply_or_conflict_with_code(self):
+        from email.message import EmailMessage
+
+        attached = EmailMessage()
+        attached["From"] = "auth@example.com"
+        attached.set_content("Your verification code is 654321")
+        for body, expected in (
+            ("See the attached message.", None),
+            ("Your verification code is 123456", "123456"),
+        ):
+            with self.subTest(body=body):
+                outer = EmailMessage()
+                outer["From"] = "friend@example.com"
+                outer["Subject"] = "Forwarded information"
+                outer.set_content(body)
+                outer.add_attachment(attached)
+                found = extract_code(outer.as_bytes())
+                self.assertEqual(found["code"] if found else None, expected)
+
 
 
 if __name__ == "__main__":
