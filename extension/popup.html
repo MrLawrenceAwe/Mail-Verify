@@ -1,30 +1,79 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Yahoo Code Fill</title><link rel="stylesheet" href="popup.css"></head>
-<body>
-<header><span class="mark">Y<span>✓</span></span><div><h1>Code Fill</h1><p>Your Yahoo codes, right here.</p></div></header>
-<main>
-<p id="status" role="status" aria-live="polite">Connecting to your Mac companion…</p>
-<section id="setup" hidden>
-<h2>Connect Yahoo Mail</h2>
-<p>Use a Yahoo app password. It stays in your Mac’s Keychain.</p>
-<form id="connectForm">
-<label for="email">Yahoo email address</label><input id="email" type="email" autocomplete="username" required placeholder="you@yahoo.com">
-<label for="password">App password</label><input id="password" type="password" autocomplete="off" required placeholder="Yahoo-generated app password">
-<a href="https://login.yahoo.com/account/security" target="_blank" rel="noreferrer">Create an app password in Yahoo ↗</a>
-<button id="connect" type="submit">Connect securely</button>
-</form>
-</section>
-<section id="mailbox" hidden>
-<div class="account"><span id="account"></span><button id="disconnect" class="quiet">Disconnect</button></div>
-<p class="destination">Fill on <strong id="destination"></strong></p>
-<p class="hint">Check that the sender and service match this website before filling.</p>
-<div id="codes"></div>
-<button id="refresh">Check for a code</button>
-<p class="hint">While waiting, checks about every 8 seconds for up to 2 minutes. Keep this popup open. Recent inbox messages only.</p>
-</section>
-<section id="missing" hidden><h2>One-time Mac setup</h2><p>Run <strong>Install Companion.command</strong> from the Yahoo Code Fill folder. Your extension ID:</p><input id="extensionId" readonly aria-label="Extension ID"><p>Then close and reopen this popup.</p></section>
-</main>
-<footer>On-device extraction · No AI or cloud relay</footer>
-<script src="popup.js"></script>
-</body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yahoo Code Fill</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <span class="mark">Y<span>✓</span></span>
+      <div>
+        <h1>Code Fill</h1>
+        <p>Codes from your Yahoo inbox.</p>
+      </div>
+    </header>
+    <main>
+      <p id="status" role="status" aria-live="polite">
+        Connecting to your Mac companion…
+      </p>
+      <section id="setup" hidden>
+        <h2>Connect Yahoo Mail</h2>
+        <p>Use a Yahoo app password. It stays in your Mac’s Keychain.</p>
+        <form id="connectForm">
+          <label for="email">Yahoo email address</label
+          ><input
+            id="email"
+            type="email"
+            autocomplete="username"
+            required
+            placeholder="you@yahoo.com"
+          />
+          <label for="password">App password</label
+          ><input
+            id="password"
+            type="password"
+            autocomplete="off"
+            required
+            placeholder="Yahoo-generated app password"
+          />
+          <a
+            href="https://login.yahoo.com/account/security"
+            target="_blank"
+            rel="noreferrer"
+            >Create an app password in Yahoo ↗</a
+          >
+          <button id="connect" type="submit">Connect securely</button>
+        </form>
+      </section>
+      <section id="codeResults" hidden>
+        <div class="account">
+          <span id="accountEmail"></span
+          ><button id="removeAccount" class="quiet">Remove account</button>
+        </div>
+        <p class="destination">Fill on <strong id="destination"></strong></p>
+        <p class="hint">
+          Check that the sender and service match this website before filling.
+        </p>
+        <div id="codes"></div>
+        <button id="checkCodes">Check for a code</button>
+        <p class="hint">
+          While waiting, checks about every 8 seconds for up to 2 minutes. Keep
+          this popup open. Recent inbox messages only.
+        </p>
+      </section>
+      <section id="companionSetup" hidden>
+        <h2>One-time Mac setup</h2>
+        <p>
+          Run <strong>Install Companion.command</strong> from the Yahoo Code
+          Fill folder. Your extension ID:
+        </p>
+        <input id="extensionId" readonly aria-label="Extension ID" />
+        <p>Then close and reopen this popup.</p>
+      </section>
+    </main>
+    <footer>On-device extraction · No AI or cloud relay</footer>
+    <script type="module" src="popup-entry.js"></script>
+  </body>
+</html>

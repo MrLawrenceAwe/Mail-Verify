@@ -1,141 +1,298 @@
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const source = fs.readFileSync(require('node:path').join(__dirname, '../extension/popup.js'), 'utf8');
-const portSource = source.slice(source.indexOf('function closeMailPort('), source.indexOf('function fillCode('));
-const fillSource = source.slice(source.indexOf('async function fill('), source.indexOf('function render('));
-const renderSource = source.slice(source.indexOf('function render('), source.indexOf('async function refresh('));
-const refreshSource = source.slice(source.indexOf('async function refresh('), source.indexOf("$('refresh').addEventListener"));
-async function check(codes, timeLeft, failure=false) {
-  const controls = {refresh:{disabled:false}, disconnect:{disabled:false}};
-  const scheduled=[];
-  const context={
-    busy:false, filling:false, disconnecting:false, revision:0, timer:null, deadline:Date.now()+timeLeft,
-    $:id=>controls[id], clearTimeout:()=>{}, setTimeout:(fn,delay)=>{scheduled.push({fn,delay});return 1},
-    status:()=>{}, render:()=>{}, getCodes:async()=>{if(failure) throw Error('Temporary mail error'); return codes;}, closeMailPort:()=>{}, Date,
-  };
-  vm.createContext(context);
-  vm.runInContext(fillSource,context);
-  vm.runInContext(refreshSource,context);
-  await context.refresh();
-  return scheduled;
-}
-async function checkFillDuringRefresh(fail=false) {
-  let finishRefresh;
-  const pendingRefresh = new Promise(resolve => { finishRefresh = resolve; });
-  const messages = [], rendered = [], scheduled = new Map();
-  let nextTimer = 0;
-  const button = {disabled:false, textContent:'Fill'};
-  const controls = {refresh:{disabled:false}, disconnect:{disabled:false}, codes:{querySelectorAll:()=>[button]}};
-  const context = {
-    busy:false, filling:false, disconnecting:false, revision:0, timer:null, deadline:Date.now()+120000,
-    targetTab:{id:1,url:'https://example.com/login'},
-    $:id=>controls[id], clearTimeout:id=>scheduled.delete(id), setTimeout:(fn,delay)=>{const id=++nextTimer;scheduled.set(id,{fn,delay});return id},
-    status:message=>messages.push(message), render:codes=>rendered.push(codes),
-    getCodes:async()=>pendingRefresh, closeMailPort:()=>{}, Date,
-    chrome:{tabs:{get:async()=>{if(fail) throw Error('Tab unavailable');return {url:'https://example.com/login'}},query:async()=>[{id:1}]},scripting:{executeScript:async()=>[{result:{ok:true}}]}},
-    fillCode:()=>{},
-  };
-  vm.createContext(context);
-  context.abortCheck=()=>{context.revision++;context.busy=false;};
-  vm.runInContext(fillSource,context);
-  vm.runInContext(refreshSource,context);
-  const refresh = context.refresh();
-  await context.fill({code:'123456',receivedAt:Date.now()},button);
-  finishRefresh([{code:'123456'}]);
-  await refresh;
-  assert.equal(messages.at(-1),fail ? 'Tab unavailable' : 'Code filled. The website may continue automatically.');
-  assert.equal(rendered.length,0,'stale refresh must not replace the cards');
-  assert.equal(scheduled.size,fail ? 1 : 0,'polling should resume only after a failed fill');
-  assert.equal(button.disabled,fail ? false : true);
-}
-function checkUnchangedCards() {
-  let replacements = 0;
-  const codesNode = {replaceChildren(){replacements++}, append(){}};
-  const document = {createElement:()=>({append(){},addEventListener(){},className:'',textContent:''})};
-  const context = {renderedCodes:undefined, targetTab:null, document, $:id=>id==='codes'?codesNode:null, JSON};
-  vm.createContext(context);
-  vm.runInContext(renderSource,context);
-  const codes = [{code:'123456',sender:'sender@example.com',subject:'Sign in',receivedAt:1}];
-  context.render(codes);
-  context.render([{...codes[0]}]);
-  assert.equal(replacements,1,'unchanged results should retain existing cards and focus');
-  context.render([{...codes[0],code:'654321'}]);
-  assert.equal(replacements,2,'new results should update the cards');
-}
-async function checkPortReuseAndInterruption() {
-  const ports=[];
-  const context={HOST:'local.yahoo_code_fill', mailPort:undefined, pendingRequest:undefined, revision:0, busy:true,
-    chrome:{runtime:{connectNative:()=>{
-      const port={messages:[], onMessage:{addListener(fn){port.message=fn}}, onDisconnect:{addListener(fn){port.disconnected=fn}},
-        postMessage(message){port.messages.push(message)}, disconnect(){port.disconnected()}};
-      ports.push(port); return port;
-    }}}
-  };
-  vm.createContext(context);
-  vm.runInContext(portSource,context);
-  const status=context.mailRequest('status');
-  assert.equal(ports[0].messages[0].action,'status');
-  ports[0].message({ok:true,email:'test@yahoo.com'});
-  assert.equal((await status).email,'test@yahoo.com');
-  const first=context.getCodes();
-  assert.equal(ports.length,1,'startup and checks should reuse one native host');
-  assert.equal(ports[0].messages[1].action,'codes');
-  ports[0].message({ok:true,codes:[{code:'123456'}]});
-  assert.equal((await first)[0].code,'123456');
-  const second=context.getCodes();
-  assert.equal(ports.length,1,'checks should reuse one native host');
-  context.abortCheck();
-  await assert.rejects(second,/interrupted/);
-  const third=context.getCodes();
-  assert.equal(ports.length,2,'retry should open a fresh host after interruption');
-  ports[0].message({ok:true,codes:[{code:'stale'}]});
-  ports[1].message({ok:true,codes:[]});
-  assert.equal((await third).length,0);
-}
-async function checkManualRetry() {
-  let resolveFirst, resolveSecond, calls=0, aborted=0;
-  const rendered=[];
-  const controls={refresh:{disabled:false},disconnect:{disabled:false}};
-  const context={busy:false,filling:false,disconnecting:false,revision:0,timer:null,deadline:Date.now()+120000,
-    $:id=>controls[id],clearTimeout:()=>{},setTimeout:()=>1,Date,status:()=>{},render:codes=>rendered.push(codes),closeMailPort:()=>{},scheduleRefresh:()=>{},
-    getCodes:()=>new Promise(resolve=>{if(++calls===1) resolveFirst=resolve; else resolveSecond=resolve;})};
-  context.abortCheck=()=>{aborted++;context.revision++;context.busy=false;};
-  vm.createContext(context);
-  vm.runInContext(refreshSource,context);
-  const first=context.refresh();
-  const second=context.refresh();
-  resolveFirst([{code:'old'}]); resolveSecond([{code:'new'}]);
-  await Promise.all([first,second]);
-  assert.equal(aborted,1);
-  assert.equal(rendered.length,1);
-  assert.equal(rendered[0][0].code,'new');
-  assert.equal(controls.refresh.disabled,false);
-  assert.equal(controls.disconnect.disabled,false);
-}
-async function checkPollTiming() {
-  for (const [duration, expected] of [[3000,5000],[10000,2000]]) {
-    let now=1000, delay;
-    const controls={refresh:{disabled:false},disconnect:{disabled:false}};
-    const context={busy:false,filling:false,disconnecting:false,revision:0,timer:null,deadline:121000,
-      $:id=>controls[id],clearTimeout:()=>{},setTimeout:(_fn,ms)=>{delay=ms;return 1},Date:{now:()=>now},
-      status:()=>{},render:()=>{},closeMailPort:()=>{},scheduleRefresh:ms=>{delay=ms},getCodes:async()=>{now+=duration;return []}};
-    vm.createContext(context);
-    vm.runInContext(refreshSource,context);
-    await context.refresh();
-    assert.equal(delay,expected,'slow checks should leave a short pause before polling again');
+const assert = require("node:assert/strict");
+
+class FakeElement {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.listeners = {};
+    this.disabled = false;
+    this.hidden = true;
+    this.value = "";
+    this.textContent = "";
+    this.replacements = 0;
+    this.classList = { toggle() {} };
+  }
+  append(child) {
+    this.children.push(child);
+  }
+  replaceChildren() {
+    this.children = [];
+    this.replacements++;
+  }
+  addEventListener(event, listener) {
+    this.listeners[event] = listener;
+  }
+  querySelectorAll(tag) {
+    return this.children.flatMap((child) => [
+      ...(child.tag === tag ? [child] : []),
+      ...child.querySelectorAll(tag),
+    ]);
+  }
+  trigger(event = "click") {
+    return this.listeners[event]({ preventDefault() {} });
   }
 }
-(async()=>{
-  assert.equal((await check([{code:'111111'}],120000)).length,1,'an older visible code must not stop polling');
-  assert.equal((await check([],120000)).length,1,'poll when no code is visible');
-  assert.equal((await check([{code:'111111'}],-1)).length,0,'stop after the deadline');
-  assert.equal((await check([],120000,true)).length,1,'retry after a temporary mail error');
-  await checkFillDuringRefresh();
-  await checkFillDuringRefresh(true);
-  checkUnchangedCards();
-  await checkPortReuseAndInterruption();
-  await checkManualRetry();
-  await checkPollTiming();
-  console.log('10 polling, fill-race, port, and card-update cases passed.');
-})().catch(error=>{console.error(error);process.exitCode=1});
+
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const code = {
+  code: "123456",
+  sender: "sender@example.com",
+  subject: "Sign in",
+  receivedAt: 1000,
+};
+
+(async () => {
+  const { createPopup } = await import("../extension/popup.js");
+  const { createCompanionClient } =
+    await import("../extension/companion-client.js");
+
+  async function setup({ codes = [code], account = "test@yahoo.com" } = {}) {
+    const controls = Object.fromEntries(
+      [
+        "checkCodes",
+        "removeAccount",
+        "codes",
+        "status",
+        "setup",
+        "companionSetup",
+        "codeResults",
+        "accountEmail",
+        "connectForm",
+        "connect",
+        "password",
+        "email",
+        "extensionId",
+        "destination",
+      ].map((id) => [id, new FakeElement()]),
+    );
+    const scheduled = new Map();
+    const state = {
+      now: 1000,
+      closes: 0,
+      fetchCodes: async () => codes,
+      failFill: false,
+      failRemove: false,
+      requests: [],
+    };
+    const tab = { id: 1, url: "https://example.com/login" };
+    let nextTimer = 0;
+    const client = {
+      closeSession() {
+        state.closes++;
+      },
+      async sendSessionRequest(action) {
+        return action === "status"
+          ? { email: account }
+          : { codes: await state.fetchCodes() };
+      },
+      async sendCompanionRequest(request) {
+        state.requests.push(request);
+        if (state.failRemove) throw Error("Keychain unavailable");
+        return { email: request.email };
+      },
+    };
+    const popup = createPopup({
+      document: {
+        getElementById: (id) => controls[id],
+        createElement: (tag) => new FakeElement(tag),
+      },
+      chrome: {
+        runtime: { id: "test-extension" },
+        tabs: {
+          query: async () => [tab],
+          get: async () => {
+            if (state.failFill) throw Error("Tab unavailable");
+            return tab;
+          },
+        },
+        scripting: { executeScript: async () => [{ result: { ok: true } }] },
+      },
+      client,
+      clock: { now: () => state.now },
+      setTimeout: (callback, delay) => {
+        const id = ++nextTimer;
+        scheduled.set(id, { callback, delay });
+        return id;
+      },
+      clearTimeout: (id) => scheduled.delete(id),
+    });
+    await popup.initialize();
+    await settle();
+    return { controls, scheduled, state };
+  }
+
+  for (const codes of [[code], []]) {
+    const { scheduled } = await setup({ codes });
+    assert.equal(
+      scheduled.size,
+      1,
+      "keep checking with or without an existing code",
+    );
+  }
+  {
+    const { scheduled, state } = await setup();
+    state.now += 120001;
+    await [...scheduled.values()][0].callback();
+    assert.equal(scheduled.size, 0, "stop after the polling deadline");
+  }
+  {
+    const { controls, scheduled, state } = await setup();
+    state.fetchCodes = async () => {
+      throw Error("Temporary mail error");
+    };
+    controls.checkCodes.trigger();
+    await settle();
+    assert.equal(scheduled.size, 1, "retry after temporary errors");
+    assert.equal(controls.status.textContent, "Temporary mail error");
+  }
+  for (const failFill of [false, true]) {
+    const { controls, scheduled, state } = await setup();
+    let finishCheck;
+    state.fetchCodes = () =>
+      new Promise((resolve) => {
+        finishCheck = resolve;
+      });
+    state.failFill = failFill;
+    const replacements = controls.codes.replacements;
+    controls.checkCodes.trigger();
+    const button = controls.codes.querySelectorAll("button")[0];
+    await button.trigger();
+    finishCheck([{ ...code, code: "654321" }]);
+    await settle();
+    assert.equal(
+      controls.codes.replacements,
+      replacements,
+      "stale checks must not replace cards",
+    );
+    assert.equal(
+      controls.status.textContent,
+      failFill
+        ? "Tab unavailable"
+        : "Code filled. The website may continue automatically.",
+    );
+    assert.equal(scheduled.size, failFill ? 1 : 0);
+    assert.equal(button.disabled, !failFill);
+  }
+  {
+    const { controls, state } = await setup();
+    const initial = controls.codes.replacements;
+    state.fetchCodes = async () => [{ ...code }];
+    controls.checkCodes.trigger();
+    await settle();
+    assert.equal(
+      controls.codes.replacements,
+      initial,
+      "unchanged cards retain focus",
+    );
+    state.fetchCodes = async () => [{ ...code, code: "654321" }];
+    controls.checkCodes.trigger();
+    await settle();
+    assert.equal(controls.codes.replacements, initial + 1);
+  }
+  {
+    const { controls, state } = await setup();
+    const pending = [];
+    state.fetchCodes = () => new Promise((resolve) => pending.push(resolve));
+    const initial = controls.codes.replacements;
+    controls.checkCodes.trigger();
+    controls.checkCodes.trigger();
+    pending[0]([{ ...code, code: "111111" }]);
+    pending[1]([{ ...code, code: "222222" }]);
+    await settle();
+    assert.equal(state.closes, 1, "manual retry interrupts the previous check");
+    assert.equal(controls.codes.replacements, initial + 1);
+    assert.equal(controls.codes.children[0].children[0].textContent, "222222");
+    assert.equal(controls.checkCodes.disabled, false);
+  }
+  for (const [duration, expected] of [
+    [3000, 5000],
+    [10000, 2000],
+  ]) {
+    const { controls, scheduled, state } = await setup();
+    state.fetchCodes = async () => {
+      state.now += duration;
+      return [];
+    };
+    controls.checkCodes.trigger();
+    await settle();
+    assert.equal([...scheduled.values()][0].delay, expected);
+  }
+  for (const failRemove of [false, true]) {
+    const { controls, scheduled, state } = await setup();
+    state.failRemove = failRemove;
+    await controls.removeAccount.trigger();
+    assert.equal(state.requests[0].action, "disconnect");
+    assert.equal(scheduled.size, failRemove ? 1 : 0);
+    assert.equal(controls.codeResults.hidden, !failRemove);
+    assert.equal(controls.removeAccount.disabled, false);
+  }
+  {
+    const { controls, state } = await setup({ account: null });
+    assert.equal(controls.setup.hidden, false);
+    controls.email.value = "test@yahoo.com";
+    controls.password.value = "app-password";
+    await controls.connectForm.trigger("submit");
+    await settle();
+    assert.equal(controls.password.value, "");
+    assert.deepEqual(state.requests[0], {
+      action: "configure",
+      email: "test@yahoo.com",
+      password: "app-password",
+    });
+    assert.equal(controls.accountEmail.textContent, "test@yahoo.com");
+    assert.equal(controls.codeResults.hidden, false);
+  }
+  {
+    const ports = [];
+    const client = createCompanionClient({
+      connectNative: () => {
+        const port = {
+          messages: [],
+          onMessage: {
+            addListener(listener) {
+              port.message = listener;
+            },
+          },
+          onDisconnect: {
+            addListener(listener) {
+              port.disconnected = listener;
+            },
+          },
+          postMessage(message) {
+            port.messages.push(message);
+          },
+          disconnect() {
+            port.disconnected();
+          },
+        };
+        ports.push(port);
+        return port;
+      },
+    });
+    const status = client.sendSessionRequest("status");
+    ports[0].message({ ok: true, email: "test@yahoo.com" });
+    assert.equal((await status).email, "test@yahoo.com");
+    const first = client.sendSessionRequest("codes");
+    ports[0].message({ ok: true, codes: [code] });
+    assert.equal((await first).codes[0].code, code.code);
+    assert.equal(ports.length, 1, "startup and checks reuse one native host");
+    const interrupted = client.sendSessionRequest("codes");
+    client.closeSession();
+    await assert.rejects(interrupted, /interrupted/);
+    const retry = client.sendSessionRequest("codes");
+    assert.equal(ports.length, 2);
+    ports[0].message({ ok: true, codes: [code] });
+    ports[1].message({ ok: true, codes: [] });
+    assert.equal(
+      (await retry).codes.length,
+      0,
+      "ignore responses from closed ports",
+    );
+  }
+  console.log(
+    "Popup polling, fill races, account controls, and companion session cases passed.",
+  );
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
