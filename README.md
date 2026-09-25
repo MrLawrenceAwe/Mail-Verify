@@ -27,7 +27,7 @@ If reinstalling or setting up another Mac, first double-click **Install Companio
 
 The inline suggestion only shows mail received since the current code step began, with a five-second allowance for mail that arrived just before the field appeared. It keeps the newest code per sender. Clicking “Send new code” or “Resend code” clears the old suggestion immediately and waits for newer mail. The toolbar popup remains available for manually choosing older codes.
 
-No toolbar popup is required after setup. Hidden tabs stop checking. The extension does not click Submit, although some websites submit automatically when all digits are entered.
+No toolbar popup is required after setup. Hidden tabs stop checking. Scroll and resize updates reuse cached candidate fields and position the picker on the next animation frame; relevant page changes refresh field discovery. The extension does not click Submit, although some websites submit automatically when all digits are entered.
 
 ## Current limits
 
@@ -45,7 +45,7 @@ Email access goes directly from your Mac to `imap.mail.yahoo.com:993` over TLS. 
 
 The extension requests `nativeMessaging`, `activeTab`, and `scripting`, and runs a content script on HTTPS sites to recognise code fields automatically. Chrome does not necessarily show a permission prompt after reloading an unpacked extension. If the on-page picker is absent after refreshing the website, open the extension’s **Details** in `chrome://extensions` and check that **Site access** allows it to run on that site. There are no analytics or AI integrations. The on-page picker runs in an isolated content-script context with a closed shadow root. Codes remain in memory and are written into a website’s input only when you click Fill; that website can then read the code.
 
-Chrome starts the companion on demand for automatic checks on the active tab. Background checks reuse the Yahoo connection while the picker is polling and close it after 15 seconds without a new check; simultaneous checks share an in-flight scan. Each check verifies that the saved account is still connected. The popup retains its reusable connection while open. No background login item, public server, or open network listener is installed. Native messaging is restricted to this extension ID.
+Chrome starts the companion on demand for automatic checks on the active tab. Background checks reuse the Yahoo connection while the picker is polling and close it after 15 seconds without a new check; simultaneous checks share an in-flight scan. Codes found in the newest five eligible messages are returned immediately; older candidates are checked on later polls, with newly arrived mail taking priority. If that first batch contains no code, the check continues through the remaining candidates. Each check verifies that the saved account is still connected. The popup retains its reusable connection while open. No background login item, public server, or open network listener is installed. Native messaging is restricted to this extension ID.
 
 ## Remove account or uninstall
 

@@ -1,7 +1,8 @@
-export function fillCode(code, detectOnly = false) {
+export function fillCode(code, detectOnly = false, cachedCandidates = null) {
   // Detection is read-only; filling happens only after the user selects a code.
   const isVisible = (el) => {
     if (
+      el.isConnected === false ||
       el.disabled ||
       el.readOnly ||
       el.type === "hidden" ||
@@ -20,7 +21,7 @@ export function fillCode(code, detectOnly = false) {
   };
   const getVisibleInputs = () =>
     [...document.querySelectorAll("input")].filter(isVisible);
-  const inputs = getVisibleInputs();
+
   const getInputHints = (el) => [
     el.autocomplete,
     el.name,
@@ -57,19 +58,26 @@ export function fillCode(code, detectOnly = false) {
       (el) => el.maxLength === 1 && hasSupportedType(el),
     );
   const focused = document.activeElement;
-  const candidates = inputs.filter(
-    (el) => hasSupportedType(el) && hasCodeHint(el),
-  );
+  // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
+  // Filling always rediscovers the page so cached hints cannot authorize a fill.
+  const discovery = detectOnly && cachedCandidates ? cachedCandidates : {
+    inputs: [...document.querySelectorAll("input")].filter(
+      (el) => hasSupportedType(el) && hasCodeHint(el),
+    ),
+    contextRoots: [...contextRoots],
+  };
+  const candidates = discovery.inputs.filter(isVisible);
   const focusedCodeInput = candidates.includes(focused) ? focused : null;
   // Focus alone does not identify a code field; it may be a search or account input.
   const targetInput =
     focusedCodeInput || (candidates.length === 1 ? candidates[0] : null);
   if (detectOnly) {
     const anchor = targetInput || (candidates.length && candidates.every((el) => el.maxLength === 1) ? candidates[0] : null);
-    if (!anchor) return { ok: false, contextRoots: [...contextRoots] };
+    if (!anchor) return { ok: false, contextRoots: discovery.contextRoots, candidates: discovery };
     const { top, bottom, left, right } = anchor.getBoundingClientRect();
-    return { ok: true, rect: { top, bottom, left, right }, contextRoots: [...contextRoots] };
+    return { ok: true, rect: { top, bottom, left, right }, contextRoots: discovery.contextRoots, candidates: discovery };
   }
+  const inputs = getVisibleInputs();
   let fields;
   if (targetInput && targetInput.maxLength === 1) {
     fields = inputs.filter(

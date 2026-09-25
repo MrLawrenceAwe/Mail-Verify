@@ -96,6 +96,75 @@ class MailSessionTests(unittest.TestCase):
         self.assertEqual(conn.searches[0], (None, "UID", "13:*"))
         self.assertTrue(conn.closed)
 
+    def test_returns_first_code_and_defers_older_mail_behind_new_arrivals(self):
+        class FakeConnection:
+            count = 12
+
+            def __init__(self):
+                self.batches = []
+
+            def select(self, *_args, **_kwargs):
+                return "OK", [b"12"]
+
+            def metadata(self, uids):
+                date = mail_session.imaplib.Time2Internaldate(time.time() - 60).encode()
+                return "OK", [
+                    b"1 (UID " + uid + b" INTERNALDATE " + date + b" RFC822.SIZE 100)"
+                    for uid in uids
+                ]
+
+            def fetch(self, *_args):
+                return self.metadata([str(i).encode() for i in range(1, 13)])
+
+            def uid(self, command, *args):
+                if command == "search":
+                    first = int(args[2].split(":")[0])
+                    return "OK", [b" ".join(str(i).encode() for i in range(first, self.count + 1))]
+                uids = args[0].split(b",")
+                if "INTERNALDATE" in args[1]:
+                    return self.metadata(uids)
+                self.batches.append(uids)
+                return "OK", [
+                    (b"1 (UID " + uid + b" BODY[] {100}",
+                     b"From: auth@example.com\r\n\r\nYour code is " + str(100000 + int(uid)).encode()
+                     if uid in (b"12", b"13", b"6", b"1") else b"No code here.")
+                    for uid in uids
+                ]
+
+            def shutdown(self):
+                pass
+
+        conn = FakeConnection()
+        with patch.object(mail_session, "connect_imap", return_value=conn):
+            session = mail_session.MailSession({})
+            self.assertEqual([x["code"] for x in session.recent_codes()], ["100012"])
+            self.assertEqual(conn.batches, [[b"12", b"11", b"10", b"9", b"8"]])
+            self.assertEqual(len(session.pending_by_uid), 7)
+            conn.count = 13
+            self.assertEqual([x["code"] for x in session.recent_codes()], ["100013", "100012", "100006"])
+            self.assertEqual(conn.batches[1], [b"13", b"7", b"6", b"5", b"4"])
+            self.assertEqual([x["code"] for x in session.recent_codes()], ["100013", "100012", "100006", "100001"])
+            self.assertEqual(conn.batches[2], [b"3", b"2", b"1"])
+            session.recent_codes()
+            self.assertEqual(len(conn.batches), 3)
+            session.pending_by_uid[b"99"] = time.time()
+            session.close()
+            self.assertEqual(session.pending_by_uid, {})
+
+    def test_expired_deferred_mail_is_not_downloaded(self):
+        class FakeConnection:
+            def uid(self, command, *_args):
+                if command != "search":
+                    raise AssertionError("Expired mail must not be fetched")
+                return "OK", [b""]
+
+        session = mail_session.MailSession({})
+        session.conn = FakeConnection()
+        session.last_seen_uid = 10
+        session.pending_by_uid[b"9"] = time.time() - 601
+        self.assertEqual(session.recent_codes(), [])
+        self.assertEqual(session.pending_by_uid, {})
+
     def test_initial_scan_is_bounded_to_newest_30_messages(self):
         class FakeConnection:
             def select(self, *_args, **_kwargs):

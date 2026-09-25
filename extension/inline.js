@@ -49,7 +49,13 @@ export function startInlinePicker() {
   let dismissed = false, generation = 0, lastURL = location.href;
   let requestStartedAt;
   let contextRoots = [];
-  const locate = () => fillCode("", true);
+  let candidates;
+  const locate = () => {
+    const field = fillCode("", true, candidates);
+    candidates = field.candidates;
+    contextRoots = field.contextRoots;
+    return field;
+  };
   function remove() {
     generation++;
     clearTimeout(timer);
@@ -145,11 +151,12 @@ export function startInlinePicker() {
       else if (host && !results.childElementCount) status.textContent = "No code found. Click ↻ to check again.";
     }
   }
-  function scan() {
-    if (lastURL !== location.href) { remove(); dismissed = false; lastURL = location.href; requestStartedAt = undefined; }
+  function scan(refresh = true) {
+    if (lastURL !== location.href) { remove(); dismissed = false; lastURL = location.href; requestStartedAt = undefined; candidates = undefined; }
     if (document.hidden) { remove(); return; }
+    if (dismissed) return;
+    if (refresh) candidates = undefined;
     const field = locate();
-    contextRoots = field.contextRoots;
     if (!field.ok) { if (host) remove(); return; }
     if (!host && !dismissed) mount(field);
     else position(field);
@@ -160,6 +167,14 @@ export function startInlinePicker() {
     if (scanTimer) return;
     scanTimer = setTimeout(() => { scanTimer = undefined; scan(); }, 150);
   };
+  let positionFrame;
+  const schedulePosition = () => {
+    if (dismissed || document.hidden || positionFrame) return;
+    positionFrame = requestAnimationFrame(() => {
+      positionFrame = undefined;
+      scan(false);
+    });
+  };
   new MutationObserver((records) => {
     if (mutationAffectsPicker(records, host, contextRoots)) scheduleScan();
   }).observe(document.documentElement, {
@@ -168,8 +183,8 @@ export function startInlinePicker() {
   });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button]");
-    if (!control || !locate().ok ||
-        !/^(?:send (?:a )?(?:new|another) code|resend(?: (?:the )?code)?)$/i.test((control.textContent || "").trim())) return;
+    if (!control ||
+        !/^(?:send (?:a )?(?:new|another) code|resend(?: (?:the )?code)?)$/i.test((control.textContent || "").trim()) || !locate().ok) return;
     // A resend invalidates the previous suggestion immediately, including any
     // old response already in flight. IMAP dates have one-second precision.
     requestStartedAt = Math.floor(Date.now() / 1000) * 1000;
@@ -186,8 +201,8 @@ export function startInlinePicker() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && host) { dismissed = true; remove(); }
   });
-  window.addEventListener("scroll", scheduleScan, true);
-  window.addEventListener("resize", scheduleScan);
+  window.addEventListener("scroll", schedulePosition, true);
+  window.addEventListener("resize", schedulePosition);
   window.addEventListener("popstate", scheduleScan);
   scan();
 }

@@ -226,3 +226,29 @@ test("detection reports generic code context for later page updates", () => {
   assert.equal(result.ok, false);
   assert.equal(result.contextRoots[0], form);
 });
+
+
+test("cached detection tracks offscreen candidates without rescanning unrelated inputs", () => {
+  let queries = 0;
+  const input = new FakeInput({ autocomplete: "one-time-code", rect: { top: 900, bottom: 930, left: 0, right: 100 } });
+  const unrelated = new FakeInput({ name: "search" });
+  unrelated.getClientRects = () => { throw new Error("Unrelated fields need no layout reads"); };
+  const context = vm.createContext({
+    document: { querySelectorAll: () => { queries++; return [input, unrelated]; }, activeElement: null },
+    innerHeight: 800, innerWidth: 1200,
+  });
+  vm.runInContext(`var detect = (${fillCode.toString()}); var field = detect("", true);`, context);
+  assert.equal(context.field.ok, false);
+  input.rect = { top: 100, bottom: 130, left: 0, right: 100 };
+  vm.runInContext('field = detect("", true, field.candidates);', context);
+  assert.equal(context.field.ok, true);
+  assert.equal(queries, 1);
+  input.isConnected = false;
+  vm.runInContext('field = detect("", true, field.candidates);', context);
+  assert.equal(context.field.ok, false);
+  input.isConnected = true;
+  input.autocomplete = "";
+  vm.runInContext('field = detect("", true);', context);
+  assert.equal(context.field.ok, false);
+  assert.equal(queries, 2);
+});

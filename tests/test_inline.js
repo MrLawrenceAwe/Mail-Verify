@@ -44,3 +44,69 @@ test("page mutations only rescan when fields or their form can change", () => {
   assert.equal(mutationAffectsPicker([{ type: "characterData", target: { textContent: "new code" } }], null, context), true);
   assert.equal(mutationAffectsPicker([{ type: "characterData", target: { textContent: "clock" } }], null, context), false);
 });
+
+test("scroll positioning uses animation frames and cached candidates; mutations rediscover", async () => {
+  const { default: vm } = await import("node:vm");
+  const { readFileSync } = await import("node:fs");
+  const events = new Map(), frames = [], timers = [];
+  let observer, discoveries = 0, detections = 0, visible = false, mounted;
+  const cached = { inputs: [], contextRoots: [] };
+  const elements = Object.fromEntries(["#status", "#results", "#close", "#retry"].map(id => [id, {
+    dataset: {}, childElementCount: 0,
+  }]));
+  const context = vm.createContext({
+    fillCode: (_code, _detect, candidates) => {
+      detections++;
+      if (!candidates) discoveries++;
+      return { ok: visible, candidates: cached, contextRoots: [], rect: { top: 100, bottom: 130, left: 20 } };
+    },
+    location: { href: "https://example.test", hostname: "example.test" },
+    innerWidth: 1200, innerHeight: 800,
+    document: {
+      hidden: false,
+      documentElement: { append: node => { mounted = node; } },
+      addEventListener: (name, fn) => events.set(name, fn),
+      createElement: () => ({
+        dataset: {}, style: {},
+        attachShadow: () => ({ querySelector: id => elements[id] }),
+        getBoundingClientRect: () => ({ width: 240, height: 60 }),
+        remove: () => { mounted = undefined; },
+      }),
+    },
+    window: { addEventListener: (name, fn) => events.set(name, fn) },
+    MutationObserver: class { constructor(callback) { observer = callback; } observe() {} },
+    requestAnimationFrame: fn => { frames.push(fn); return frames.length; },
+    setTimeout: fn => { timers.push(fn); return timers.length; },
+    clearTimeout: () => {},
+    chrome: { runtime: { sendMessage: () => new Promise(() => {}) } },
+  });
+  const source = readFileSync(new URL("../extension/inline.js", import.meta.url), "utf8")
+    .replace(/^import .*\n/, "").replaceAll("export function ", "function ");
+  vm.runInContext(source + "\nstartInlinePicker();", context);
+  assert.equal(discoveries, 1);
+  for (let i = 0; i < 20; i++) events.get("scroll")();
+  assert.equal(frames.length, 1);
+  assert.equal(timers.length, 0);
+  frames.shift()();
+  assert.equal(discoveries, 1);
+  visible = true;
+  events.get("scroll")();
+  frames.shift()();
+  assert.equal(mounted.style.top, "134px");
+  assert.equal(discoveries, 1);
+  visible = false;
+  events.get("scroll")();
+  frames.shift()();
+  assert.equal(mounted, undefined);
+  observer([{ type: "attributes", target: { matches: () => true } }]);
+  timers.shift()();
+  assert.equal(discoveries, 2);
+  visible = true;
+  events.get("scroll")();
+  frames.shift()();
+  elements["#close"].onclick();
+  const before = detections;
+  events.get("scroll")();
+  assert.equal(frames.length, 0);
+  assert.equal(detections, before);
+});
