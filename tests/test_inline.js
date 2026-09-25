@@ -44,7 +44,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   const { default: vm } = await import("node:vm");
   const { readFileSync } = await import("node:fs");
   const events = new Map(), timers = [];
-  let observer, now = 10_000, visible = true, anchor = {}, responses = [];
+  let observer, now = 10_000, visible = true, anchor = {}, responses = [], warnings = [];
   const results = {
     dataset: {}, children: [],
     get childElementCount() { return this.children.length; },
@@ -80,7 +80,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
     requestAnimationFrame: fn => fn(),
     setTimeout: fn => { timers.push(fn); return timers.length; },
     clearTimeout: () => {},
-    chrome: { runtime: { sendMessage: async () => ({ ok: true, codes: responses }) } },
+    chrome: { runtime: { sendMessage: async () => ({ ok: true, codes: responses, warnings }) } },
   });
   const source = readFileSync(new URL("../extension/inline.js", import.meta.url), "utf8")
     .replace(/^import .*\n/, "").replaceAll("export function ", "function ");
@@ -93,6 +93,18 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   vm.runInContext(source + "\nstartInlinePicker();", context);
   await flush();
   assert.equal(results.childElementCount, 1);
+  warnings = ["one@yahoo.com: Yahoo took too long to respond."];
+  timers.pop()();
+  await flush();
+  assert.match(elements["#status"].textContent, /Could not check: one@yahoo\.com/);
+  const originalResponses = responses;
+  responses = [];
+  now = 131_000;
+  timers.pop()();
+  await flush();
+  assert.match(elements["#status"].textContent, /Could not check: one@yahoo\.com/);
+  responses = originalResponses;
+  warnings = [];
   now = 9500;
   responses = [responses[0], { uid: 2, code: "222222", sender: "auth@example.test", receivedAt: 9000 }];
   events.get("click")({ target: { closest: () => ({ textContent: "Resend code" }) } });

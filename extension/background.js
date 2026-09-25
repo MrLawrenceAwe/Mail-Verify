@@ -19,7 +19,8 @@ export function registerInlineRequests(chrome, timers = globalThis) {
           idleTimer = timers.setTimeout(() => client.closeSession(), 15_000);
         });
       }
-      return { ok: true, codes: (await pending).codes };
+      const { codes, warnings = [] } = await pending;
+      return { ok: true, codes, warnings };
     })().then(respond, (error) => respond({ ok: false, error: error.message }));
     return true;
   });
