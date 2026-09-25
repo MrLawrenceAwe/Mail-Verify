@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Yahoo Code Fill",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Show Yahoo verification codes on sign-in pages and fill the selected code with a click.",
   "permissions": [
     "nativeMessaging",
