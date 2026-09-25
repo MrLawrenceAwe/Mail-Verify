@@ -41,6 +41,17 @@ class CodeExtractionTests(unittest.TestCase):
             "123456",
         )
 
+    def test_indeed_sign_in_with_code(self):
+        for subtype, body, subject in (
+            ("plain", "Sign in to Indeed with code: 123456", "Indeed"),
+            ("plain", "Welcome", "Sign in to Indeed with code: 123456"),
+            ("html", "<p>Sign in to Indeed with code: <b>123456</b></p>", "Indeed"),
+        ):
+            with self.subTest(subtype=subtype, subject=subject):
+                self.assertEqual(extract_code(self.message(body, subject, subtype))["code"], "123456")
+        self.assertIsNone(extract_code(self.message("Sign in to Indeed with code: 123456 or 654321")))
+        self.assertIsNone(extract_code(self.message("Sign in to Indeed. Order code: 123456")))
+
     def test_html(self):
         self.assertEqual(
             extract_code(

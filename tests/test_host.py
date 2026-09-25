@@ -44,6 +44,23 @@ class HostTests(unittest.TestCase):
                 )
             keychain.assert_not_called()
 
+    def test_reused_session_notices_account_removal(self):
+        credentials = {"email": "test@yahoo.com", "password": "test-password"}
+        session = host.MailSession(credentials)
+        with patch.object(host, "keychain", return_value=None), patch.object(session, "close") as close:
+            with self.assertRaisesRegex(host.UserError, "Connect Yahoo Mail first"):
+                host.handle_request({"action": "codes"}, session)
+            close.assert_called_once()
+            self.assertIsNone(session.credentials)
+
+    def test_reused_session_keeps_connection_for_unchanged_account(self):
+        credentials = {"email": "test@yahoo.com", "password": "test-password"}
+        session = host.MailSession(credentials)
+        with patch.object(host, "keychain", return_value=dict(credentials)), patch.object(session, "close") as close, patch.object(host, "check_with_timeout", return_value=[]) as check:
+            self.assertEqual(host.handle_request({"action": "codes"}, session), {"codes": []})
+            close.assert_not_called()
+            check.assert_called_once_with(session)
+
     def test_whole_check_times_out(self):
         with patch.object(host, "CHECK_TIMEOUT_SECONDS", 0.01), patch.object(
             host.MailSession, "recent_codes", side_effect=lambda: time.sleep(0.2)
