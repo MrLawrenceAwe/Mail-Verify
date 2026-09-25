@@ -132,6 +132,7 @@ class MailSession:
                 found = extract_code(messages[uid]) if uid in messages else None
                 if found:
                     found["receivedAt"] = int(received * 1000)
+                    found["uid"] = int(uid)
                     self.codes_by_uid[int(uid)] = found
                     new_code_count += 1
                 if new_code_count == MAX_RESULTS:

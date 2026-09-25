@@ -8,10 +8,10 @@ export function suggestionPosition(rect, width, height, viewportWidth, viewportH
   return { left, top };
 }
 
-export function freshCodes(codes, since, now = Date.now()) {
+export function freshCodes(codes, since, now = Date.now(), excludedUids = new Set()) {
   const senders = new Set();
   return codes
-    .filter((item) => item.receivedAt >= since && item.receivedAt <= now && now - item.receivedAt <= 600_000)
+    .filter((item) => !excludedUids.has(item.uid) && item.receivedAt >= since && item.receivedAt <= now && now - item.receivedAt <= 600_000)
     .sort((a, b) => b.receivedAt - a.receivedAt)
     .filter((item) => {
       const sender = item.sender.toLowerCase();
@@ -47,7 +47,8 @@ export function mutationAffectsPicker(records, host, contextRoots = []) {
 export function startInlinePicker() {
   let host, status, results, timer, deadline = 0, checking = false;
   let dismissed = false, generation = 0, lastURL = location.href;
-  let requestStartedAt;
+  let requestStartedAt, anchor;
+  let knownUids = new Set(), excludedUids = new Set();
   let contextRoots = [];
   let candidates;
   const locate = () => {
@@ -61,6 +62,7 @@ export function startInlinePicker() {
     clearTimeout(timer);
     host?.remove();
     host = undefined;
+    anchor = undefined;
   }
   function position(field = locate()) {
     if (!host || !field.ok) return;
@@ -71,6 +73,7 @@ export function startInlinePicker() {
   }
   function mount(field) {
     requestStartedAt ??= Date.now() - 5_000;
+    anchor = field.anchor;
     host = document.createElement("div");
     host.dataset.yahooCodeFill = "suggestion";
     host.style.cssText = "position:fixed;z-index:2147483647;left:0;top:0";
@@ -112,7 +115,8 @@ export function startInlinePicker() {
       const response = await chrome.runtime.sendMessage({ type: "yahoo-inline-codes" });
       if (current !== generation || !host) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check Yahoo.");
-      const codes = freshCodes(response.codes, requestStartedAt);
+      for (const item of response.codes) knownUids.add(item.uid);
+      const codes = freshCodes(response.codes, requestStartedAt, Date.now(), excludedUids);
       // Preserve keyboard focus on unchanged suggestions during polling.
       const key = JSON.stringify(codes);
       if (results.dataset.codes !== key) {
@@ -152,12 +156,32 @@ export function startInlinePicker() {
     }
   }
   function scan(refresh = true) {
-    if (lastURL !== location.href) { remove(); dismissed = false; lastURL = location.href; requestStartedAt = undefined; candidates = undefined; }
+    if (lastURL !== location.href) {
+      remove();
+      dismissed = false;
+      lastURL = location.href;
+      requestStartedAt = undefined;
+      knownUids = new Set();
+      excludedUids = new Set();
+      candidates = undefined;
+    }
     if (document.hidden) { remove(); return; }
     if (dismissed) return;
     if (refresh) candidates = undefined;
     const field = locate();
-    if (!field.ok) { if (host) remove(); return; }
+    if (!field.ok) {
+      if (host) {
+        for (const uid of knownUids) excludedUids.add(uid);
+        remove();
+        requestStartedAt = undefined;
+      }
+      return;
+    }
+    if (host && anchor !== field.anchor) {
+      for (const uid of knownUids) excludedUids.add(uid);
+      remove();
+      requestStartedAt = undefined;
+    }
     if (!host && !dismissed) mount(field);
     else position(field);
   }
@@ -188,6 +212,7 @@ export function startInlinePicker() {
     // A resend invalidates the previous suggestion immediately, including any
     // old response already in flight. IMAP dates have one-second precision.
     requestStartedAt = Math.floor(Date.now() / 1000) * 1000;
+    for (const uid of knownUids) excludedUids.add(uid);
     dismissed = false;
     generation++;
     results?.replaceChildren();

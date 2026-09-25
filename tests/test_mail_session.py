@@ -90,6 +90,7 @@ class MailSessionTests(unittest.TestCase):
             [item["code"] for item in codes],
             ["100012", "100011", "100010", "100009", "100008"],
         )
+        self.assertEqual([item["uid"] for item in codes], [12, 11, 10, 9, 8])
         self.assertEqual(len(conn.fetches), 3)
         self.assertEqual(conn.sequence_fetches, ["1:12"])
         self.assertEqual(conn.fetches[0][0], b"12,11,10,9,8")
