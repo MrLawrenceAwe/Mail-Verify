@@ -130,6 +130,44 @@ class MailSessionTests(unittest.TestCase):
         self.assertEqual(conn.sequence, "9971:10000")
         self.assertEqual(session.last_seen_uid, 10000)
 
+    def test_initial_scan_without_codes_uses_two_body_fetches(self):
+        class FakeConnection:
+            def __init__(self):
+                self.body_batches = []
+
+            def select(self, *_args, **_kwargs):
+                return "OK", [b"30"]
+
+            def fetch(self, *_args):
+                date = mail_session.imaplib.Time2Internaldate(time.time() - 60).encode()
+                return "OK", [
+                    b"1 (UID " + str(uid).encode() + b" INTERNALDATE " + date + b" RFC822.SIZE 100)"
+                    for uid in range(1, 31)
+                ]
+
+            def uid(self, command, *args):
+                self.assert_uid_command(command)
+                uids = args[0].split(b",")
+                self.body_batches.append(uids)
+                return "OK", [
+                    (b"1 (UID " + uid + b" BODY[] {100}",
+                     b"From: auth@example.com\r\nSubject: Account\r\n\r\nNo code here.")
+                    for uid in uids
+                ]
+
+            def assert_uid_command(self, command):
+                if command != "fetch":
+                    raise AssertionError(command)
+
+            def shutdown(self):
+                pass
+
+        conn = FakeConnection()
+        with patch.object(mail_session, "connect_imap", return_value=conn):
+            session = mail_session.MailSession({"email": "test@yahoo.com", "password": "unused"})
+            self.assertEqual(session.recent_codes(), [])
+        self.assertEqual([len(batch) for batch in conn.body_batches], [5, 25])
+
     def test_future_internaldate_does_not_permanently_skip_code(self):
         class FakeConnection:
             def __init__(self):

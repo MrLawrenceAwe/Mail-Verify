@@ -192,6 +192,18 @@ test("Indeed's Enter code requires email verification context", () => {
   assert.equal(run([input]).ok, false);
 });
 
+test("explicit hints skip page text and generic hints read shared context once", () => {
+  const explicit = new FakeInput({ autocomplete: "one-time-code", form: {
+    get textContent() { throw new Error("unneeded context read"); },
+  } });
+  assert.equal(run([explicit]).ok, true);
+  let reads = 0;
+  const form = { get textContent() { reads++; return "We sent a code to your email"; } };
+  const inputs = [new FakeInput({ name: "code", form }), new FakeInput({ name: "code", form })];
+  run(inputs);
+  assert.equal(reads, 1);
+});
+
 test("automatic detection does not fill or dispatch events", () => {
   const input = new FakeInput({ autocomplete: "one-time-code" });
   const context = vm.createContext({
@@ -201,4 +213,16 @@ test("automatic detection does not fill or dispatch events", () => {
   assert.equal(vm.runInContext(`(${fillCode.toString()})("", true)`, context).ok, true);
   assert.equal(input.value, undefined);
   assert.deepEqual(input.events, []);
+});
+
+test("detection reports generic code context for later page updates", () => {
+  const form = { textContent: "Enter code", contains: () => true };
+  const input = new FakeInput({ name: "code", form });
+  const context = vm.createContext({
+    document: { querySelectorAll: () => [input], activeElement: input },
+    innerHeight: 800, innerWidth: 1200,
+  });
+  const result = vm.runInContext(`(${fillCode.toString()})("", true)`, context);
+  assert.equal(result.ok, false);
+  assert.equal(result.contextRoots[0], form);
 });
