@@ -9,7 +9,7 @@ The Mac companion has already been installed by Codex. Finish these steps:
 1. In Chrome, type `chrome://extensions` into the address bar.
 2. Turn on **Developer mode**, choose **Load unpacked**, and select the `extension` folder beside this guide.
 3. Pin **Yahoo Code Fill** using Chrome’s Extensions menu, then open it.
-4. Enter your Yahoo email and a **Yahoo-generated app password**, then click **Connect securely**. Generate that password in [Yahoo Account Security](https://login.yahoo.com/account/security). Use an app password, not your normal account password. Enter it in the extension, not in chat.
+4. Enter your Yahoo email and a **Yahoo-generated app password**, then click **Add account securely**. Generate that password in [Yahoo Account Security](https://login.yahoo.com/account/security). Use an app password, not your normal account password. Enter it in the extension, not in chat. Use **Add another Yahoo account** for each additional inbox.
 5. If macOS asks for Keychain access, approve access for the companion’s Python process.
 
 Expected extension ID: `ggmcbkkmgcdiimnpkekakaegmclkgkjj`.
@@ -32,7 +32,7 @@ No toolbar popup is required after setup. Hidden tabs stop checking. Scroll and 
 ## Current limits
 
 - Suggestions are styled like Mail autofill and anchored to the input; they are an extension interface rather than a macOS system control.
-- One Yahoo account. Inbox only, the latest 30 messages on the first check, and codes received within the last 10 minutes. Spam and other folders are excluded.
+- Multiple Yahoo accounts. Each account scans its inbox only, the latest 30 messages on the first check, and codes received within the last 10 minutes. Spam and other folders are excluded. With multiple accounts, checks may take longer because inboxes are scanned in turn.
 - Recognises numeric codes of 4–8 digits when the code is directly labelled by common English phrases such as “Your code is”, “Security code:”, or “Sign in to Indeed with code:”. Messages containing multiple candidate codes are omitted. Some formats, languages, and alphanumeric codes are not supported yet.
 - Supports ordinary input fields and common split-digit forms on HTTPS pages when the fields have a verification-related label or attribute. A generic “code” label also requires email/sign-in verification text in its form or main page content; coupon and promo fields are excluded. Unlabelled fields, embedded cross-origin forms, and unusual custom widgets may not work.
 - Sender and subject are provided for your review. The prototype does not authenticate a sender or automatically establish which website owns a code. It never selects a code for you.
@@ -41,7 +41,7 @@ No toolbar popup is required after setup. Hidden tabs stop checking. Scroll and 
 
 ## Privacy and permissions
 
-Email access goes directly from your Mac to `imap.mail.yahoo.com:993` over TLS. Credentials are stored as a generic password in macOS Keychain under `local.yahoo_code_fill`. They are never stored in extension storage, configuration files, logs, or command-line arguments. The companion uses a read-only inbox and BODY.PEEK retrieval, so checking does not mark messages read.
+Email access goes directly from your Mac to `imap.mail.yahoo.com:993` over TLS. Credentials are stored together as a generic password in macOS Keychain under `local.yahoo_code_fill`. An existing single-account credential is retained when adding another account. Credentials are never stored in extension storage, configuration files, logs, or command-line arguments. The companion uses a read-only inbox and BODY.PEEK retrieval, so checking does not mark messages read.
 
 The extension requests `nativeMessaging`, `activeTab`, and `scripting`, and runs a content script on HTTPS sites to recognise code fields automatically. Chrome does not necessarily show a permission prompt after reloading an unpacked extension. If the on-page picker is absent after refreshing the website, open the extension’s **Details** in `chrome://extensions` and check that **Site access** allows it to run on that site. There are no analytics or AI integrations. The on-page picker runs in an isolated content-script context with a closed shadow root. Codes remain in memory and are written into a website’s input only when you click Fill; that website can then read the code.
 
@@ -49,7 +49,7 @@ Chrome starts the companion on demand for automatic checks on the active tab. Ba
 
 ## Remove account or uninstall
 
-**Remove account** in the popup removes the saved Yahoo credential from Keychain.
+**Remove** beside an account in the popup removes that Yahoo credential from Keychain. Removing the last account deletes the Keychain item.
 
 To uninstall the companion, run this from the Yahoo Code Fill folder:
 

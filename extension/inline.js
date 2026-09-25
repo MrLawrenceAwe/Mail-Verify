@@ -11,14 +11,18 @@ export function suggestionPosition(rect, width, height, viewportWidth, viewportH
 export function freshCodes(codes, since, now = Date.now(), excludedUids = new Set()) {
   const senders = new Set();
   return codes
-    .filter((item) => !excludedUids.has(item.uid) && item.receivedAt >= since && item.receivedAt <= now && now - item.receivedAt <= 600_000)
+    .filter((item) => !excludedUids.has(codeIdentity(item)) && item.receivedAt >= since && item.receivedAt <= now && now - item.receivedAt <= 600_000)
     .sort((a, b) => b.receivedAt - a.receivedAt)
     .filter((item) => {
-      const sender = item.sender.toLowerCase();
+      const sender = `${item.accountEmail || ""}:${item.sender.toLowerCase()}`;
       if (senders.has(sender)) return false;
       senders.add(sender);
       return true;
     });
+}
+
+function codeIdentity(item) {
+  return item.accountEmail ? `${item.accountEmail.toLowerCase()}:${item.uid}` : item.uid;
 }
 
 export function mutationAffectsPicker(records, host, contextRoots = []) {
@@ -115,7 +119,7 @@ export function startInlinePicker() {
       const response = await chrome.runtime.sendMessage({ type: "yahoo-inline-codes" });
       if (current !== generation || !host) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check Yahoo.");
-      for (const item of response.codes) knownUids.add(item.uid);
+      for (const item of response.codes) knownUids.add(codeIdentity(item));
       const codes = freshCodes(response.codes, requestStartedAt, Date.now(), excludedUids);
       // Preserve keyboard focus on unchanged suggestions during polling.
       const key = JSON.stringify(codes);
@@ -127,8 +131,9 @@ export function startInlinePicker() {
           button.className = "code";
           button.innerHTML = `<svg viewBox="0 0 36 28" aria-hidden="true"><path fill="currentColor" d="M2 2h32L18 14zM1 5l12 10L1 25zm34 0v20L23 15zM3 27l12-10 3 3 3-3 12 10z"/></svg><span><strong></strong><small>From Yahoo Mail</small></span>`;
           button.querySelector("strong").textContent = `Fill code ${item.code}`;
-          button.title = `${item.sender}\n${item.subject}\nFill on ${location.hostname}`;
-          button.setAttribute("aria-label", `Fill code ${item.code} from ${item.sender}. ${item.subject}. On ${location.hostname}`);
+          button.querySelector("small").textContent = item.accountEmail || "From Yahoo Mail";
+          button.title = `${item.accountEmail || "Yahoo Mail"}\n${item.sender}\n${item.subject}\nFill on ${location.hostname}`;
+          button.setAttribute("aria-label", `Fill code ${item.code} from ${item.sender} in ${item.accountEmail || "Yahoo Mail"}. ${item.subject}. On ${location.hostname}`);
           button.addEventListener("mousedown", (event) => event.preventDefault());
           button.onclick = () => {
             if (Date.now() - item.receivedAt > 600_000) {

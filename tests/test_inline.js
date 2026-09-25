@@ -31,6 +31,15 @@ test("resend excludes an already seen message but accepts a new UID in the same 
   assert.deepEqual(freshCodes([old, newer], 9000, 9500, new Set([7])), [newer]);
 });
 
+test("same sender and UID in separate accounts remain distinct", () => {
+  const codes = [
+    { uid: 7, code: "111111", sender: "auth@example.test", accountEmail: "one@yahoo.com", receivedAt: 9000 },
+    { uid: 7, code: "222222", sender: "auth@example.test", accountEmail: "two@yahoo.com", receivedAt: 9100 },
+  ];
+  assert.deepEqual(freshCodes(codes, 8000, 10000).map(x => x.code), ["222222", "111111"]);
+  assert.deepEqual(freshCodes(codes, 8000, 10000, new Set(["one@yahoo.com:7"])).map(x => x.code), ["222222"]);
+});
+
 test("a new verification field on the same URL starts a fresh code window", async () => {
   const { default: vm } = await import("node:vm");
   const { readFileSync } = await import("node:fs");
@@ -53,14 +62,14 @@ test("a new verification field on the same URL starts a fresh code window", asyn
       documentElement: { append() {} },
       addEventListener: (name, fn) => events.set(name, fn),
       createElement: () => {
-        const strong = {};
+        const strong = {}, small = {};
         return {
-          strong, dataset: {}, style: {},
+          strong, small, dataset: {}, style: {},
           attachShadow: () => ({ querySelector: id => elements[id] }),
           getBoundingClientRect: () => ({ width: 240, height: 60 }),
           contains: () => false,
           remove() {},
-          querySelector: () => strong,
+          querySelector: selector => selector === "small" ? small : strong,
           addEventListener() {},
           setAttribute() {},
         };

@@ -19,7 +19,7 @@
         Connecting to your Mac companion…
       </p>
       <section id="setup" hidden>
-        <h2>Connect Yahoo Mail</h2>
+        <h2>Add Yahoo account</h2>
         <p>Use a Yahoo app password. It stays in your Mac’s Keychain.</p>
         <form id="connectForm">
           <label for="email">Yahoo email address</label
@@ -44,14 +44,12 @@
             rel="noreferrer"
             >Create an app password in Yahoo ↗</a
           >
-          <button id="connect" type="submit">Connect securely</button>
+          <button id="connect" type="submit">Add account securely</button>
         </form>
       </section>
       <section id="codeResults" hidden>
-        <div class="account">
-          <span id="accountEmail"></span
-          ><button id="removeAccount" class="quiet">Remove account</button>
-        </div>
+        <div id="accounts"></div>
+        <button id="addAccount" class="quiet">Add another Yahoo account</button>
         <p class="destination">Fill on <strong id="destination"></strong></p>
         <p class="hint">
           Check that the sender and service match this website before filling.
