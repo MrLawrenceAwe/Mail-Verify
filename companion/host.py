@@ -30,18 +30,73 @@ def check_with_timeout(session):
         signal.signal(signal.SIGALRM, previous)
 
 
-def handle_request(request, session):
+def stored_accounts():
+    saved = keychain("get")
+    if not saved:
+        return []
+    # The original single-account Keychain item is read in place so an update
+    # does not strand the user's existing app password.
+    return saved["accounts"] if "accounts" in saved else [saved]
+
+
+class AccountSessions:
+    def __init__(self):
+        self.sessions = {}
+
+    def close(self):
+        for session in self.sessions.values():
+            session.close()
+        self.sessions.clear()
+
+    def remove(self, email):
+        session = self.sessions.pop(email.lower(), None)
+        if session:
+            session.close()
+
+    def codes(self, accounts):
+        active = {account["email"].lower() for account in accounts}
+        for email in list(self.sessions):
+            if email not in active:
+                self.remove(email)
+        codes, errors = [], []
+        for account in accounts:
+            email = account["email"]
+            key = email.lower()
+            session = self.sessions.get(key)
+            if session and session.credentials != account:
+                self.remove(email)
+                session = None
+            if not session:
+                session = self.sessions[key] = MailSession(account)
+            try:
+                codes.extend({**item, "accountEmail": email} for item in check_with_timeout(session))
+            except (UserError, imaplib.IMAP4.error, OSError, socket.timeout) as exc:
+                self.remove(email)
+                errors.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
+        if errors and not codes and len(errors) == len(accounts):
+            raise UserError("Could not check connected accounts: " + "; ".join(errors))
+        codes.sort(key=lambda item: item["receivedAt"], reverse=True)
+        return {"codes": codes, "warnings": errors}
+
+
+def handle_request(request, sessions):
     if not isinstance(request, dict):
         raise UserError("Invalid request.")
     action = request.get("action")
     if action == "status":
-        credentials = keychain("get")
-        return {"email": credentials["email"] if credentials else None}
+        return {"accounts": [item["email"] for item in stored_accounts()]}
     if action == "disconnect":
-        keychain("delete")
-        session.close()
-        session.credentials = None
-        return {"disconnected": True}
+        address = request.get("email", "")
+        accounts = stored_accounts()
+        remaining = [item for item in accounts if item["email"].lower() != address.lower()]
+        if len(remaining) == len(accounts):
+            raise UserError("That Yahoo account is not connected.")
+        if remaining:
+            keychain("set", {"accounts": remaining})
+        else:
+            keychain("delete")
+        sessions.remove(address)
+        return {"accounts": [item["email"] for item in remaining]}
     if action == "configure":
         address = request.get("email", "").strip()
         password = request.get("password", "").replace(" ", "")
@@ -53,18 +108,18 @@ def handle_request(request, session):
         credentials = {"email": address, "password": password}
         with connect_imap(credentials):
             pass
-        keychain("set", credentials)
-        session.close()
-        session.credentials = credentials
-        return {"email": address}
+        accounts = stored_accounts()
+        accounts = [item for item in accounts if item["email"].lower() != address.lower()]
+        accounts.append(credentials)
+        keychain("set", {"accounts": accounts})
+        sessions.remove(address)
+        return {"accounts": [item["email"] for item in accounts]}
     if action == "codes":
-        credentials = keychain("get")
-        if credentials != session.credentials:
-            session.close()
-            session.credentials = credentials
-        if not session.credentials:
+        accounts = stored_accounts()
+        if not accounts:
+            sessions.close()
             raise UserError("Connect Yahoo Mail first.")
-        return {"codes": check_with_timeout(session)}
+        return sessions.codes(accounts)
     raise UserError("Unsupported request.")
 
 
@@ -84,14 +139,14 @@ def read_message(stream):
 
 
 def main():
-    session = MailSession(None)
+    sessions = AccountSessions()
     try:
         while True:
             try:
                 request = read_message(sys.stdin.buffer)
                 if request is None:
                     break
-                response = {"ok": True, **handle_request(request, session)}
+                response = {"ok": True, **handle_request(request, sessions)}
             except UserError as exc:
                 response = {"ok": False, "error": str(exc)}
             except imaplib.IMAP4.error:
@@ -113,7 +168,7 @@ def main():
             sys.stdout.buffer.write(struct.pack("=I", len(payload)) + payload)
             sys.stdout.buffer.flush()
     finally:
-        session.close()
+        sessions.close()
 
 
 if __name__ == "__main__":

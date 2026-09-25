@@ -16,6 +16,7 @@ export function createPopup({
   const $ = (id) => document.getElementById(id);
   const { sendCompanionRequest, sendSessionRequest, closeSession } = client;
   let targetTab;
+  let accounts = [];
   let checking = false,
     filling = false,
     removingAccount = false;
@@ -29,13 +30,35 @@ export function createPopup({
   }
   function setActionControlsDisabled(disabled) {
     $("checkCodes").disabled = disabled;
-    $("removeAccount").disabled = disabled;
+    for (const button of $("accounts").querySelectorAll("button")) button.disabled = disabled;
   }
-  function showAccount(email) {
-    $("setup").hidden = true;
+  function showAccounts(nextAccounts) {
+    abortCheck();
+    accounts = nextAccounts;
+    $("setup").hidden = accounts.length > 0;
     $("companionSetup").hidden = true;
-    $("codeResults").hidden = false;
-    $("accountEmail").textContent = email;
+    $("codeResults").hidden = accounts.length === 0;
+    $("accounts").replaceChildren();
+    for (const email of accounts) {
+      const row = document.createElement("div");
+      row.className = "account";
+      const label = document.createElement("span");
+      label.textContent = email;
+      const remove = document.createElement("button");
+      remove.className = "quiet";
+      remove.textContent = "Remove";
+      remove.setAttribute("aria-label", `Remove ${email}`);
+      remove.addEventListener("click", () => removeAccount(email));
+      row.append(label, remove);
+      $("accounts").append(row);
+    }
+    $("codes").replaceChildren();
+    renderedCodesKey = undefined;
+    if (!accounts.length) {
+      pollDeadline = 0;
+      setStatus("No Yahoo accounts connected.");
+      return;
+    }
     pollDeadline = clock.now() + POLL_WINDOW_MS;
     checkForCodes();
   }
@@ -99,6 +122,7 @@ export function createPopup({
       card.className = "card";
       for (const [tag, className, text] of [
         ["div", "code", item.code],
+        ["p", "source", item.accountEmail || accounts[0]],
         ["p", "sender", item.sender],
         ["p", "subject", item.subject],
       ]) {
@@ -132,11 +156,12 @@ export function createPopup({
     let failed = false;
     setStatus("Checking recent Yahoo emails… This may take up to 25 seconds.");
     try {
-      const codes = (await sendSessionRequest("codes")).codes;
+      const response = await sendSessionRequest("codes");
+      const codes = response.codes;
       if (!filling && requestGeneration === checkGeneration) {
         renderCodes(codes);
         setStatus(
-          codes.length
+          response.warnings?.length ? `Some accounts could not be checked: ${response.warnings.join("; ")}` : codes.length
             ? "Choose the code for this website. Checking for newer codes…"
             : "No recent code yet. Request one on the website; keep this popup open.",
         );
@@ -176,25 +201,26 @@ export function createPopup({
         email: $("email").value,
         password,
       });
-      showAccount(result.email);
+      $("email").value = "";
+      showAccounts(result.accounts);
     } catch (error) {
       setStatus(error.message, true);
     } finally {
       $("connect").disabled = false;
     }
   });
-  $("removeAccount").addEventListener("click", async () => {
+  $("addAccount").addEventListener("click", () => {
+    $("setup").hidden = false;
+    $("email").focus();
+  });
+  async function removeAccount(email) {
     pollDeadline = 0;
     removingAccount = true;
     abortCheck();
     setActionControlsDisabled(true);
     try {
-      await sendCompanionRequest({ action: "disconnect" });
-      $("codes").replaceChildren();
-      renderedCodesKey = undefined;
-      $("codeResults").hidden = true;
-      $("setup").hidden = false;
-      setStatus("Yahoo credentials removed from this Mac’s Keychain.");
+      const result = await sendCompanionRequest({ action: "disconnect", email });
+      showAccounts(result.accounts);
     } catch (error) {
       setStatus(error.message, true);
       pollDeadline = clock.now() + POLL_WINDOW_MS;
@@ -203,7 +229,7 @@ export function createPopup({
       setActionControlsDisabled(false);
       if (pollDeadline) scheduleCheck();
     }
-  });
+  }
   async function initialize() {
     $("extensionId").value = chrome.runtime.id;
     const [tab] = await chrome.tabs.query({
@@ -216,7 +242,7 @@ export function createPopup({
       : "an HTTPS sign-in page";
     try {
       const result = await sendSessionRequest("status");
-      if (result.email) showAccount(result.email);
+      if (result.accounts?.length) showAccounts(result.accounts);
       else {
         $("setup").hidden = false;
         setStatus("Connect once. No Yahoo tab needed.");
