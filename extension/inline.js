@@ -48,19 +48,19 @@ export function startInlinePicker() {
     const root = host.attachShadow({ mode: "closed" });
     root.innerHTML = `<style>
       :host { all:initial; }
-      section { box-sizing:border-box; width:300px; max-width:calc(100vw - 16px); max-height:45vh; overflow:auto; padding:7px; border:1px solid #c7c7b9; border-radius:12px; background:#eeeedf; color:#343746; box-shadow:0 5px 16px #0003; font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+      section { box-sizing:border-box; width:240px; max-width:calc(100vw - 16px); max-height:45vh; overflow:auto; padding:4px; border:1px solid #d3d3ca; border-radius:8px; background:#f3f3eb; color:#343746; box-shadow:0 2px 8px #0002; font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
       button { font:inherit; cursor:pointer; border:0; }
       button:focus-visible { outline:2px solid #163fa9; outline-offset:2px; }
-      .code { width:100%; display:flex; gap:12px; align-items:center; text-align:left; border-radius:7px; padding:10px 12px; background:#6096f4; color:white; }
+      .code { width:100%; display:flex; gap:8px; align-items:center; text-align:left; border-radius:5px; padding:6px 8px; background:#6096f4; color:white; }
       .code:hover { background:#477fdf; }
-      .code + .code { margin-top:6px; }
+      .code + .code { margin-top:4px; }
       .code:disabled { opacity:.6; }
-      svg { width:34px; height:30px; flex:none; }
-      strong { display:block; font-size:17px; font-weight:500; }
-      small { display:block; font-size:13px; margin-top:1px; }
-      .controls { display:flex; align-items:center; gap:6px; padding:2px 4px; }
-      #status { flex:1; font-size:12px; margin:4px 0; }
-      #retry, #close { color:#555d6b; background:transparent; padding:4px; border-radius:4px; }
+      svg { width:24px; height:20px; flex:none; }
+      strong { display:block; font-size:14px; font-weight:500; }
+      small { display:block; font-size:11px; margin-top:0; }
+      .controls { display:flex; align-items:center; gap:4px; padding:0 3px; }
+      #status { flex:1; font-size:10px; margin:2px 0; overflow-wrap:anywhere; }
+      #retry, #close { color:#555d6b; background:transparent; padding:1px 4px; border-radius:3px; line-height:18px; }
       #retry:hover, #close:hover { background:#0001; }
       [hidden] { display:none !important; }
     </style><section aria-label="Yahoo Mail code suggestions"><div id="results"></div><div class="controls"><p id="status" role="status"></p><button id="retry" title="Check Yahoo again" aria-label="Check Yahoo again">↻</button><button id="close" aria-label="Dismiss code suggestions">×</button></div></section>`;
