@@ -25,6 +25,90 @@ test("only the latest code per sender is suggested, without changing the respons
   assert.equal(codes[0].code, "111111");
 });
 
+test("resend excludes an already seen message but accepts a new UID in the same second", () => {
+  const old = { uid: 7, code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+  const newer = { uid: 8, code: "222222", sender: "auth@example.test", receivedAt: 9000 };
+  assert.deepEqual(freshCodes([old, newer], 9000, 9500, new Set([7])), [newer]);
+});
+
+test("a new verification field on the same URL starts a fresh code window", async () => {
+  const { default: vm } = await import("node:vm");
+  const { readFileSync } = await import("node:fs");
+  const events = new Map(), timers = [];
+  let observer, now = 10_000, visible = true, anchor = {}, responses = [];
+  const results = {
+    dataset: {}, children: [],
+    get childElementCount() { return this.children.length; },
+    replaceChildren() { this.children = []; },
+    append(child) { this.children.push(child); },
+  };
+  const elements = { "#results": results, "#status": {}, "#close": {}, "#retry": {} };
+  const context = vm.createContext({
+    fillCode: () => ({ ok: visible, anchor, candidates: {}, contextRoots: [], rect: { top: 100, bottom: 130, left: 20 } }),
+    Date: { now: () => now },
+    location: { href: "https://example.test", hostname: "example.test" },
+    innerWidth: 1200, innerHeight: 800,
+    document: {
+      hidden: false,
+      documentElement: { append() {} },
+      addEventListener: (name, fn) => events.set(name, fn),
+      createElement: () => {
+        const strong = {};
+        return {
+          strong, dataset: {}, style: {},
+          attachShadow: () => ({ querySelector: id => elements[id] }),
+          getBoundingClientRect: () => ({ width: 240, height: 60 }),
+          contains: () => false,
+          remove() {},
+          querySelector: () => strong,
+          addEventListener() {},
+          setAttribute() {},
+        };
+      },
+    },
+    window: { addEventListener: (name, fn) => events.set(name, fn) },
+    MutationObserver: class { constructor(callback) { observer = callback; } observe() {} },
+    requestAnimationFrame: fn => fn(),
+    setTimeout: fn => { timers.push(fn); return timers.length; },
+    clearTimeout: () => {},
+    chrome: { runtime: { sendMessage: async () => ({ ok: true, codes: responses }) } },
+  });
+  const source = readFileSync(new URL("../extension/inline.js", import.meta.url), "utf8")
+    .replace(/^import .*\n/, "").replaceAll("export function ", "function ");
+  const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
+  const rescan = () => {
+    observer([{ type: "attributes", target: { matches: () => true } }]);
+    timers.pop()();
+  };
+  responses = [{ uid: 1, code: "111111", sender: "auth@example.test", receivedAt: 9000 }];
+  vm.runInContext(source + "\nstartInlinePicker();", context);
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  now = 9500;
+  responses = [responses[0], { uid: 2, code: "222222", sender: "auth@example.test", receivedAt: 9000 }];
+  events.get("click")({ target: { closest: () => ({ textContent: "Resend code" }) } });
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  assert.equal(results.children[0].strong.textContent, "Fill code 222222");
+  visible = false;
+  rescan();
+  now = 20_000;
+  visible = true;
+  anchor = {};
+  rescan();
+  await flush();
+  assert.equal(results.childElementCount, 0);
+  responses = [{ uid: 3, code: "333333", sender: "auth@example.test", receivedAt: 20_000 }];
+  timers.pop()();
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  now = 30_000;
+  anchor = {};
+  rescan();
+  await flush();
+  assert.equal(results.childElementCount, 0);
+});
+
 test("page mutations only rescan when fields or their form can change", () => {
   const node = (tag, hasInput = false) => ({
     nodeType: 1,
