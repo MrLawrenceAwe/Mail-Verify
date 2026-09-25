@@ -1,231 +1,230 @@
-const $ = id => document.getElementById(id);
-const HOST = 'local.yahoo_code_fill';
-let targetTab, busy = false, filling = false, disconnecting = false, timer, deadline, revision = 0, renderedCodes;
-let mailPort, pendingRequest;
-function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
-async function native(request) {
-  let response;
-  try { response = await chrome.runtime.sendNativeMessage(HOST, request); }
-  catch { throw new Error('Mac companion unavailable. Run the companion installer, then reopen this popup.'); }
-  if (!response?.ok) throw new Error(response?.error || 'Unexpected companion response.');
-  return response;
-}
-function connected(email) {
-  $('setup').hidden = true; $('missing').hidden = true; $('mailbox').hidden = false;
-  $('account').textContent = email;
-  deadline = Date.now() + 120000;
-  refresh();
-}
-function closeMailPort() {
-  const port = mailPort;
-  mailPort = undefined;
-  if (port) port.disconnect();
-  if (pendingRequest) {
-    pendingRequest.reject(new Error('Check interrupted.'));
-    pendingRequest = undefined;
+import { fillCode } from "./fill-code.js";
+
+const POLL_INTERVAL_MS = 8_000;
+const POLL_WINDOW_MS = 120_000;
+const MIN_POLL_PAUSE_MS = 2_000;
+const MAX_CODE_AGE_MS = 600_000;
+
+export function createPopup({
+  document,
+  chrome,
+  client,
+  clock = Date,
+  setTimeout = globalThis.setTimeout,
+  clearTimeout = globalThis.clearTimeout,
+}) {
+  const $ = (id) => document.getElementById(id);
+  const { sendCompanionRequest, sendSessionRequest, closeSession } = client;
+  let targetTab;
+  let checking = false,
+    filling = false,
+    removingAccount = false;
+  let pollTimer,
+    pollDeadline = 0,
+    checkGeneration = 0,
+    renderedCodesKey;
+  function setStatus(text, error = false) {
+    $("status").textContent = text;
+    $("status").classList.toggle("error", error);
   }
-}
-function abortCheck() {
-  revision++;
-  busy = false;
-  closeMailPort();
-}
-function mailRequest(action) {
-  if (!mailPort) {
-    try { mailPort = chrome.runtime.connectNative(HOST); }
-    catch { throw new Error('Mac companion unavailable. Run the companion installer, then reopen this popup.'); }
-    const port = mailPort;
-    port.onMessage.addListener(response => {
-      if (mailPort !== port) return;
-      const pending = pendingRequest;
-      pendingRequest = undefined;
-      if (!pending) return;
-      if (response?.ok) pending.resolve(response);
-      else pending.reject(new Error(response?.error || 'Unexpected companion response.'));
-    });
-    port.onDisconnect.addListener(() => {
-      if (mailPort !== port) return;
-      mailPort = undefined;
-      if (pendingRequest) {
-        const message = pendingRequest.action === 'status'
-          ? 'Mac companion unavailable. Run the companion installer, then reopen this popup.'
-          : 'Mac companion disconnected. Try checking again.';
-        pendingRequest.reject(new Error(message));
-        pendingRequest = undefined;
+  function showAccount(email) {
+    $("setup").hidden = true;
+    $("companionSetup").hidden = true;
+    $("codeResults").hidden = false;
+    $("accountEmail").textContent = email;
+    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    checkForCodes();
+  }
+  function abortCheck() {
+    checkGeneration++;
+    checking = false;
+    closeSession();
+  }
+  async function fillSelectedCode(item, button) {
+    if (filling) return;
+    filling = true;
+    abortCheck();
+    clearTimeout(pollTimer);
+    $("checkCodes").disabled = true;
+    $("removeAccount").disabled = true;
+    const buttons = [...$("codes").querySelectorAll("button")];
+    for (const control of buttons) control.disabled = true;
+    try {
+      if (clock.now() - item.receivedAt > MAX_CODE_AGE_MS)
+        throw new Error("This code is too old. Request a new code.");
+      const current = await chrome.tabs.get(targetTab.id);
+      const [active] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (active?.id !== targetTab.id || current.url !== targetTab.url)
+        throw new Error(
+          "The page changed. Reopen Code Fill on the intended page.",
+        );
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: targetTab.id },
+        func: fillCode,
+        args: [item.code],
+      });
+      if (!result?.ok)
+        throw new Error(result?.error || "Could not fill this page.");
+      pollDeadline = 0;
+      closeSession();
+      setStatus("Code filled. The website may continue automatically.");
+      button.textContent = "Filled";
+    } catch (error) {
+      setStatus(error.message, true);
+      for (const control of buttons) control.disabled = false;
+    } finally {
+      filling = false;
+      checkGeneration++;
+      $("checkCodes").disabled = checking;
+      $("removeAccount").disabled = checking;
+      scheduleCheck();
+    }
+  }
+  function scheduleCheck(delay = POLL_INTERVAL_MS) {
+    clearTimeout(pollTimer);
+    if (!filling && !removingAccount && clock.now() < pollDeadline)
+      pollTimer = setTimeout(checkForCodes, delay);
+    else if (clock.now() >= pollDeadline) closeSession();
+  }
+  function renderCodes(codes) {
+    const key = JSON.stringify(codes);
+    if (key === renderedCodesKey) return;
+    renderedCodesKey = key;
+    $("codes").replaceChildren();
+    for (const item of codes) {
+      const card = document.createElement("article");
+      card.className = "card";
+      for (const [tag, className, text] of [
+        ["div", "code", item.code],
+        ["p", "sender", item.sender],
+        ["p", "subject", item.subject],
+      ]) {
+        const el = document.createElement(tag);
+        el.className = className;
+        el.textContent = text;
+        card.append(el);
       }
-    });
+      const button = document.createElement("button");
+      button.textContent = targetTab
+        ? `Fill on ${new URL(targetTab.url).hostname}`
+        : "Open an HTTPS sign-in page to fill";
+      button.disabled = !targetTab;
+      button.addEventListener("click", () => fillSelectedCode(item, button));
+      card.append(button);
+      $("codes").append(card);
+    }
   }
-  return new Promise((resolve, reject) => {
-    pendingRequest = {action, resolve, reject};
-    try { mailPort.postMessage({action}); }
-    catch { closeMailPort(); }
+  async function checkForCodes() {
+    if (filling || removingAccount) return;
+    if (checking) abortCheck();
+    clearTimeout(pollTimer);
+    checking = true;
+    const requestGeneration = ++checkGeneration;
+    const startedAt = clock.now();
+    let failed = false;
+    setStatus("Checking recent Yahoo emails… This may take up to 25 seconds.");
+    try {
+      const codes = (await sendSessionRequest("codes")).codes;
+      if (!filling && requestGeneration === checkGeneration) {
+        renderCodes(codes);
+        setStatus(
+          codes.length
+            ? "Choose the code for this website. Checking for newer codes…"
+            : "No recent code yet. Request one on the website; keep this popup open.",
+        );
+      }
+    } catch (error) {
+      failed = true;
+      if (!filling && requestGeneration === checkGeneration)
+        setStatus(error.message, true);
+    } finally {
+      if (requestGeneration === checkGeneration) {
+        checking = false;
+        $("checkCodes").disabled = filling || removingAccount;
+        $("removeAccount").disabled = filling || removingAccount;
+        scheduleCheck(
+          failed
+            ? POLL_INTERVAL_MS
+            : Math.max(
+                MIN_POLL_PAUSE_MS,
+                POLL_INTERVAL_MS - (clock.now() - startedAt),
+              ),
+        );
+      }
+    }
+  }
+  $("checkCodes").addEventListener("click", () => {
+    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    checkForCodes();
   });
-}
-async function getCodes() { return (await mailRequest('codes')).codes; }
-function fillCode(code) {
-  // Executed only after a user click, in the top frame of the selected HTTPS tab.
-  const visible = el => {
-    if (el.disabled || el.readOnly || el.type === 'hidden' || !el.getClientRects().length) return false;
-    if (!el.checkVisibility({checkOpacity:true, checkVisibilityCSS:true})) return false;
-    const rect = el.getBoundingClientRect();
-    return rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth;
-  };
-  const readInputs = () => [...document.querySelectorAll('input')].filter(visible);
-  const inputs = readInputs();
-  const hints = el => [el.autocomplete, el.name, el.id, el.placeholder, el.getAttribute('aria-label'), ...[...(el.labels || [])].map(l => l.textContent)];
-  // A bare "code" may mean a coupon, referral, or product code.
-  const otp = el => hints(el).some(value => /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|sign[-_ ]?in[-_ ]?code|login[-_ ]?code)(?:$|[^\w])/i.test(value || ''));
-  const eligible = el => ['text', 'tel', 'number', 'password', ''].includes(el.type);
-  const focused = document.activeElement;
-  const candidates = inputs.filter(el => eligible(el) && otp(el));
-  const focusedCodeInput = inputs.includes(focused) && eligible(focused) && otp(focused) ? focused : null;
-  // Focus alone does not identify a code field; it may be a search or account input.
-  let first = focusedCodeInput || (candidates.length === 1 ? candidates[0] : null);
-  let fields;
-  if (first && first.maxLength === 1) {
-    fields = inputs.filter(el => el.maxLength === 1 && eligible(el) && el.form === first.form && el.parentElement === first.parentElement);
-  } else if (!first) {
-    const singles = inputs.filter(el => el.maxLength === 1 && eligible(el));
-    if (singles.length === code.length && singles.every(el => el.form === singles[0].form) && singles.some(otp)) fields = singles;
-  }
-  if (fields) {
-    if (fields.length !== code.length) return {ok:false, error:'Select the code field on the page, then reopen Code Fill.'};
-  } else if (!first || (first.maxLength > 0 && first.maxLength < code.length)) {
-    return {ok:false, error:'Click the verification-code field on the page, then reopen Code Fill. Embedded forms may not be supported.'};
-  }
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-  if (fields) {
-    const singles = inputs.filter(el => el.maxLength === 1 && eligible(el));
-    const start = singles.indexOf(fields[0]);
-    for (let index = 0; index < code.length; index++) {
-      // Input handlers may replace the fields after each digit. Resolve the
-      // current group again before writing the next one.
-      const currentSingles = readInputs().filter(el => el.maxLength === 1 && eligible(el));
-      const group = currentSingles.slice(start, start + code.length);
-      if (group.length !== code.length || !group.every(el => el.form === group[0].form && el.parentElement === group[0].parentElement)) {
-        return {ok:false, error:'The code fields changed. Select the code field and try again.'};
+  $("connectForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("connect").disabled = true;
+    setStatus("Checking your Yahoo connection…");
+    const password = $("password").value;
+    $("password").value = "";
+    try {
+      const result = await sendCompanionRequest({
+        action: "configure",
+        email: $("email").value,
+        password,
+      });
+      showAccount(result.email);
+    } catch (error) {
+      setStatus(error.message, true);
+    } finally {
+      $("connect").disabled = false;
+    }
+  });
+  $("removeAccount").addEventListener("click", async () => {
+    clearTimeout(pollTimer);
+    pollDeadline = 0;
+    removingAccount = true;
+    abortCheck();
+    $("checkCodes").disabled = true;
+    $("removeAccount").disabled = true;
+    try {
+      await sendCompanionRequest({ action: "disconnect" });
+      $("codes").replaceChildren();
+      renderedCodesKey = undefined;
+      $("codeResults").hidden = true;
+      $("setup").hidden = false;
+      setStatus("Yahoo credentials removed from this Mac’s Keychain.");
+    } catch (error) {
+      setStatus(error.message, true);
+      pollDeadline = clock.now() + POLL_WINDOW_MS;
+    } finally {
+      removingAccount = false;
+      $("checkCodes").disabled = false;
+      $("removeAccount").disabled = false;
+      if (pollDeadline) scheduleCheck();
+    }
+  });
+  async function initialize() {
+    $("extensionId").value = chrome.runtime.id;
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tab?.url?.startsWith("https://")) targetTab = tab;
+    $("destination").textContent = targetTab
+      ? new URL(targetTab.url).hostname
+      : "an HTTPS sign-in page";
+    try {
+      const result = await sendSessionRequest("status");
+      if (result.email) showAccount(result.email);
+      else {
+        $("setup").hidden = false;
+        setStatus("Connect once. No Yahoo tab needed.");
       }
-      const el = group[index];
-      setter.call(el, code[index]);
-      el.dispatchEvent(new Event('input', {bubbles:true}));
-      el.dispatchEvent(new Event('change', {bubbles:true}));
-    }
-    const currentSingles = readInputs().filter(el => el.maxLength === 1 && eligible(el));
-    currentSingles[start + code.length - 1]?.focus();
-    return {ok:true};
-  }
-  setter.call(first, code);
-  first.dispatchEvent(new Event('input', {bubbles:true}));
-  first.dispatchEvent(new Event('change', {bubbles:true}));
-  first.focus();
-  return {ok:true};
-}
-async function fill(item, button) {
-  if (filling) return;
-  filling = true;
-  abortCheck();
-  clearTimeout(timer);
-  $('refresh').disabled = true;
-  $('disconnect').disabled = true;
-  const buttons = [...$('codes').querySelectorAll('button')];
-  for (const control of buttons) control.disabled = true;
-  try {
-    if (Date.now() - item.receivedAt > 600000) throw new Error('This code is too old. Request a new code.');
-    const current = await chrome.tabs.get(targetTab.id);
-    const [active] = await chrome.tabs.query({active:true, currentWindow:true});
-    if (active?.id !== targetTab.id || current.url !== targetTab.url) throw new Error('The page changed. Reopen Code Fill on the intended page.');
-    const [{result}] = await chrome.scripting.executeScript({target:{tabId:targetTab.id}, func:fillCode, args:[item.code]});
-    if (!result?.ok) throw new Error(result?.error || 'Could not fill this page.');
-    deadline = 0;
-    closeMailPort();
-    status('Code filled. The website may continue automatically.');
-    button.textContent = 'Filled';
-  } catch (error) {
-    status(error.message, true);
-    for (const control of buttons) control.disabled = false;
-  } finally {
-    filling = false;
-    revision++;
-    $('refresh').disabled = busy;
-    $('disconnect').disabled = busy;
-    scheduleRefresh();
-  }
-}
-function scheduleRefresh(delay = 8000) {
-  clearTimeout(timer);
-  if (!filling && !disconnecting && Date.now() < deadline) timer = setTimeout(refresh, delay);
-  else if (Date.now() >= deadline) closeMailPort();
-}
-function render(codes) {
-  const key = JSON.stringify(codes);
-  if (key === renderedCodes) return;
-  renderedCodes = key;
-  $('codes').replaceChildren();
-  for (const item of codes) {
-    const card = document.createElement('article'); card.className = 'card';
-    for (const [tag, className, text] of [['div','code',item.code], ['p','sender',item.sender], ['p','subject',item.subject]]) {
-      const el = document.createElement(tag); el.className = className; el.textContent = text; card.append(el);
-    }
-    const button = document.createElement('button');
-    button.textContent = targetTab ? `Fill on ${new URL(targetTab.url).hostname}` : 'Open an HTTPS sign-in page to fill';
-    button.disabled = !targetTab;
-    button.addEventListener('click', () => fill(item, button)); card.append(button); $('codes').append(card);
-  }
-}
-async function refresh() {
-  if (filling || disconnecting) return;
-  if (busy) abortCheck();
-  clearTimeout(timer); busy = true;
-  const requestRevision = ++revision;
-  const startedAt = Date.now();
-  let failed = false;
-  status('Checking recent Yahoo emails… This may take up to 25 seconds.');
-  try {
-    const codes = await getCodes();
-    if (!filling && requestRevision === revision) {
-      render(codes);
-      status(codes.length ? 'Choose the code for this website. Checking for newer codes…' : 'No recent code yet. Request one on the website; keep this popup open.');
-    }
-  } catch (error) {
-    failed = true;
-    if (!filling && requestRevision === revision) status(error.message, true);
-  }
-  finally {
-    if (requestRevision === revision) {
-      busy = false;
-      $('refresh').disabled = filling || disconnecting;
-      $('disconnect').disabled = filling || disconnecting;
-      scheduleRefresh(failed ? 8000 : Math.max(2000, 8000 - (Date.now() - startedAt)));
+    } catch (error) {
+      setStatus(error.message, true);
+      $("companionSetup").hidden = false;
     }
   }
+
+  return { initialize };
 }
-$('refresh').addEventListener('click', () => { deadline = Date.now()+120000; refresh(); });
-$('connectForm').addEventListener('submit', async event => {
-  event.preventDefault(); $('connect').disabled = true; status('Checking your Yahoo connection…');
-  const password = $('password').value; $('password').value = '';
-  try { const result = await native({action:'configure', email:$('email').value, password}); connected(result.email); }
-  catch (error) { status(error.message, true); }
-  finally { $('connect').disabled = false; }
-});
-$('disconnect').addEventListener('click', async () => {
-  clearTimeout(timer); deadline = 0; disconnecting = true; abortCheck();
-  $('refresh').disabled = true; $('disconnect').disabled = true;
-  try { await native({action:'disconnect'}); $('codes').replaceChildren(); renderedCodes = undefined; $('mailbox').hidden = true; $('setup').hidden = false; status('Yahoo credentials removed from this Mac’s Keychain.'); }
-  catch (error) { status(error.message, true); deadline = Date.now() + 120000; }
-  finally {
-    disconnecting = false;
-    $('refresh').disabled = false; $('disconnect').disabled = false;
-    if (deadline) scheduleRefresh();
-  }
-});
-(async () => {
-  $('extensionId').value = chrome.runtime.id;
-  const [tab] = await chrome.tabs.query({active:true, currentWindow:true});
-  if (tab?.url?.startsWith('https://')) targetTab = tab;
-  $('destination').textContent = targetTab ? new URL(targetTab.url).hostname : 'an HTTPS sign-in page';
-  try {
-    const result = await mailRequest('status');
-    if (result.email) connected(result.email);
-    else { $('setup').hidden = false; status('Connect once. No Yahoo tab needed.'); }
-  } catch (error) { $('missing').hidden = true; status(error.message, true); $('missing').hidden = false; }
-})();

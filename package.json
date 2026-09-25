@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "python3 -m unittest discover -s tests -v && node tests/test_fill.cjs && node tests/test_poll.cjs"
+  }
+}

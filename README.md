@@ -45,9 +45,9 @@ The extension requests `nativeMessaging`, `activeTab`, and `scripting`. Clicking
 
 Chrome starts the companion on demand and keeps it connected while the popup is open. It reuses the Yahoo connection and checks only newly arrived messages after the first scan. Closing the popup ends the connection. No background login item, public server, or open network listener is installed. Native messaging is restricted to this extension ID.
 
-## Disconnect or uninstall
+## Remove account or uninstall
 
-**Disconnect** in the popup removes the saved Yahoo credential from Keychain.
+**Remove account** in the popup removes the saved Yahoo credential from Keychain.
 
 To uninstall the companion, run this from the Yahoo Code Fill folder:
 
@@ -55,7 +55,7 @@ To uninstall the companion, run this from the Yahoo Code Fill folder:
 python3 companion/install.py --uninstall
 ```
 
-Remove the extension through Chrome’s Extensions page. If you uninstalled before disconnecting, delete the `local.yahoo_code_fill` item in Keychain Access. You can also revoke the app password in Yahoo Account Security.
+Remove the extension through Chrome’s Extensions page. If you uninstalled before removing the account, delete the `local.yahoo_code_fill` item in Keychain Access. You can also revoke the app password in Yahoo Account Security.
 
 The companion is installed at `~/Library/Application Support/Yahoo Code Fill/`. Its Chrome registration is at `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/local.yahoo_code_fill.json`.
 
@@ -65,10 +65,24 @@ The companion is installed at `~/Library/Application Support/Yahoo Code Fill/`. 
 python3 -m unittest discover -s tests -v
 node tests/test_fill.cjs
 node tests/test_poll.cjs
-node --check extension/popup.js
+for file in extension/*.js; do node --check "$file"; done
 ```
 
-No package installation is needed. Python uses its standard library and macOS Security framework.
+You can also run the test suites with `npm test`. No package installation is needed. Python uses its standard library and macOS Security framework. JavaScript uses native ES modules, with no bundler.
+
+The installer test installs into a temporary directory, launches that copy to verify native-message framing and module imports, then checks uninstall cleanup. It does not access Yahoo or Keychain.
+
+## Code organisation
+
+- `extension/popup-entry.js` starts the popup; `popup.js` owns its controls, rendering, and polling.
+- `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
+- `extension/fill-code.js` exports the self-contained function injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page.
+- `companion/host.py` manages IMAP sessions, request dispatch, and native-message framing.
+- `companion/code_extraction.py` parses email content and extracts a single unambiguous code.
+- `companion/keychain.py` stores credentials; `errors.py` defines user-facing errors.
+- `companion/install.py` installs and removes the companion files listed in `COMPANION_FILES`. Update that list when adding runtime modules.
+
+After changing companion code, rerun **Install Companion.command**; after changing extension code, reload the extension in Chrome. The Keychain service/account identifiers and extension identity are intentionally stable so updates retain access to saved credentials and Chrome registration.
 
 ## References
 
