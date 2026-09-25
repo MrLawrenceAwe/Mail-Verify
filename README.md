@@ -63,8 +63,7 @@ The companion is installed at `~/Library/Application Support/Yahoo Code Fill/`. 
 
 ```sh
 python3 -m unittest discover -s tests -v
-node tests/test_fill.cjs
-node tests/test_poll.cjs
+node --test tests/test_*.js
 for file in extension/*.js; do node --check "$file"; done
 ```
 
@@ -77,10 +76,10 @@ The installer test installs into a temporary directory, launches that copy to ve
 - `extension/popup-entry.js` starts the popup; `popup.js` owns its controls, rendering, and polling.
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
 - `extension/fill-code.js` exports the self-contained function injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page.
-- `companion/host.py` manages IMAP sessions, request dispatch, and native-message framing.
+- `companion/host.py` handles request dispatch and native-message framing; `mail_session.py` manages IMAP connections and bounded inbox scans.
 - `companion/code_extraction.py` parses email content and extracts a single unambiguous code.
 - `companion/keychain.py` stores credentials; `errors.py` defines user-facing errors.
-- `companion/install.py` installs and removes the companion files listed in `COMPANION_FILES`. Update that list when adding runtime modules.
+- `companion/install.py` installs and removes the companion files listed in `COMPANION_FILES`. Update that list when adding runtime modules. Tests are grouped by the production module they cover.
 
 After changing companion code, rerun **Install Companion.command**; after changing extension code, reload the extension in Chrome. The Keychain service/account identifiers and extension identity are intentionally stable so updates retain access to saved credentials and Chrome registration.
 

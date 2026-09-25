@@ -27,6 +27,10 @@ export function createPopup({
     $("status").textContent = text;
     $("status").classList.toggle("error", error);
   }
+  function setActionControlsDisabled(disabled) {
+    $("checkCodes").disabled = disabled;
+    $("removeAccount").disabled = disabled;
+  }
   function showAccount(email) {
     $("setup").hidden = true;
     $("companionSetup").hidden = true;
@@ -36,6 +40,7 @@ export function createPopup({
     checkForCodes();
   }
   function abortCheck() {
+    clearTimeout(pollTimer);
     checkGeneration++;
     checking = false;
     closeSession();
@@ -44,9 +49,7 @@ export function createPopup({
     if (filling) return;
     filling = true;
     abortCheck();
-    clearTimeout(pollTimer);
-    $("checkCodes").disabled = true;
-    $("removeAccount").disabled = true;
+    setActionControlsDisabled(true);
     const buttons = [...$("codes").querySelectorAll("button")];
     for (const control of buttons) control.disabled = true;
     try {
@@ -69,7 +72,6 @@ export function createPopup({
       if (!result?.ok)
         throw new Error(result?.error || "Could not fill this page.");
       pollDeadline = 0;
-      closeSession();
       setStatus("Code filled. The website may continue automatically.");
       button.textContent = "Filled";
     } catch (error) {
@@ -77,9 +79,7 @@ export function createPopup({
       for (const control of buttons) control.disabled = false;
     } finally {
       filling = false;
-      checkGeneration++;
-      $("checkCodes").disabled = checking;
-      $("removeAccount").disabled = checking;
+      setActionControlsDisabled(false);
       scheduleCheck();
     }
   }
@@ -143,8 +143,7 @@ export function createPopup({
     } finally {
       if (requestGeneration === checkGeneration) {
         checking = false;
-        $("checkCodes").disabled = filling || removingAccount;
-        $("removeAccount").disabled = filling || removingAccount;
+        setActionControlsDisabled(filling || removingAccount);
         scheduleCheck(
           failed
             ? POLL_INTERVAL_MS
@@ -180,12 +179,10 @@ export function createPopup({
     }
   });
   $("removeAccount").addEventListener("click", async () => {
-    clearTimeout(pollTimer);
     pollDeadline = 0;
     removingAccount = true;
     abortCheck();
-    $("checkCodes").disabled = true;
-    $("removeAccount").disabled = true;
+    setActionControlsDisabled(true);
     try {
       await sendCompanionRequest({ action: "disconnect" });
       $("codes").replaceChildren();
@@ -198,8 +195,7 @@ export function createPopup({
       pollDeadline = clock.now() + POLL_WINDOW_MS;
     } finally {
       removingAccount = false;
-      $("checkCodes").disabled = false;
-      $("removeAccount").disabled = false;
+      setActionControlsDisabled(false);
       if (pollDeadline) scheduleCheck();
     }
   });

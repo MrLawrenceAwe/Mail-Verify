@@ -1,170 +1,20 @@
 #!/usr/bin/env python3
-"""Local Yahoo IMAP bridge. stdout is reserved for Chrome native messaging."""
+"""Local Yahoo native messaging host. stdout is reserved for Chrome."""
 
 import imaplib
 import json
 import re
 import signal
 import socket
-import ssl
 import struct
 import sys
-import time
 
-from code_extraction import extract_code
 from errors import UserError
 from keychain import keychain
+from mail_session import MailSession, connect_imap
 
-MAX_CODE_AGE_SECONDS = 600
-MAX_FUTURE_SKEW_SECONDS = 120
 CHECK_TIMEOUT_SECONDS = 25
-FETCH_BATCH_SIZE = 5
-MAX_MESSAGES = 30
-MAX_RESULTS = 5
-MAX_MESSAGE_BYTES = 1_000_000
 MAX_FRAME_BYTES = 16_384
-
-
-def connect_imap(credentials):
-    conn = imaplib.IMAP4_SSL(
-        "imap.mail.yahoo.com", 993, ssl_context=ssl.create_default_context(), timeout=15
-    )
-    try:
-        conn.login(credentials["email"], credentials["password"])
-        return conn
-    except Exception:
-        try:
-            conn.shutdown()
-        except Exception:
-            pass
-        raise
-
-
-class MailSession:
-    def __init__(self, credentials):
-        self.credentials = credentials
-        self.conn = None
-        self.last_seen_uid = None
-        self.message_count = 0
-        self.codes_by_uid = {}
-
-    def close(self):
-        conn, self.conn = self.conn, None
-        self.last_seen_uid = None
-        self.message_count = 0
-        self.codes_by_uid.clear()
-        if conn:
-            try:
-                conn.shutdown()
-            except (OSError, imaplib.IMAP4.error):
-                pass
-
-    def recent_codes(self):
-        try:
-            if self.conn is None:
-                self.conn = connect_imap(self.credentials)
-                status, count = self.conn.select("INBOX", readonly=True)
-                if status != "OK":
-                    raise UserError("Yahoo could not open your inbox.")
-                self.message_count = int(count[0])
-            now = time.time()
-            self.codes_by_uid = {
-                uid: item
-                for uid, item in self.codes_by_uid.items()
-                if 0 <= now - item["receivedAt"] / 1000 <= MAX_CODE_AGE_SECONDS
-            }
-            if self.last_seen_uid is None:
-                # Sequence numbers let the server return only the newest 30
-                # messages instead of every UID received during the past day.
-                if not self.message_count:
-                    self.last_seen_uid = 0
-                    return self._results()
-                first = max(1, self.message_count - MAX_MESSAGES + 1)
-                status, metadata = self.conn.fetch(
-                    f"{first}:{self.message_count}", "(UID INTERNALDATE RFC822.SIZE)"
-                )
-                if status != "OK":
-                    raise UserError("Yahoo could not inspect recent messages.")
-                uids = [
-                    match.group(1)
-                    for entry in metadata
-                    if isinstance(entry, bytes)
-                    if (match := re.search(rb"\bUID (\d+)\b", entry))
-                ]
-                self.last_seen_uid = max(map(int, uids), default=0)
-            else:
-                status, data = self.conn.uid(
-                    "search", None, "UID", f"{self.last_seen_uid + 1}:*"
-                )
-                if status != "OK":
-                    raise UserError("Yahoo could not search your inbox.")
-                all_uids = data[0].split()
-                # UID ranges ending in * can return the previous last UID when no new mail exists.
-                all_uids = [uid for uid in all_uids if int(uid) > self.last_seen_uid]
-                uids = all_uids[-MAX_MESSAGES:]
-                if all_uids:
-                    self.last_seen_uid = int(all_uids[-1])
-                if uids:
-                    status, metadata = self.conn.uid(
-                        "fetch", b",".join(uids), "(UID INTERNALDATE RFC822.SIZE)"
-                    )
-                    if status != "OK":
-                        raise UserError("Yahoo could not inspect recent messages.")
-            if not uids:
-                return self._results()
-            eligible = {}
-            for entry in metadata:
-                if not isinstance(entry, bytes):
-                    continue
-                uid = re.search(rb"\bUID (\d+)\b", entry)
-                date = imaplib.Internaldate2tuple(entry)
-                size = re.search(rb"\bRFC822.SIZE (\d+)\b", entry)
-                if (
-                    not uid
-                    or not date
-                    or not size
-                    or int(size.group(1)) > MAX_MESSAGE_BYTES
-                ):
-                    continue
-                received = time.mktime(date)
-                if -MAX_FUTURE_SKEW_SECONDS <= now - received <= MAX_CODE_AGE_SECONDS:
-                    eligible[uid.group(1)] = min(received, now)
-            candidates = [uid for uid in reversed(uids) if uid in eligible]
-            new_code_count = 0
-            for start in range(0, len(candidates), FETCH_BATCH_SIZE):
-                batch = candidates[start : start + FETCH_BATCH_SIZE]
-                status, body = self.conn.uid(
-                    "fetch", b",".join(batch), "(UID BODY.PEEK[])"
-                )
-                if status != "OK":
-                    raise UserError("Yahoo could not read recent messages.")
-                messages = {}
-                for entry in body:
-                    if not isinstance(entry, tuple):
-                        continue
-                    uid = re.search(rb"\bUID (\d+)\b", entry[0])
-                    if uid:
-                        messages[uid.group(1)] = entry[1]
-                for uid in batch:
-                    found = extract_code(messages[uid]) if uid in messages else None
-                    if found:
-                        found["receivedAt"] = int(eligible[uid] * 1000)
-                        self.codes_by_uid[int(uid)] = found
-                        new_code_count += 1
-                    if new_code_count == MAX_RESULTS:
-                        break
-                if new_code_count == MAX_RESULTS:
-                    break
-            return self._results()
-        except Exception:
-            self.close()
-            raise
-
-    def _results(self):
-        return [
-            item
-            for _, item in sorted(self.codes_by_uid.items(), reverse=True)[:MAX_RESULTS]
-        ]
 
 
 def check_with_timeout(session):

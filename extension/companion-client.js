@@ -2,6 +2,12 @@ const HOST_NAME = "local.yahoo_code_fill";
 const COMPANION_UNAVAILABLE =
   "Mac companion unavailable. Run the companion installer, then reopen this popup.";
 
+function requireSuccessfulResponse(response) {
+  if (!response?.ok)
+    throw new Error(response?.error || "Unexpected companion response.");
+  return response;
+}
+
 export function createCompanionClient(runtime) {
   let mailPort, pendingRequest;
   async function sendCompanionRequest(request) {
@@ -11,9 +17,7 @@ export function createCompanionClient(runtime) {
     } catch {
       throw new Error(COMPANION_UNAVAILABLE);
     }
-    if (!response?.ok)
-      throw new Error(response?.error || "Unexpected companion response.");
-    return response;
+    return requireSuccessfulResponse(response);
   }
   function closeSession() {
     const port = mailPort;
@@ -25,6 +29,8 @@ export function createCompanionClient(runtime) {
     }
   }
   function sendSessionRequest(action) {
+    if (pendingRequest)
+      throw new Error("A companion request is already in progress.");
     if (!mailPort) {
       try {
         mailPort = runtime.connectNative(HOST_NAME);
@@ -37,11 +43,11 @@ export function createCompanionClient(runtime) {
         const pending = pendingRequest;
         pendingRequest = undefined;
         if (!pending) return;
-        if (response?.ok) pending.resolve(response);
-        else
-          pending.reject(
-            new Error(response?.error || "Unexpected companion response."),
-          );
+        try {
+          pending.resolve(requireSuccessfulResponse(response));
+        } catch (error) {
+          pending.reject(error);
+        }
       });
       port.onDisconnect.addListener(() => {
         if (mailPort !== port) return;

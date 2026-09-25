@@ -46,12 +46,7 @@ export function fillCode(code) {
   const candidates = inputs.filter(
     (el) => hasSupportedType(el) && hasCodeHint(el),
   );
-  const focusedCodeInput =
-    inputs.includes(focused) &&
-    hasSupportedType(focused) &&
-    hasCodeHint(focused)
-      ? focused
-      : null;
+  const focusedCodeInput = candidates.includes(focused) ? focused : null;
   // Focus alone does not identify a code field; it may be a search or account input.
   const targetInput =
     focusedCodeInput || (candidates.length === 1 ? candidates[0] : null);
