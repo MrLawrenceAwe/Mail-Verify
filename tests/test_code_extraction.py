@@ -97,6 +97,18 @@ class CodeExtractionTests(unittest.TestCase):
             extract_code(self.message("Your verification code is 123456, or 654321."))
         )
 
+    def test_alternative_with_verb_is_ambiguous(self):
+        self.assertIsNone(
+            extract_code(self.message("Your code is 123456 or use 654321 instead."))
+        )
+
+    def test_grouped_number_is_not_truncated_to_a_code(self):
+        for value in ("1234 5678", "1234,5678"):
+            with self.subTest(value=value):
+                self.assertIsNone(
+                    extract_code(self.message(f"Your verification code is {value}."))
+                )
+
     def test_ordinary_numbers(self):
         self.assertIsNone(
             extract_code(self.message("Order 482913 has shipped.", subject="Receipt"))

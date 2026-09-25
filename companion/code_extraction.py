@@ -6,7 +6,9 @@ from email.utils import parseaddr
 from html.parser import HTMLParser
 import re
 
-CODE = r"(?<![\w.+-])\d{4,8}(?!\w|[.-]\d)"
+# Reject the first group of a longer, formatted number rather than showing
+# a plausible but incomplete code (for example, "1234 5678").
+CODE = r"(?<![\w.+-])\d{4,8}(?!\w|[.,-]\d|[ ,]\d{4,8}\b)"
 PURPOSE = r"(?:verification|security|authentication|confirmation|login|sign[ -]?in|one[ -]?time|access)"
 LABEL = r"(?:code|passcode|otp|pin)"
 CODE_PATTERNS = (
@@ -131,7 +133,7 @@ def extract_code(raw):
                 codes.add(match.group("code"))
                 # Adjacent alternatives, including "123456 (or 654321)", are ambiguous.
                 alternative = re.match(
-                    rf"\s*(?:[,([]\s*)*(?:or|/)\s*(?P<code>{CODE})",
+                    rf"\s*(?:[,([]\s*)*(?:or|/)\s*(?:(?:use|enter)\s+)?(?:code\s+)?(?P<code>{CODE})",
                     text[match.end() :],
                     re.I,
                 )
