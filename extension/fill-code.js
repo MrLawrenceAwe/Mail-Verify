@@ -1,5 +1,5 @@
-export function fillCode(code) {
-  // Executed only after a user click, in the top frame of the selected HTTPS tab.
+export function fillCode(code, detectOnly = false) {
+  // Detection is read-only; filling happens only after the user selects a code.
   const isVisible = (el) => {
     if (
       el.disabled ||
@@ -30,8 +30,14 @@ export function fillCode(code) {
     ...[...(el.labels || [])].map((l) => l.textContent),
   ];
   // A bare "code" may mean a coupon, referral, or product code.
+  const hasContextualCodeHint = (el) => {
+    const hints = getInputHints(el).filter(Boolean).join(" ");
+    if (!/\bcode\b/i.test(hints) || /coupon|promo|postal|zip|referral|product/i.test(hints)) return false;
+    const context = (el.form || el.closest?.("main") || document.body)?.textContent || "";
+    return /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|we sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i.test(context);
+  };
   const hasCodeHint = (el) =>
-    getInputHints(el).some((value) =>
+    hasContextualCodeHint(el) || getInputHints(el).some((value) =>
       /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|sign[-_ ]?in[-_ ]?code|login[-_ ]?code)(?:$|[^\w])/i.test(
         value || "",
       ),
@@ -50,6 +56,12 @@ export function fillCode(code) {
   // Focus alone does not identify a code field; it may be a search or account input.
   const targetInput =
     focusedCodeInput || (candidates.length === 1 ? candidates[0] : null);
+  if (detectOnly) {
+    const anchor = targetInput || (candidates.length && candidates.every((el) => el.maxLength === 1) ? candidates[0] : null);
+    if (!anchor) return { ok: false };
+    const { top, bottom, left, right } = anchor.getBoundingClientRect();
+    return { ok: true, rect: { top, bottom, left, right } };
+  }
   let fields;
   if (targetInput && targetInput.maxLength === 1) {
     fields = inputs.filter(

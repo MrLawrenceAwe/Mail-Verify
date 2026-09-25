@@ -12,6 +12,11 @@ CODE = r"(?<![\w.+-])\d{4,8}(?!\w|[.,-]\d|[ ,]\d{4,8}\b)"
 PURPOSE = r"(?:verification|security|authentication|confirmation|login|sign[ -]?in|one[ -]?time|access)"
 LABEL = r"(?:code|passcode|otp|pin)"
 CODE_PATTERNS = (
+    # Indeed and similar providers put the service between the action and code.
+    re.compile(
+        rf"\b(?:sign[ -]?in|log[ -]?in)\s+to\s+[^.!?\r\n]{{1,80}}?\s+with\s+(?:your\s+)?{LABEL}\s*[:=—-]?\s*(?P<code>{CODE})",
+        re.I,
+    ),
     re.compile(
         rf"\b(?:your|the)\s+(?:{PURPOSE}\s+)?{LABEL}\b\s*(?:is\s*)?[:=—-]?\s*(?P<code>{CODE})",
         re.I,

@@ -58,8 +58,10 @@ def handle_request(request, session):
         session.credentials = credentials
         return {"email": address}
     if action == "codes":
-        if session.credentials is None:
-            session.credentials = keychain("get")
+        credentials = keychain("get")
+        if credentials != session.credentials:
+            session.close()
+            session.credentials = credentials
         if not session.credentials:
             raise UserError("Connect Yahoo Mail first.")
         return {"codes": check_with_timeout(session)}

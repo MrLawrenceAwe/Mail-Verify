@@ -178,3 +178,27 @@ test("follows split fields replaced after each digit", () => {
   );
   assert.equal(current.map((x) => x.value).join(""), "123456");
 });
+
+test("Indeed's Enter code requires email verification context", () => {
+  const input = new FakeInput({
+    labels: [{ textContent: "Enter code *" }],
+    form: { textContent: "Check your email for a code. We sent a code to you. Enter code *" },
+  });
+  assert.equal(run([input]).ok, true);
+  input.form.textContent = "Enter code to redeem a discount";
+  assert.equal(run([input]).ok, false);
+  input.form.textContent = "We sent a code to your email";
+  input.labels = [{ textContent: "Promo code" }];
+  assert.equal(run([input]).ok, false);
+});
+
+test("automatic detection does not fill or dispatch events", () => {
+  const input = new FakeInput({ autocomplete: "one-time-code" });
+  const context = vm.createContext({
+    document: { querySelectorAll: () => [input], activeElement: input },
+    innerHeight: 800, innerWidth: 1200,
+  });
+  assert.equal(vm.runInContext(`(${fillCode.toString()})("", true)`, context).ok, true);
+  assert.equal(input.value, undefined);
+  assert.deepEqual(input.events, []);
+});

@@ -1,6 +1,6 @@
 # Yahoo Code Fill
 
-A working local prototype for desktop Chrome on macOS. No Yahoo browser tab is needed. Open the extension on a sign-in page to retrieve recent Yahoo verification emails, then click a code to fill it.
+A working local prototype for desktop Chrome on macOS. No Yahoo browser tab is needed. A code picker appears automatically on supported HTTPS verification forms. Click the matching email code to fill it; the toolbar popup is only needed for account setup or manual checks.
 
 ## Set up on this Mac
 
@@ -21,18 +21,20 @@ If reinstalling or setting up another Mac, first double-click **Install Companio
 ## Use
 
 1. Ask the website to send an email code.
-2. Click its verification-code field, then open **Yahoo Code Fill** from the Chrome toolbar.
-3. The extension checks your Yahoo inbox. While waiting for a code, it checks about every 8 seconds for up to 2 minutes while the popup remains open. A slow Yahoo response may delay a check; the next check starts at least 2 seconds after it finishes. Press **Check for a code** to interrupt a slow check and retry.
-4. Review the sender, subject, and destination website. Click **Fill on [website]** for the right email.
+2. A compact blue **Fill code … / From Yahoo Mail** suggestion appears directly beneath the code field (or above it when space is limited) when a visible verification-code field is detected, including Indeed’s “Enter code” form.
+3. It checks automatically, then every 2 seconds after each response for up to 2 minutes. The destination website is shown below the suggestion. Hover over a code to see its sender and subject, then click the matching code to fill it.
+4. Use **↻** to restart checking, or × / Escape to dismiss the suggestion for this page.
 
-Closing the popup stops checking. Reopen it or press **Check for a code** to try again. The extension does not click Submit, although some websites submit automatically when all digits are entered.
+The inline suggestion only shows mail received since the current code step began, with a five-second allowance for mail that arrived just before the field appeared. It keeps the newest code per sender. Clicking “Send new code” or “Resend code” clears the old suggestion immediately and waits for newer mail. The toolbar popup remains available for manually choosing older codes.
+
+No toolbar popup is required after setup. Hidden tabs stop checking. The extension does not click Submit, although some websites submit automatically when all digits are entered.
 
 ## Current limits
 
-- This first version requires opening the toolbar popup; it does not automatically detect every code field or show a system keyboard suggestion.
+- Suggestions are styled like Mail autofill and anchored to the input; they are an extension interface rather than a macOS system control.
 - One Yahoo account. Inbox only, the latest 30 messages on the first check, and codes received within the last 10 minutes. Spam and other folders are excluded.
-- Recognises numeric codes of 4–8 digits when the code is directly labelled by common English phrases such as “Your code is” or “Security code:”. Messages containing multiple candidate codes are omitted. Some formats, languages, and alphanumeric codes are not supported yet.
-- Supports ordinary input fields and common split-digit forms on HTTPS pages when the fields have a verification-related label or attribute. A generic “code” label is deliberately insufficient because it may refer to a coupon or other code. Unlabelled fields, embedded cross-origin forms, and unusual custom widgets may not work.
+- Recognises numeric codes of 4–8 digits when the code is directly labelled by common English phrases such as “Your code is”, “Security code:”, or “Sign in to Indeed with code:”. Messages containing multiple candidate codes are omitted. Some formats, languages, and alphanumeric codes are not supported yet.
+- Supports ordinary input fields and common split-digit forms on HTTPS pages when the fields have a verification-related label or attribute. A generic “code” label also requires email/sign-in verification text in its form or main page content; coupon and promo fields are excluded. Unlabelled fields, embedded cross-origin forms, and unusual custom widgets may not work.
 - Sender and subject are provided for your review. The prototype does not authenticate a sender or automatically establish which website owns a code. It never selects a code for you.
 - Yahoo may restrict app-password generation for some accounts. If Yahoo does not offer one, this connection method cannot be completed for that account.
 - Tested with synthetic email and form cases plus the installed native bridge. A live Yahoo login and a real Chrome extension fill still need account setup and manual validation.
@@ -41,9 +43,9 @@ Closing the popup stops checking. Reopen it or press **Check for a code** to try
 
 Email access goes directly from your Mac to `imap.mail.yahoo.com:993` over TLS. Credentials are stored as a generic password in macOS Keychain under `local.yahoo_code_fill`. They are never stored in extension storage, configuration files, logs, or command-line arguments. The companion uses a read-only inbox and BODY.PEEK retrieval, so checking does not mark messages read.
 
-The extension requests `nativeMessaging`, `activeTab`, and `scripting`. Clicking the extension grants temporary access to the active tab. It has no blanket access to all websites, no analytics, and no AI integration. Codes remain in popup memory and are sent to the chosen page only when you click Fill. Once filled, that website can read the code.
+The extension requests `nativeMessaging`, `activeTab`, and `scripting`, and runs a content script on HTTPS sites to recognise code fields automatically. Chrome does not necessarily show a permission prompt after reloading an unpacked extension. If the on-page picker is absent after refreshing the website, open the extension’s **Details** in `chrome://extensions` and check that **Site access** allows it to run on that site. There are no analytics or AI integrations. The on-page picker runs in an isolated content-script context with a closed shadow root. Codes remain in memory and are written into a website’s input only when you click Fill; that website can then read the code.
 
-Chrome starts the companion on demand and keeps it connected while the popup is open. It reuses the Yahoo connection and checks only newly arrived messages after the first scan. Closing the popup ends the connection. No background login item, public server, or open network listener is installed. Native messaging is restricted to this extension ID.
+Chrome starts the companion on demand for automatic checks on the active tab. Background checks reuse the Yahoo connection while the picker is polling and close it after 15 seconds without a new check; simultaneous checks share an in-flight scan. Each check verifies that the saved account is still connected. The popup retains its reusable connection while open. No background login item, public server, or open network listener is installed. Native messaging is restricted to this extension ID.
 
 ## Remove account or uninstall
 
@@ -73,6 +75,7 @@ The installer test installs into a temporary directory, launches that copy to ve
 
 ## Code organisation
 
+- `extension/content-entry.js` loads `inline.js` for automatic field detection and the on-page picker; `background.js` brokers active-tab native checks.
 - `extension/popup-entry.js` starts the popup; `popup.js` owns its controls, rendering, and polling.
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
 - `extension/fill-code.js` exports the self-contained function injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page.
@@ -87,3 +90,5 @@ After changing companion code, rerun **Install Companion.command**; after changi
 
 - [Chrome native messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)
 - [Yahoo IMAP access](https://help.yahoo.com/kb/SLN28681.html)
+
+To preview the suggestion with synthetic data, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/suggestion.html`. No Yahoo access is used by that fixture.
