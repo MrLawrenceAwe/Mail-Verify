@@ -107,8 +107,11 @@ class MailSession:
 
     def _fetch_codes(self, candidates, eligible):
         new_code_count = 0
-        for start in range(0, len(candidates), FETCH_BATCH_SIZE):
-            batch = candidates[start : start + FETCH_BATCH_SIZE]
+        # Check the newest few messages first. If none (or too few) have codes,
+        # fetch the rest together instead of paying for up to five more round trips.
+        for batch in (candidates[:FETCH_BATCH_SIZE], candidates[FETCH_BATCH_SIZE:]):
+            if not batch:
+                continue
             status, body = self.conn.uid(
                 "fetch", b",".join(batch), "(UID BODY.PEEK[])"
             )
@@ -160,4 +163,3 @@ class MailSession:
             item
             for _, item in sorted(self.codes_by_uid.items(), reverse=True)[:MAX_RESULTS]
         ]
-

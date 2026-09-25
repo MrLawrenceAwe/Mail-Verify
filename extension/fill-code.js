@@ -29,19 +29,27 @@ export function fillCode(code, detectOnly = false) {
     el.getAttribute("aria-label"),
     ...[...(el.labels || [])].map((l) => l.textContent),
   ];
+  const contextMatches = new Map();
+  const contextRoots = new Set();
   // A bare "code" may mean a coupon, referral, or product code.
-  const hasContextualCodeHint = (el) => {
-    const hints = getInputHints(el).filter(Boolean).join(" ");
-    if (!/\bcode\b/i.test(hints) || /coupon|promo|postal|zip|referral|product/i.test(hints)) return false;
-    const context = (el.form || el.closest?.("main") || document.body)?.textContent || "";
-    return /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|we sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i.test(context);
+  const hasContextualCodeHint = (el, hints) => {
+    const hintText = hints.filter(Boolean).join(" ");
+    if (!/\bcode\b/i.test(hintText) || /coupon|promo|postal|zip|referral|product/i.test(hintText)) return false;
+    const container = el.form || el.closest?.("main") || document.body;
+    if (!container) return false;
+    contextRoots.add(container);
+    if (!contextMatches.has(container))
+      contextMatches.set(container, /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|we sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i.test(container.textContent || ""));
+    return contextMatches.get(container);
   };
-  const hasCodeHint = (el) =>
-    hasContextualCodeHint(el) || getInputHints(el).some((value) =>
+  const hasCodeHint = (el) => {
+    const hints = getInputHints(el);
+    return hints.some((value) =>
       /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|sign[-_ ]?in[-_ ]?code|login[-_ ]?code)(?:$|[^\w])/i.test(
         value || "",
       ),
-    );
+    ) || hasContextualCodeHint(el, hints);
+  };
   const hasSupportedType = (el) =>
     ["text", "tel", "number", "password", ""].includes(el.type);
   const getDigitInputs = () =>
@@ -58,9 +66,9 @@ export function fillCode(code, detectOnly = false) {
     focusedCodeInput || (candidates.length === 1 ? candidates[0] : null);
   if (detectOnly) {
     const anchor = targetInput || (candidates.length && candidates.every((el) => el.maxLength === 1) ? candidates[0] : null);
-    if (!anchor) return { ok: false };
+    if (!anchor) return { ok: false, contextRoots: [...contextRoots] };
     const { top, bottom, left, right } = anchor.getBoundingClientRect();
-    return { ok: true, rect: { top, bottom, left, right } };
+    return { ok: true, rect: { top, bottom, left, right }, contextRoots: [...contextRoots] };
   }
   let fields;
   if (targetInput && targetInput.maxLength === 1) {

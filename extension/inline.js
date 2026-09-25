@@ -21,10 +21,34 @@ export function freshCodes(codes, since, now = Date.now()) {
     });
 }
 
+export function mutationAffectsPicker(records, host, contextRoots = []) {
+  const hasRelevantElement = (node) => node?.nodeType === 1 && (
+    node.matches?.("input, label, form, main") ||
+    node.querySelector?.("input, label, form, main")
+  );
+  const relevantText = (value) => /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value || "");
+  const changesContext = (record) => record.type === "characterData"
+    ? relevantText(record.target.textContent) || relevantText(record.oldValue)
+    : record.type === "childList" &&
+      [...record.addedNodes, ...record.removedNodes].some((node) => relevantText(node.textContent));
+  return records.some((record) => {
+    const target = record.target;
+    if (target === host || host?.contains(target)) return false;
+    if (contextRoots.some((root) => root.contains?.(target)) && changesContext(record)) return true;
+    if (record.type === "attributes")
+      return target?.matches?.("input, label") || !!target?.querySelector?.("input");
+    if (record.type === "characterData")
+      return !!target?.parentElement?.closest?.("label");
+    if (target?.closest?.("label")) return true;
+    return [...record.addedNodes, ...record.removedNodes].some(hasRelevantElement);
+  });
+}
+
 export function startInlinePicker() {
   let host, status, results, timer, deadline = 0, checking = false;
   let dismissed = false, generation = 0, lastURL = location.href;
   let requestStartedAt;
+  let contextRoots = [];
   const locate = () => fillCode("", true);
   function remove() {
     generation++;
@@ -32,15 +56,14 @@ export function startInlinePicker() {
     host?.remove();
     host = undefined;
   }
-  function position() {
-    const field = locate();
+  function position(field = locate()) {
     if (!host || !field.ok) return;
     const bounds = host.getBoundingClientRect();
     const { left, top } = suggestionPosition(field.rect, bounds.width, bounds.height, innerWidth, innerHeight);
     host.style.left = `${left}px`;
     host.style.top = `${top}px`;
   }
-  function mount() {
+  function mount(field) {
     requestStartedAt ??= Date.now() - 5_000;
     host = document.createElement("div");
     host.dataset.yahooCodeFill = "suggestion";
@@ -70,7 +93,7 @@ export function startInlinePicker() {
     root.querySelector("#retry").onclick = () => { deadline = Date.now() + 120_000; check(); };
     document.documentElement.append(host);
     deadline = Date.now() + 120_000;
-    position();
+    position(field);
     check();
   }
   async function check() {
@@ -125,9 +148,11 @@ export function startInlinePicker() {
   function scan() {
     if (lastURL !== location.href) { remove(); dismissed = false; lastURL = location.href; requestStartedAt = undefined; }
     if (document.hidden) { remove(); return; }
-    if (!locate().ok) { if (host) remove(); return; }
-    if (!host && !dismissed) mount();
-    else position();
+    const field = locate();
+    contextRoots = field.contextRoots;
+    if (!field.ok) { if (host) remove(); return; }
+    if (!host && !dismissed) mount(field);
+    else position(field);
   }
   let scanTimer;
   const scheduleScan = () => {
@@ -136,8 +161,11 @@ export function startInlinePicker() {
     scanTimer = setTimeout(() => { scanTimer = undefined; scan(); }, 150);
   };
   new MutationObserver((records) => {
-    if (records.some((record) => record.target !== host)) scheduleScan();
-  }).observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+    if (mutationAffectsPicker(records, host, contextRoots)) scheduleScan();
+  }).observe(document.documentElement, {
+    childList: true, subtree: true, characterData: true, characterDataOldValue: true, attributes: true,
+    attributeFilter: ["type", "name", "id", "placeholder", "autocomplete", "aria-label", "hidden", "style", "class", "disabled", "readonly", "maxlength", "for"],
+  });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button]");
     if (!control || !locate().ok ||
