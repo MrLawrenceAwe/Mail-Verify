@@ -38,12 +38,14 @@ class MailSession:
         self.last_seen_uid = None
         self.message_count = 0
         self.codes_by_uid = {}
+        self.pending_by_uid = {}
 
     def close(self):
         conn, self.conn = self.conn, None
         self.last_seen_uid = None
         self.message_count = 0
         self.codes_by_uid.clear()
+        self.pending_by_uid.clear()
         if conn:
             try:
                 conn.shutdown()
@@ -107,8 +109,8 @@ class MailSession:
 
     def _fetch_codes(self, candidates, eligible):
         new_code_count = 0
-        # Check the newest few messages first. If none (or too few) have codes,
-        # fetch the rest together instead of paying for up to five more round trips.
+        # Return codes from the newest batch immediately. Older candidates stay
+        # queued for the next poll; if no code is found, continue this check.
         for batch in (candidates[:FETCH_BATCH_SIZE], candidates[FETCH_BATCH_SIZE:]):
             if not batch:
                 continue
@@ -125,13 +127,17 @@ class MailSession:
                 if uid:
                     messages[uid.group(1)] = entry[1]
             for uid in batch:
+                received = eligible[uid]
+                self.pending_by_uid.pop(uid, None)
                 found = extract_code(messages[uid]) if uid in messages else None
                 if found:
-                    found["receivedAt"] = int(eligible[uid] * 1000)
+                    found["receivedAt"] = int(received * 1000)
                     self.codes_by_uid[int(uid)] = found
                     new_code_count += 1
                 if new_code_count == MAX_RESULTS:
                     return
+            if new_code_count:
+                return
 
     def recent_codes(self):
         try:
@@ -147,12 +153,23 @@ class MailSession:
                 for uid, item in self.codes_by_uid.items()
                 if 0 <= now - item["receivedAt"] / 1000 <= MAX_CODE_AGE_SECONDS
             }
-            uids, metadata = self._new_message_metadata()
-            if not uids:
-                return self._results()
-            eligible = self._eligible_messages(metadata, now)
-            candidates = [uid for uid in reversed(uids) if uid in eligible]
-            self._fetch_codes(candidates, eligible)
+            _, metadata = self._new_message_metadata()
+            self.pending_by_uid.update(self._eligible_messages(metadata, now))
+            # Keep deferred work bounded, fresh, and behind newly arrived mail.
+            cutoff = (
+                sorted(self.codes_by_uid, reverse=True)[MAX_RESULTS - 1]
+                if len(self.codes_by_uid) >= MAX_RESULTS else 0
+            )
+            self.pending_by_uid = {
+                uid: received
+                for uid, received in sorted(
+                    self.pending_by_uid.items(), key=lambda item: int(item[0]), reverse=True
+                )
+                if int(uid) > cutoff and 0 <= now - received <= MAX_CODE_AGE_SECONDS
+            }
+            candidates = list(self.pending_by_uid)[:MAX_MESSAGES]
+            self.pending_by_uid = {uid: self.pending_by_uid[uid] for uid in candidates}
+            self._fetch_codes(candidates, self.pending_by_uid)
             return self._results()
         except Exception:
             self.close()
