@@ -1,69 +1,71 @@
-const assert = require("node:assert/strict");
-const vm = require("node:vm");
+import assert from "node:assert/strict";
+import test from "node:test";
+import vm from "node:vm";
+import { fillCode } from "../extension/fill-code.js";
 
-(async () => {
-  const { fillCode } = await import("../extension/fill-code.js");
-  // Chrome serializes this function into the page; evaluate the exported function
-  // in an isolated DOM context to verify it has no module-scope dependencies.
-  class FakeInput {
-    constructor(props = {}) {
-      Object.assign(
-        this,
-        {
-          type: "text",
-          maxLength: -1,
-          name: "",
-          id: "",
-          placeholder: "",
-          autocomplete: "",
-          labels: [],
-          form: null,
-          parentElement: null,
-          events: [],
-        },
-        props,
-      );
-    }
-    getClientRects() {
-      return [1];
-    }
-    getBoundingClientRect() {
-      return this.rect || { top: 0, left: 0, bottom: 20, right: 100 };
-    }
-    checkVisibility() {
-      return !this.hidden;
-    }
-    getAttribute() {
-      return "";
-    }
-    set value(value) {
-      this._value = value;
-    }
-    get value() {
-      return this._value;
-    }
-    dispatchEvent(event) {
-      this.events.push(event.type);
-    }
-    focus() {
-      this.focused = true;
-    }
-  }
-  function run(inputs, activeElement = null) {
-    const ctx = {
-      document: { querySelectorAll: () => inputs, activeElement },
-      HTMLInputElement: FakeInput,
-      innerHeight: 800,
-      innerWidth: 1200,
-      Event: class {
-        constructor(type) {
-          this.type = type;
-        }
+// Chrome serializes this function into the page; evaluate the exported function
+// in an isolated DOM context to verify it has no module-scope dependencies.
+class FakeInput {
+  constructor(props = {}) {
+    Object.assign(
+      this,
+      {
+        type: "text",
+        maxLength: -1,
+        name: "",
+        id: "",
+        placeholder: "",
+        autocomplete: "",
+        labels: [],
+        form: null,
+        parentElement: null,
+        events: [],
       },
-    };
-    vm.createContext(ctx);
-    return vm.runInContext(`(${fillCode.toString()})("123456")`, ctx);
+      props,
+    );
   }
+  getClientRects() {
+    return [1];
+  }
+  getBoundingClientRect() {
+    return this.rect || { top: 0, left: 0, bottom: 20, right: 100 };
+  }
+  checkVisibility() {
+    return !this.hidden;
+  }
+  getAttribute() {
+    return "";
+  }
+  set value(value) {
+    this._value = value;
+  }
+  get value() {
+    return this._value;
+  }
+  dispatchEvent(event) {
+    this.events.push(event.type);
+  }
+  focus() {
+    this.focused = true;
+  }
+}
+function run(inputs, activeElement = null) {
+  const ctx = {
+    document: { querySelectorAll: () => inputs, activeElement },
+    HTMLInputElement: FakeInput,
+    innerHeight: 800,
+    innerWidth: 1200,
+    Event: class {
+      constructor(type) {
+        this.type = type;
+      }
+    },
+  };
+  vm.createContext(ctx);
+  return vm.runInContext(`(${fillCode.toString()})("123456")`, ctx);
+}
+
+test("fills labelled fields and rejects unrelated or hidden fields", () => {
   let a = new FakeInput({ autocomplete: "one-time-code" });
   assert.equal(run([a]).ok, true);
   assert.equal(a.value, "123456");
@@ -111,6 +113,9 @@ const vm = require("node:vm");
     ]).ok,
     false,
   );
+});
+
+test("fills split digit fields only when the group fits", () => {
   const parent = {};
   const singles = Array.from(
     { length: 6 },
@@ -128,6 +133,9 @@ const vm = require("node:vm");
     run([new FakeInput({ autocomplete: "one-time-code", maxLength: 4 })]).ok,
     false,
   );
+});
+
+test("follows split fields replaced after each digit", () => {
   const rerenderParent = {};
   let current = Array.from(
     { length: 6 },
@@ -169,8 +177,4 @@ const vm = require("node:vm");
     true,
   );
   assert.equal(current.map((x) => x.value).join(""), "123456");
-  console.log("Form-fill cases passed.");
-})().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
 });
