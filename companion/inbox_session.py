@@ -5,12 +5,12 @@ import re
 import ssl
 import time
 
-from code_extraction import extract_code
+from code_extraction import extract_code_details
 from errors import UserError
 
 MAX_CODE_AGE_SECONDS = 600
 MAX_FUTURE_SKEW_SECONDS = 120
-INITIAL_FETCH_SIZE = 5
+FIRST_BATCH_SIZE = 5
 MAX_MESSAGES = 30
 MAX_RESULTS = 5
 MAX_MESSAGE_BYTES = 1_000_000
@@ -111,7 +111,7 @@ class InboxSession:
         new_code_count = 0
         # Return codes from the newest batch immediately. Older candidates stay
         # queued for the next poll; if no code is found, continue this check.
-        for batch in (candidates[:INITIAL_FETCH_SIZE], candidates[INITIAL_FETCH_SIZE:]):
+        for batch in (candidates[:FIRST_BATCH_SIZE], candidates[FIRST_BATCH_SIZE:]):
             if not batch:
                 continue
             status, body = self.conn.uid(
@@ -132,7 +132,7 @@ class InboxSession:
                     # An OK fetch can omit a body. Try this UID again on the next poll.
                     continue
                 self.pending_received_at_by_uid.pop(uid, None)
-                found = extract_code(messages[uid])
+                found = extract_code_details(messages[uid])
                 if found:
                     found["receivedAt"] = int(received * 1000)
                     found["uid"] = uid
@@ -142,6 +142,30 @@ class InboxSession:
                     return
             if new_code_count:
                 return
+
+    def _prune_pending_messages(self, now):
+        # Keep deferred work bounded, fresh, and behind newly arrived mail.
+        cutoff = (
+            sorted(
+                (item["receivedAt"], uid)
+                for uid, item in self.codes_by_uid.items()
+            )[-MAX_RESULTS]
+            if len(self.codes_by_uid) >= MAX_RESULTS else None
+        )
+        eligible = sorted(
+            self.pending_received_at_by_uid.items(), key=lambda item: item[0], reverse=True
+        )
+        self.pending_received_at_by_uid = {
+            uid: received
+            for uid, received in eligible
+            if 0 <= now - received <= MAX_CODE_AGE_SECONDS
+            and (cutoff is None or (int(received * 1000), uid) > cutoff)
+        }
+        candidates = list(self.pending_received_at_by_uid)[:MAX_MESSAGES]
+        self.pending_received_at_by_uid = {
+            uid: self.pending_received_at_by_uid[uid] for uid in candidates
+        }
+        return candidates
 
     def recent_codes(self):
         try:
@@ -159,24 +183,7 @@ class InboxSession:
             }
             metadata = self._new_message_metadata()
             self.pending_received_at_by_uid.update(self._eligible_messages(metadata, now))
-            # Keep deferred work bounded, fresh, and behind newly arrived mail.
-            cutoff = (
-                sorted(
-                    (item["receivedAt"], uid)
-                    for uid, item in self.codes_by_uid.items()
-                )[-MAX_RESULTS]
-                if len(self.codes_by_uid) >= MAX_RESULTS else None
-            )
-            self.pending_received_at_by_uid = {
-                uid: received
-                for uid, received in sorted(
-                    self.pending_received_at_by_uid.items(), key=lambda item: item[0], reverse=True
-                )
-                if 0 <= now - received <= MAX_CODE_AGE_SECONDS
-                and (cutoff is None or (int(received * 1000), uid) > cutoff)
-            }
-            candidates = list(self.pending_received_at_by_uid)[:MAX_MESSAGES]
-            self.pending_received_at_by_uid = {uid: self.pending_received_at_by_uid[uid] for uid in candidates}
+            candidates = self._prune_pending_messages(now)
             self._fetch_codes(candidates)
             return self._results()
         except Exception:

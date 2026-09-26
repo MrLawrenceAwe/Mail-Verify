@@ -9,13 +9,13 @@ import sys
 
 from errors import UserError
 from keychain import keychain
-from mail_session import connect_imap
+from inbox_session import connect_imap
 from account_sessions import AccountSessions
 
 MAX_FRAME_BYTES = 16_384
 
 
-def stored_accounts():
+def load_account_credentials():
     saved = keychain("get")
     if not saved:
         return []
@@ -29,19 +29,19 @@ def handle_request(request, sessions):
         raise UserError("Invalid request.")
     action = request.get("action")
     if action == "status":
-        return {"accounts": [item["email"] for item in stored_accounts()]}
+        return {"accountEmails": [item["email"] for item in load_account_credentials()]}
     if action == "removeAccount":
         address = request.get("email", "")
-        accounts = stored_accounts()
-        remaining = [item for item in accounts if item["email"].lower() != address.lower()]
-        if len(remaining) == len(accounts):
+        credentials = load_account_credentials()
+        remaining = [item for item in credentials if item["email"].lower() != address.lower()]
+        if len(remaining) == len(credentials):
             raise UserError("That Yahoo account is not connected.")
         if remaining:
             keychain("set", {"accounts": remaining})
         else:
             keychain("delete")
         sessions.remove(address)
-        return {"accounts": [item["email"] for item in remaining]}
+        return {"accountEmails": [item["email"] for item in remaining]}
     if action == "saveAccount":
         address = request.get("email", "").strip()
         password = request.get("password", "").replace(" ", "")
@@ -53,18 +53,18 @@ def handle_request(request, sessions):
         credentials = {"email": address, "password": password}
         with connect_imap(credentials):
             pass
-        accounts = stored_accounts()
-        accounts = [item for item in accounts if item["email"].lower() != address.lower()]
-        accounts.append(credentials)
-        keychain("set", {"accounts": accounts})
+        account_credentials = load_account_credentials()
+        account_credentials = [item for item in account_credentials if item["email"].lower() != address.lower()]
+        account_credentials.append(credentials)
+        keychain("set", {"accounts": account_credentials})
         sessions.remove(address)
-        return {"accounts": [item["email"] for item in accounts]}
+        return {"accountEmails": [item["email"] for item in account_credentials]}
     if action == "codes":
-        accounts = stored_accounts()
-        if not accounts:
+        account_credentials = load_account_credentials()
+        if not account_credentials:
             sessions.close()
             raise UserError("Connect Yahoo Mail first.")
-        return sessions.codes(accounts)
+        return sessions.fetch_recent_codes(account_credentials)
     raise UserError("Unsupported request.")
 
 

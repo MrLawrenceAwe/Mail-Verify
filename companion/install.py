@@ -16,7 +16,8 @@ HOST_MANIFEST_PATH = (
     / "Library/Application Support/Google/Chrome/NativeMessagingHosts/local.yahoo_code_fill.json"
 )
 
-COMPANION_FILES = ("host.py", "account_sessions.py", "mail_session.py", "code_extraction.py", "keychain.py", "errors.py")
+COMPANION_FILES = ("host.py", "account_sessions.py", "inbox_session.py", "code_extraction.py", "keychain.py", "errors.py")
+OBSOLETE_COMPANION_FILES = ("mail_session.py",)
 
 
 def main():
@@ -25,7 +26,7 @@ def main():
     if "--uninstall" in sys.argv:
         HOST_MANIFEST_PATH.unlink(missing_ok=True)
         # Only remove files owned by this installer. Use Remove account in the popup first.
-        for name in (*COMPANION_FILES, "launch-host"):
+        for name in (*COMPANION_FILES, *OBSOLETE_COMPANION_FILES, "launch-host"):
             (INSTALL_DIR / name).unlink(missing_ok=True)
         print(
             "Companion removed. Remove the extension in Chrome. To remove credentials, delete local.yahoo_code_fill in Keychain Access."
@@ -37,6 +38,8 @@ def main():
     INSTALL_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in COMPANION_FILES:
         shutil.copy2(PROJECT_ROOT / "companion" / name, INSTALL_DIR / name)
+    for name in OBSOLETE_COMPANION_FILES:
+        (INSTALL_DIR / name).unlink(missing_ok=True)
     launcher = INSTALL_DIR / "launch-host"
     launcher.write_text(
         "#!/bin/sh\nexec "

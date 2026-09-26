@@ -76,10 +76,10 @@ The installer test installs into a temporary directory, launches that copy to ve
 ## Code organisation
 
 - `extension/content-entry.js` loads `inline-picker.js` for automatic field detection and picker lifecycle; `inline-picker-view.js` renders the on-page picker. `background.js` brokers active-tab native checks.
-- `extension/popup-entry.js` starts the popup; `popup.js` manages account actions and polling, while `popup-view.js` renders its controls and code cards.
+- `extension/popup-entry.js` starts the popup; `popup-controller.js` manages account actions and polling, while `popup-view.js` renders its controls and code cards.
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
 - `extension/code-fields.js` exports the self-contained field detector and filler injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page. `code-timing.js` shares timing limits between the popup and inline picker.
-- `companion/host.py` handles request dispatch and native-message framing; `account_sessions.py` coordinates connected accounts, while `mail_session.py` manages IMAP connections and bounded inbox scans.
+- `companion/host.py` handles request dispatch and native-message framing; `account_sessions.py` coordinates connected accounts, while `inbox_session.py` manages IMAP connections and bounded inbox scans.
 - `companion/code_extraction.py` parses email content and extracts a single unambiguous code.
 - `companion/keychain.py` stores credentials; `errors.py` defines user-facing errors.
 - `companion/install.py` installs and removes the companion files listed in `COMPANION_FILES`. Update that list when adding runtime modules. Tests are grouped by the production module they cover.

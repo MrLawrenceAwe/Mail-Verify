@@ -11,10 +11,10 @@ export function suggestionPosition(rect, width, height, viewportWidth, viewportH
   return { left, top };
 }
 
-export function selectSuggestedCodes(codes, earliestCodeTime, now = Date.now(), excludedMessageKeys = new Set()) {
+export function selectSuggestedCodes(codes, minReceivedAtMs, now = Date.now(), excludedMessageKeys = new Set()) {
   const senders = new Set();
   return codes
-    .filter((item) => !excludedMessageKeys.has(messageKey(item)) && item.receivedAt >= earliestCodeTime && item.receivedAt <= now && now - item.receivedAt <= MAX_CODE_AGE_MS)
+    .filter((item) => !excludedMessageKeys.has(messageKey(item)) && item.receivedAt >= minReceivedAtMs && item.receivedAt <= now && now - item.receivedAt <= MAX_CODE_AGE_MS)
     .sort((a, b) => b.receivedAt - a.receivedAt)
     .filter((item) => {
       const senderKey = item.sender.trim()
@@ -58,10 +58,10 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     setTimeout, clearTimeout, Date: clock = Date } = browser;
   let view, pollTimer, pollDeadline = 0, checking = false;
   let dismissed = false, attemptGeneration = 0, lastURL = location.href;
-  let earliestCodeTime, anchor;
+  let minReceivedAtMs, anchor;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   let candidateCache;
-  const locate = () => {
+  const detectCodeField = () => {
     const field = handleField({ action: "detect", candidateCache });
     candidateCache = field.candidateCache;
     return field;
@@ -73,7 +73,18 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     view = undefined;
     anchor = undefined;
   }
-  function positionPicker(field = locate()) {
+  function dismissPicker() {
+    dismissed = true;
+    unmountPicker();
+  }
+  function excludeSeenMessages() {
+    for (const key of seenMessageKeys) excludedMessageKeys.add(key);
+  }
+  function restartPolling() {
+    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    checkForCodes();
+  }
+  function positionPicker(field = detectCodeField()) {
     if (!view || !field.ok) return;
     const bounds = view.host.getBoundingClientRect();
     const { left, top } = suggestionPosition(field.rect, bounds.width, bounds.height, browser.innerWidth, browser.innerHeight);
@@ -81,17 +92,11 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     view.host.style.top = `${top}px`;
   }
   function mountPicker(field) {
-    earliestCodeTime ??= clock.now() - 5_000;
+    minReceivedAtMs ??= clock.now() - 5_000;
     anchor = field.anchor;
     view = createInlinePickerView(document, {
-      onClose: () => {
-        dismissed = true;
-        unmountPicker();
-      },
-      onRetry: () => {
-        pollDeadline = clock.now() + POLL_WINDOW_MS;
-        checkForCodes();
-      },
+      onClose: dismissPicker,
+      onRetry: restartPolling,
       onFill: (item, button) => {
         if (clock.now() - item.receivedAt > MAX_CODE_AGE_MS) {
           view.setStatus("This code is too old to suggest. Request a new one.");
@@ -101,8 +106,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
         }
         const result = handleField({ action: "fill", code: item.code });
         if (result.ok) {
-          dismissed = true;
-          unmountPicker();
+          dismissPicker();
         } else {
           view.setStatus("Select the code field and try again.");
           positionPicker();
@@ -110,13 +114,12 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       },
     });
     document.documentElement.append(view.host);
-    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    restartPolling();
     positionPicker(field);
-    checkForCodes();
   }
   async function checkForCodes() {
     clearTimeout(pollTimer);
-    if (checking || !view || document.hidden || !locate().ok) return;
+    if (checking || !view || document.hidden || !detectCodeField().ok) return;
     checking = true;
     const requestGeneration = attemptGeneration;
     let checkFailed = false;
@@ -127,7 +130,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       if (!response?.ok) throw new Error(response?.error || "Could not check Yahoo.");
       checkFailed = !!response.warnings?.length;
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
-      const codes = selectSuggestedCodes(response.codes, earliestCodeTime, clock.now(), excludedMessageKeys);
+      const codes = selectSuggestedCodes(response.codes, minReceivedAtMs, clock.now(), excludedMessageKeys);
       view.renderCodes(codes, location.hostname);
       const status = response.warnings?.length
         ? `Could not check: ${response.warnings.join("; ")}`
@@ -149,9 +152,9 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     }
   }
   function resetAttempt({ newPage = false } = {}) {
-    if (!newPage) for (const messageKey of seenMessageKeys) excludedMessageKeys.add(messageKey);
+    if (!newPage) excludeSeenMessages();
     unmountPicker();
-    earliestCodeTime = undefined;
+    minReceivedAtMs = undefined;
     if (newPage) {
       dismissed = false;
       seenMessageKeys = new Set();
@@ -159,7 +162,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       candidateCache = undefined;
     }
   }
-  function scan(refresh = true) {
+  function syncPicker({ refreshCandidates = true } = {}) {
     if (lastURL !== location.href) {
       resetAttempt({ newPage: true });
       lastURL = location.href;
@@ -169,8 +172,8 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       return;
     }
     if (dismissed) return;
-    if (refresh) candidateCache = undefined;
-    const field = locate();
+    if (refreshCandidates) candidateCache = undefined;
+    const field = detectCodeField();
     if (!field.ok) {
       if (view) resetAttempt();
       return;
@@ -183,14 +186,14 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   const scheduleScan = () => {
     // Throttle so a page with continuous DOM updates cannot postpone detection forever.
     if (scanTimer) return;
-    scanTimer = setTimeout(() => { scanTimer = undefined; scan(); }, 150);
+    scanTimer = setTimeout(() => { scanTimer = undefined; syncPicker(); }, 150);
   };
   let positionFrame;
   const schedulePosition = () => {
     if (dismissed || document.hidden || positionFrame) return;
     positionFrame = requestAnimationFrame(() => {
       positionFrame = undefined;
-      scan(false);
+      syncPicker({ refreshCandidates: false });
     });
   };
   new MutationObserver((records) => {
@@ -202,33 +205,31 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button]");
     if (!control ||
-        !/^(?:send (?:a )?(?:new|another) code|resend(?: (?:the )?code)?)$/i.test((control.textContent || "").trim()) || !locate().ok) return;
+        !/^(?:send (?:a )?(?:new|another) code|resend(?: (?:the )?code)?)$/i.test((control.textContent || "").trim()) || !detectCodeField().ok) return;
     // IMAP dates have one-second precision. Codes from the resend's current
     // second cannot be distinguished from an unseen code sent just before it.
     // Start with the next second so a pending check cannot revive the old code.
-    earliestCodeTime = Math.floor(clock.now() / 1000) * 1000 + 1000;
-    for (const messageKey of seenMessageKeys) excludedMessageKeys.add(messageKey);
+    minReceivedAtMs = Math.floor(clock.now() / 1000) * 1000 + 1000;
+    excludeSeenMessages();
     dismissed = false;
     attemptGeneration++;
     view?.clearCodes();
-    pollDeadline = clock.now() + POLL_WINDOW_MS;
     if (view) {
       view.setStatus("Waiting for your new code…");
-      checkForCodes();
+      restartPolling();
     } else {
-      scan();
+      syncPicker();
     }
   }, true);
   document.addEventListener("focusin", scheduleScan);
   document.addEventListener("visibilitychange", scheduleScan);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && view) {
-      dismissed = true;
-      unmountPicker();
+      dismissPicker();
     }
   });
   window.addEventListener("scroll", schedulePosition, true);
   window.addEventListener("resize", schedulePosition);
   window.addEventListener("popstate", scheduleScan);
-  scan();
+  syncPicker();
 }

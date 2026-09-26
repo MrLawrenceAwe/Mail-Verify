@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPopup } from "../extension/popup.js";
+import { createPopup } from "../extension/popup-controller.js";
 
 class FakeElement {
   constructor(tag = "div") {
@@ -46,7 +46,7 @@ const code = {
   receivedAt: 1000,
 };
 
-async function setup({ codes = [code], account = "test@yahoo.com" } = {}) {
+async function setup({ codes = [code], account = "test@yahoo.com", remainingAccountEmails = [] } = {}) {
   const controls = Object.fromEntries(
     [
       "checkCodes",
@@ -54,9 +54,9 @@ async function setup({ codes = [code], account = "test@yahoo.com" } = {}) {
       "addAccount",
       "codes",
       "status",
-      "setup",
+      "accountSetup",
       "companionSetup",
-      "codeResults",
+      "connectedAccountPanel",
       "addAccountForm",
       "addAccountSubmit",
       "password",
@@ -83,13 +83,13 @@ async function setup({ codes = [code], account = "test@yahoo.com" } = {}) {
     },
     async sendSessionRequest(action) {
       return action === "status"
-        ? { accounts: account ? [account] : [] }
+        ? { accountEmails: account ? [account] : [] }
         : { codes: await state.fetchCodes() };
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);
       if (state.failRemove) throw Error("Keychain unavailable");
-      return { accounts: request.action === "removeAccount" ? [] : [request.email] };
+      return { accountEmails: request.action === "removeAccount" ? remainingAccountEmails : [request.email] };
     },
   };
   const popup = createPopup({
@@ -137,10 +137,11 @@ test("polls whether codes are present or absent", async () => {
 });
 
 test("stops polling after the deadline", async () => {
-  const { scheduled, state } = await setup();
+  const { controls, scheduled, state } = await setup();
   state.now += 120001;
   await [...scheduled.values()][0].callback();
   assert.equal(scheduled.size, 0, "stop after the polling deadline");
+  assert.equal(controls.status.textContent, "Automatic checking finished. Check again for newer codes.");
 });
 
 test("does not start a scheduled check after the deadline", async () => {
@@ -256,14 +257,27 @@ test("removes an account and recovers from errors", async () => {
     assert.equal(state.requests[0].action, "removeAccount");
     assert.equal(state.requests[0].email, "test@yahoo.com");
     assert.equal(scheduled.size, failRemove ? 1 : 0);
-    assert.equal(controls.codeResults.hidden, !failRemove);
+    assert.equal(controls.connectedAccountPanel.hidden, !failRemove);
     assert.equal(controls.checkCodes.disabled, false);
   }
 });
 
+test("checks remaining accounts immediately after removal", async () => {
+  const { controls, scheduled, state } = await setup({
+    remainingAccountEmails: ["other@yahoo.com"],
+  });
+  let checks = 0;
+  state.fetchCodes = async () => { checks++; return []; };
+  await controls.accounts.querySelectorAll("button")[0].trigger();
+  await settle();
+  assert.equal(checks, 1);
+  assert.equal(controls.accounts.children[0].children[0].textContent, "other@yahoo.com");
+  assert.equal(scheduled.size, 1);
+});
+
 test("connects an account without retaining the form password", async () => {
   const { controls, state } = await setup({ account: null });
-  assert.equal(controls.setup.hidden, false);
+  assert.equal(controls.accountSetup.hidden, false);
   controls.email.value = "test@yahoo.com";
   controls.password.value = "app-password";
   await controls.addAccountForm.trigger("submit");
@@ -275,7 +289,7 @@ test("connects an account without retaining the form password", async () => {
     password: "app-password",
   });
   assert.equal(controls.accounts.children[0].children[0].textContent, "test@yahoo.com");
-  assert.equal(controls.codeResults.hidden, false);
+  assert.equal(controls.connectedAccountPanel.hidden, false);
 });
 
 test("shows multiple accounts and labels codes with their inbox", async () => {
@@ -285,6 +299,6 @@ test("shows multiple accounts and labels codes with their inbox", async () => {
   assert.equal(controls.accounts.children.length, 1);
   assert.equal(controls.codes.children[0].children[1].textContent, "test@yahoo.com");
   controls.addAccount.trigger();
-  assert.equal(controls.setup.hidden, false);
-  assert.equal(controls.codeResults.hidden, false);
+  assert.equal(controls.accountSetup.hidden, false);
+  assert.equal(controls.connectedAccountPanel.hidden, false);
 });

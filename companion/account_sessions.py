@@ -4,7 +4,7 @@ import imaplib
 import signal
 
 from errors import UserError
-from mail_session import InboxSession
+from inbox_session import InboxSession
 
 CHECK_TIMEOUT_SECONDS = 25
 
@@ -36,13 +36,13 @@ class AccountSessions:
         if session:
             session.close()
 
-    def codes(self, accounts):
-        active = {account["email"].lower() for account in accounts}
+    def fetch_recent_codes(self, account_credentials):
+        active = {account["email"].lower() for account in account_credentials}
         for email in list(self.sessions):
             if email not in active:
                 self.remove(email)
         codes, errors = [], []
-        for account in accounts:
+        for account in account_credentials:
             email = account["email"]
             key = email.lower()
             session = self.sessions.get(key)
@@ -56,9 +56,8 @@ class AccountSessions:
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
                 self.remove(email)
                 errors.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
-        if errors and not codes and len(errors) == len(accounts):
+        if errors and not codes and len(errors) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(errors))
         codes.sort(key=lambda item: item["receivedAt"], reverse=True)
         return {"codes": codes, "warnings": errors}
-
 

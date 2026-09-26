@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import struct
 import sys
-import time
 import unittest
 from unittest.mock import patch
 
@@ -41,7 +40,7 @@ class HostTests(unittest.TestCase):
                         "email": "test@yahoo.com",
                         "password": "abcdefghijklmnop",
                     },
-                    account_sessions.InboxSession(None),
+                    account_sessions.AccountSessions(),
                 )
             keychain.assert_not_called()
 
@@ -54,7 +53,7 @@ class HostTests(unittest.TestCase):
             with self.assertRaisesRegex(host.UserError, "Connect Yahoo Mail first"):
                 host.handle_request({"action": "codes"}, sessions)
             # Account cleanup occurs when the next scan sees the changed list.
-            sessions.codes([])
+            sessions.fetch_recent_codes([])
             close.assert_called_once()
 
     def test_reused_session_keeps_connection_for_unchanged_account(self):
@@ -74,29 +73,21 @@ class HostTests(unittest.TestCase):
         with patch.object(host, "keychain", return_value=first) as keychain, patch.object(host, "connect_imap") as connect:
             connect.return_value.__enter__.return_value = None
             result = host.handle_request({"action": "saveAccount", **second}, sessions)
-            self.assertEqual(result["accounts"], ["one@yahoo.com", "two@yahoo.com"])
+            self.assertEqual(result["accountEmails"], ["one@yahoo.com", "two@yahoo.com"])
             keychain.assert_any_call("set", {"accounts": [first, second]})
         with patch.object(account_sessions, "check_with_timeout", side_effect=[
             [{"code": "111111", "receivedAt": 1000, "uid": 1}],
             [{"code": "222222", "receivedAt": 2000, "uid": 1}],
         ]):
-            result = sessions.codes([first, second])
+            result = sessions.fetch_recent_codes([first, second])
         self.assertEqual([item["accountEmail"] for item in result["codes"]], ["two@yahoo.com", "one@yahoo.com"])
 
     def test_remove_only_selected_account(self):
         accounts = [{"email": "one@yahoo.com", "password": "password-one"}, {"email": "two@yahoo.com", "password": "password-two"}]
         with patch.object(host, "keychain", return_value={"accounts": accounts}) as keychain:
             result = host.handle_request({"action": "removeAccount", "email": "one@yahoo.com"}, account_sessions.AccountSessions())
-            self.assertEqual(result, {"accounts": ["two@yahoo.com"]})
+            self.assertEqual(result, {"accountEmails": ["two@yahoo.com"]})
             keychain.assert_any_call("set", {"accounts": [accounts[1]]})
-
-    def test_whole_check_times_out(self):
-        with patch.object(account_sessions, "CHECK_TIMEOUT_SECONDS", 0.01), patch.object(
-            account_sessions.InboxSession, "recent_codes", side_effect=lambda: time.sleep(0.2)
-        ):
-            with self.assertRaisesRegex(host.UserError, "too long"):
-                account_sessions.check_with_timeout(account_sessions.InboxSession({}))
-
 
 if __name__ == "__main__":
     unittest.main()

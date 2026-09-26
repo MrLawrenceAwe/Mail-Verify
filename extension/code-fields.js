@@ -5,7 +5,7 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
   if (!detectOnly && typeof code !== "string")
     return { ok: false, error: "Missing verification code." };
   // Detection is read-only; filling happens only after the user selects a code.
-  const isVisible = (el) => {
+  const isUsableInput = (el) => {
     if (
       el.isConnected === false ||
       el.disabled ||
@@ -25,7 +25,7 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
     );
   };
   const getVisibleInputs = () =>
-    [...document.querySelectorAll("input")].filter(isVisible);
+    [...document.querySelectorAll("input")].filter(isUsableInput);
 
   const getInputHints = (el) => [
     el.autocomplete,
@@ -69,22 +69,22 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
   const focused = document.activeElement;
   // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
   // Filling always rediscovers the page so cached hints cannot authorize a fill.
-  const candidateCacheResult = detectOnly && candidateCache ? candidateCache : {
+  const candidates = detectOnly && candidateCache ? candidateCache : {
     inputs: [...document.querySelectorAll("input")].filter(
       (el) => hasSupportedType(el) && hasCodeHint(el),
     ),
     contextRoots: [...contextRoots],
   };
-  const visibleCodeInputs = candidateCacheResult.inputs.filter(isVisible);
+  const visibleCodeInputs = candidates.inputs.filter(isUsableInput);
   const focusedCodeInput = visibleCodeInputs.includes(focused) ? focused : null;
   // Focus alone does not identify a code field; it may be a search or account input.
   const targetInput =
     focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
   if (detectOnly) {
     const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every((el) => el.maxLength === 1) ? visibleCodeInputs[0] : null);
-    if (!anchor) return { ok: false, candidateCache: candidateCacheResult };
+    if (!anchor) return { ok: false, candidateCache: candidates };
     const { top, bottom, left, right } = anchor.getBoundingClientRect();
-    return { ok: true, anchor, rect: { top, bottom, left, right }, candidateCache: candidateCacheResult };
+    return { ok: true, anchor, rect: { top, bottom, left, right }, candidateCache: candidates };
   }
   const inputs = getVisibleInputs();
   let fields;
