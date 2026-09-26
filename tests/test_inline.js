@@ -25,6 +25,14 @@ test("only the latest code per sender is suggested, without changing the respons
   assert.equal(codes[0].code, "111111");
 });
 
+test("codes without a sender remain separate suggestions", () => {
+  const codes = [
+    { uid: 1, code: "111111", sender: "", receivedAt: 9000 },
+    { uid: 2, code: "222222", sender: "", receivedAt: 9500 },
+  ];
+  assert.deepEqual(freshCodes(codes, 8000, 10000).map(item => item.code), ["222222", "111111"]);
+});
+
 test("resend excludes an already seen message but accepts a new UID in the same second", () => {
   const old = { uid: 7, code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   const newer = { uid: 8, code: "222222", sender: "auth@example.test", receivedAt: 9000 };

@@ -14,7 +14,9 @@ export function freshCodes(codes, since, now = Date.now(), excludedUids = new Se
     .filter((item) => !excludedUids.has(codeIdentity(item)) && item.receivedAt >= since && item.receivedAt <= now && now - item.receivedAt <= 600_000)
     .sort((a, b) => b.receivedAt - a.receivedAt)
     .filter((item) => {
-      const sender = `${item.accountEmail || ""}:${item.sender.toLowerCase()}`;
+      const sender = item.sender.trim()
+        ? `sender:${item.accountEmail || ""}:${item.sender.toLowerCase()}`
+        : `message:${codeIdentity(item)}`;
       if (senders.has(sender)) return false;
       senders.add(sender);
       return true;

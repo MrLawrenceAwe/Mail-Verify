@@ -36,12 +36,17 @@ export function fillCode(code, detectOnly = false, cachedCandidates = null) {
   const hasContextualCodeHint = (el, hints) => {
     const hintText = hints.filter(Boolean).join(" ");
     if (!/\bcode\b/i.test(hintText) || /coupon|promo|postal|zip|referral|product/i.test(hintText)) return false;
-    const container = el.form || el.closest?.("main") || document.body;
-    if (!container) return false;
-    contextRoots.add(container);
-    if (!contextMatches.has(container))
-      contextMatches.set(container, /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|we sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i.test(container.textContent || ""));
-    return contextMatches.get(container);
+    const page = el.closest?.("main") || document.body;
+    const roots = el.form && el.form !== page ? [el.form, page] : [page];
+    const verificationText = /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|we sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i;
+    for (const root of roots) {
+      if (!root) continue;
+      contextRoots.add(root);
+      if (!contextMatches.has(root))
+        contextMatches.set(root, verificationText.test(root.textContent || ""));
+      if (contextMatches.get(root)) return true;
+    }
+    return false;
   };
   const hasCodeHint = (el) => {
     const hints = getInputHints(el);
