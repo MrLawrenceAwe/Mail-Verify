@@ -69,9 +69,39 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
   };
   const hasSupportedType = (el) =>
     ["text", "tel", "number", "password", ""].includes(el.type);
-  const isDigitInput = (el) => el.maxLength === 1 && hasSupportedType(el);
+  // maxlength is ignored by number inputs, including one-digit OTP widgets.
+  const isDigitInput = (el) => hasSupportedType(el) &&
+    (el.maxLength === 1 || el.type === "number");
   const getDigitInputs = (inputs = getVisibleInputs()) =>
     inputs.filter(isDigitInput);
+  const isInside = (el, ancestor) => {
+    for (let parent = el.parentElement; parent; parent = parent.parentElement)
+      if (parent === ancestor) return true;
+    return false;
+  };
+  const digitGroup = (anchor, digitInputs, length) => {
+    for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
+      const group = digitInputs.filter((el) =>
+        el.form === anchor.form && isInside(el, parent));
+      if (group.length === length && group.some(hasCodeHint)) return group;
+    }
+    // A form can own inputs placed outside its DOM subtree via the form attribute.
+    if (anchor.form) {
+      const group = digitInputs.filter((el) => el.form === anchor.form);
+      if (group.length === length && group.some(hasCodeHint)) return group;
+    }
+    return null;
+  };
+  const uniqueDigitGroup = (digitInputs, length) => {
+    const groups = [];
+    for (const anchor of digitInputs.filter(hasCodeHint)) {
+      const group = digitGroup(anchor, digitInputs, length);
+      if (group && !groups.some((other) =>
+        other.length === group.length && other.every((el, index) => el === group[index])))
+        groups.push(group);
+    }
+    return groups.length === 1 ? groups[0] : null;
+  };
   const focused = document.activeElement;
   // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
   // Filling always rediscovers the page so cached hints cannot authorize a fill.
@@ -87,39 +117,25 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
   const targetInput =
     focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
   if (detectOnly) {
-    const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every((el) => el.maxLength === 1) ? visibleCodeInputs[0] : null);
+    const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every(isDigitInput) ? visibleCodeInputs[0] : null);
     if (!anchor) return { ok: false, candidateCache: candidates };
     const { top, bottom, left, right } = anchor.getBoundingClientRect();
     return { ok: true, anchor, rect: { top, bottom, left, right }, candidateCache: candidates };
   }
   const inputs = getVisibleInputs();
+  const digitInputs = getDigitInputs(inputs);
   let fields;
-  if (targetInput && targetInput.maxLength === 1) {
-    fields = inputs.filter(
-      (el) =>
-        isDigitInput(el) &&
-        el.form === targetInput.form &&
-        el.parentElement === targetInput.parentElement,
-    );
+  if (targetInput && isDigitInput(targetInput)) {
+    fields = digitGroup(targetInput, digitInputs, code.length);
   } else if (!targetInput) {
-    const digitInputs = getDigitInputs(inputs);
-    if (
-      digitInputs.length === code.length &&
-      digitInputs.every((el) => el.form === digitInputs[0].form) &&
-      digitInputs.some(hasCodeHint)
-    )
-      fields = digitInputs;
+    fields = uniqueDigitGroup(digitInputs, code.length);
   }
-  if (fields) {
-    if (fields.length !== code.length)
-      return {
-        ok: false,
-        error: "Select the code field on the page, then reopen Code Fill.",
-      };
-  } else if (
+  if (!fields && (
     !targetInput ||
+    targetInput.maxLength === 1 ||
+    (targetInput.type === "number" && digitInputs.filter((el) => el.form === targetInput.form).length > 1) ||
     (targetInput.maxLength > 0 && targetInput.maxLength < code.length)
-  ) {
+  )) {
     return {
       ok: false,
       error:
@@ -136,45 +152,29 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   };
   if (fields) {
-    let groupForm = fields[0].form;
-    let groupParent = fields[0].parentElement;
+    let group = fields;
     for (let index = 0; index < code.length; index++) {
       // Input handlers may replace the fields after each digit. Resolve the
       // verification group again before writing the next one.
       const currentDigitInputs = getDigitInputs();
-      let group = currentDigitInputs.filter(
-        (el) => el.form === groupForm && el.parentElement === groupParent,
-      );
-      if (!group.length) {
-        // A rerender can replace the parent too. Only follow a uniquely
-        // identifiable verification group in that case.
-        const hinted = currentDigitInputs.filter(hasCodeHint);
-        const anchors = hinted.filter((el, position) =>
-          hinted.findIndex((other) =>
-            other.form === el.form && other.parentElement === el.parentElement,
-          ) === position,
-        );
-        group = anchors.length === 1
-          ? currentDigitInputs.filter((el) =>
-            el.form === anchors[0].form && el.parentElement === anchors[0].parentElement,
-          )
-          : [];
-      }
-      if (group.length !== code.length || !group.some(hasCodeHint)) {
+      group = currentDigitInputs.includes(group[index])
+        ? digitGroup(group[index], currentDigitInputs, code.length)
+        : uniqueDigitGroup(currentDigitInputs, code.length);
+      if (!group) {
         return {
           ok: false,
           error:
             "The code fields changed. Select the code field and try again.",
         };
       }
-      groupForm = group[0].form;
-      groupParent = group[0].parentElement;
       const el = group[index];
       setInputValue(el, code[index]);
     }
-    getDigitInputs().filter((el) =>
-      el.form === groupForm && el.parentElement === groupParent,
-    )[code.length - 1]?.focus();
+    const currentDigitInputs = getDigitInputs();
+    const currentGroup = currentDigitInputs.includes(group[0])
+      ? digitGroup(group[0], currentDigitInputs, code.length)
+      : uniqueDigitGroup(currentDigitInputs, code.length);
+    currentGroup?.[code.length - 1].focus();
     return { ok: true };
   }
   setInputValue(targetInput, code);
