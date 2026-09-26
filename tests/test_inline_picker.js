@@ -177,6 +177,49 @@ test("new route clears suggestions even when the code field is reused", async ()
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
 });
 
+test("changed verification instructions reset codes on the same field and URL", async () => {
+  let observer, now = 10_000, mounts = 0;
+  const parent = {};
+  const form = { textContent: "We sent a code to alice@example.test. Resend in 30 seconds", contains: () => true, parentElement: parent };
+  const anchor = { form };
+  const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+  let responses = [oldCode];
+  const { timers, results } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => now,
+    sendMessage: async () => ({ ok: true, codes: responses }),
+    onObserve: callback => { observer = callback; },
+    onMount: () => { mounts++; },
+  });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  const changeInstructions = (text) => {
+    form.textContent = text;
+    observer([{ type: "characterData", target: {} }]);
+    timers.pop()();
+  };
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  changeInstructions("We sent a code to alice@example.test. Resend in 29 seconds");
+  assert.equal(mounts, 1);
+  now = 20_000;
+  changeInstructions("We sent a code to bob@example.test. Resend in 30 seconds");
+  await flush();
+  assert.equal(mounts, 2);
+  assert.equal(results.childElementCount, 0);
+  responses = [oldCode, { ...oldCode, uid: 2, code: "222222", receivedAt: 21_000 }];
+  now = 22_000;
+  timers.pop()();
+  await flush();
+  assert.equal(results.children[0].strong.textContent, "Fill code 222222");
+  now = 30_000;
+  form.previousElementSibling = { textContent: "Verification code for charlie@example.test" };
+  observer([{ type: "childList", target: parent, addedNodes: [], removedNodes: [] }]);
+  timers.pop()();
+  await flush();
+  assert.equal(mounts, 3);
+  assert.equal(results.childElementCount, 0);
+});
+
 test("a new verification field on the same URL starts a fresh code window", async () => {
   let observer, now = 10_000, visible = true, anchor = {}, responses = [], warnings = [];
   responses = [{ uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 }];

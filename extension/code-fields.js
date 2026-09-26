@@ -136,32 +136,45 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   };
   if (fields) {
-    const digitInputs = getDigitInputs(inputs);
-    const start = digitInputs.indexOf(fields[0]);
+    let groupForm = fields[0].form;
+    let groupParent = fields[0].parentElement;
     for (let index = 0; index < code.length; index++) {
       // Input handlers may replace the fields after each digit. Resolve the
-      // current group again before writing the next one.
+      // verification group again before writing the next one.
       const currentDigitInputs = getDigitInputs();
-      const group = currentDigitInputs.slice(start, start + code.length);
-      if (
-        group.length !== code.length ||
-        !group.every(
-          (el) =>
-            el.form === group[0].form &&
-            el.parentElement === group[0].parentElement,
-        )
-      ) {
+      let group = currentDigitInputs.filter(
+        (el) => el.form === groupForm && el.parentElement === groupParent,
+      );
+      if (!group.length) {
+        // A rerender can replace the parent too. Only follow a uniquely
+        // identifiable verification group in that case.
+        const hinted = currentDigitInputs.filter(hasCodeHint);
+        const anchors = hinted.filter((el, position) =>
+          hinted.findIndex((other) =>
+            other.form === el.form && other.parentElement === el.parentElement,
+          ) === position,
+        );
+        group = anchors.length === 1
+          ? currentDigitInputs.filter((el) =>
+            el.form === anchors[0].form && el.parentElement === anchors[0].parentElement,
+          )
+          : [];
+      }
+      if (group.length !== code.length || !group.some(hasCodeHint)) {
         return {
           ok: false,
           error:
             "The code fields changed. Select the code field and try again.",
         };
       }
+      groupForm = group[0].form;
+      groupParent = group[0].parentElement;
       const el = group[index];
       setInputValue(el, code[index]);
     }
-    const currentDigitInputs = getDigitInputs();
-    currentDigitInputs[start + code.length - 1]?.focus();
+    getDigitInputs().filter((el) =>
+      el.form === groupForm && el.parentElement === groupParent,
+    )[code.length - 1]?.focus();
     return { ok: true };
   }
   setInputValue(targetInput, code);

@@ -136,7 +136,7 @@ test("fills split digit fields only when the group fits", () => {
 });
 
 test("follows split fields replaced after each digit", () => {
-  const rerenderParent = {};
+  let rerenderParent = {};
   let current = Array.from(
     { length: 6 },
     (_, i) =>
@@ -149,7 +149,8 @@ test("follows split fields replaced after each digit", () => {
   const original = current;
   original[0].dispatchEvent = function (event) {
     this.events.push(event.type);
-    if (event.type === "input")
+    if (event.type === "input") {
+      rerenderParent = {};
       current = current.map(
         (old, i) =>
           new FakeInput({
@@ -159,6 +160,7 @@ test("follows split fields replaced after each digit", () => {
             value: old.value,
           }),
       );
+    }
   };
   const rerenderCtx = {
     document: { querySelectorAll: () => current, activeElement: original[0] },
@@ -177,6 +179,29 @@ test("follows split fields replaced after each digit", () => {
     true,
   );
   assert.equal(current.map((x) => x.value).join(""), "123456");
+});
+
+test("stops if a rerender inserts another digit in the verification group", () => {
+  const parent = {};
+  let current = Array.from({ length: 6 }, (_, index) => new FakeInput({
+    maxLength: 1, parentElement: parent,
+    name: index === 0 ? "verification_code" : "",
+  }));
+  const original = current;
+  original[0].dispatchEvent = function (event) {
+    this.events.push(event.type);
+    if (event.type === "input")
+      current = [new FakeInput({ maxLength: 1, parentElement: parent }), ...original];
+  };
+  const context = vm.createContext({
+    document: { querySelectorAll: () => current, activeElement: original[0] },
+    HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
+    Event: class { constructor(type) { this.type = type; } },
+  });
+  const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456" })`, context);
+  assert.equal(result.ok, false);
+  assert.equal(current[0].value, undefined);
+  assert.equal(original[1].value, undefined);
 });
 
 test("Indeed's Enter code requires email verification context", () => {
