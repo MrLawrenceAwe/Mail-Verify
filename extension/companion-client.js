@@ -9,7 +9,7 @@ function requireSuccessfulResponse(response) {
 }
 
 export function createCompanionClient(runtime) {
-  let mailPort, pendingRequest;
+  let nativePort, pendingRequest;
   async function sendCompanionRequest(request) {
     let response;
     try {
@@ -20,8 +20,8 @@ export function createCompanionClient(runtime) {
     return requireSuccessfulResponse(response);
   }
   function closeSession() {
-    const port = mailPort;
-    mailPort = undefined;
+    const port = nativePort;
+    nativePort = undefined;
     if (port) port.disconnect();
     if (pendingRequest) {
       pendingRequest.reject(new Error("Check interrupted."));
@@ -31,15 +31,15 @@ export function createCompanionClient(runtime) {
   function sendSessionRequest(action) {
     if (pendingRequest)
       throw new Error("A companion request is already in progress.");
-    if (!mailPort) {
+    if (!nativePort) {
       try {
-        mailPort = runtime.connectNative(HOST_NAME);
+        nativePort = runtime.connectNative(HOST_NAME);
       } catch {
         throw new Error(COMPANION_UNAVAILABLE);
       }
-      const port = mailPort;
+      const port = nativePort;
       port.onMessage.addListener((response) => {
-        if (mailPort !== port) return;
+        if (nativePort !== port) return;
         const pending = pendingRequest;
         pendingRequest = undefined;
         if (!pending) return;
@@ -50,8 +50,8 @@ export function createCompanionClient(runtime) {
         }
       });
       port.onDisconnect.addListener(() => {
-        if (mailPort !== port) return;
-        mailPort = undefined;
+        if (nativePort !== port) return;
+        nativePort = undefined;
         if (pendingRequest) {
           const message =
             pendingRequest.action === "status"
@@ -65,7 +65,7 @@ export function createCompanionClient(runtime) {
     return new Promise((resolve, reject) => {
       pendingRequest = { action, resolve, reject };
       try {
-        mailPort.postMessage({ action });
+        nativePort.postMessage({ action });
       } catch {
         closeSession();
       }

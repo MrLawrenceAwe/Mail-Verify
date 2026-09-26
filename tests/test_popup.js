@@ -72,6 +72,7 @@ async function setup({ codes = [code], account = "test@yahoo.com" } = {}) {
     fetchCodes: async () => codes,
     failFill: false,
     failRemove: false,
+    scriptArgs: null,
     requests: [],
   };
   const tab = { id: 1, url: "https://example.com/login" };
@@ -105,7 +106,10 @@ async function setup({ codes = [code], account = "test@yahoo.com" } = {}) {
           return tab;
         },
       },
-      scripting: { executeScript: async () => [{ result: { ok: true } }] },
+      scripting: { executeScript: async (args) => {
+        state.scriptArgs = args;
+        return [{ result: { ok: true } }];
+      } },
     },
     client,
     clock: { now: () => state.now },
@@ -191,6 +195,7 @@ test("ignores stale checks during a fill", async () => {
     );
     assert.equal(scheduled.size, failFill ? 1 : 0);
     assert.equal(button.disabled, !failFill);
+    if (!failFill) assert.deepEqual(state.scriptArgs.args, [{ action: "fill", code: code.code }]);
   }
 });
 

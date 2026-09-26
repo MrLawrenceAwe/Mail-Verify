@@ -107,12 +107,12 @@ class EmailTextParser(HTMLParser):
             self.parts.append(data)
 
 
-def visible_parts(part):
+def iter_non_attachment_parts(part):
     if part.get_content_disposition() == "attachment":
         return
     if part.is_multipart():
         for child in part.iter_parts():
-            yield from visible_parts(child)
+            yield from iter_non_attachment_parts(child)
     else:
         yield part
 
@@ -120,7 +120,7 @@ def visible_parts(part):
 def extract_code(raw):
     msg = email.message_from_bytes(raw, policy=policy.default)
     texts = []
-    for part in visible_parts(msg):
+    for part in iter_non_attachment_parts(msg):
         if part.get_content_type() not in ("text/plain", "text/html"):
             continue
         try:

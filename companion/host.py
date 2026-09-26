@@ -5,7 +5,6 @@ import imaplib
 import json
 import re
 import signal
-import socket
 import struct
 import sys
 
@@ -70,7 +69,7 @@ class AccountSessions:
                 session = self.sessions[key] = MailSession(account)
             try:
                 codes.extend({**item, "accountEmail": email} for item in check_with_timeout(session))
-            except (UserError, imaplib.IMAP4.error, OSError, socket.timeout) as exc:
+            except (UserError, imaplib.IMAP4.error, OSError) as exc:
                 self.remove(email)
                 errors.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
         if errors and not codes and len(errors) == len(accounts):
@@ -154,7 +153,7 @@ def main():
                     "ok": False,
                     "error": "Yahoo rejected the connection. Check your email and app password, then reconnect.",
                 }
-            except (OSError, socket.timeout):
+            except OSError:
                 response = {
                     "ok": False,
                     "error": "Could not reach Yahoo Mail or the local Keychain. Check your connection and try again.",

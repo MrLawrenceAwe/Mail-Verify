@@ -10,7 +10,7 @@ from errors import UserError
 
 MAX_CODE_AGE_SECONDS = 600
 MAX_FUTURE_SKEW_SECONDS = 120
-FETCH_BATCH_SIZE = 5
+INITIAL_FETCH_SIZE = 5
 MAX_MESSAGES = 30
 MAX_RESULTS = 5
 MAX_MESSAGE_BYTES = 1_000_000
@@ -65,12 +65,12 @@ class MailSession:
             if status != "OK":
                 raise UserError("Yahoo could not inspect recent messages.")
             uids = [
-                match.group(1)
+                int(match.group(1))
                 for entry in metadata
                 if isinstance(entry, bytes)
                 if (match := re.search(rb"\bUID (\d+)\b", entry))
             ]
-            self.last_seen_uid = max(map(int, uids), default=0)
+            self.last_seen_uid = max(uids, default=0)
             return metadata
 
         status, data = self.conn.uid(
@@ -79,14 +79,14 @@ class MailSession:
         if status != "OK":
             raise UserError("Yahoo could not search your inbox.")
         # UID ranges ending in * can return the previous last UID.
-        all_uids = [uid for uid in data[0].split() if int(uid) > self.last_seen_uid]
+        all_uids = [uid for value in data[0].split() if (uid := int(value)) > self.last_seen_uid]
         uids = all_uids[-MAX_MESSAGES:]
         if all_uids:
-            self.last_seen_uid = int(all_uids[-1])
+            self.last_seen_uid = all_uids[-1]
         if not uids:
             return []
         status, metadata = self.conn.uid(
-            "fetch", b",".join(uids), "(UID INTERNALDATE RFC822.SIZE)"
+            "fetch", b",".join(str(uid).encode() for uid in uids), "(UID INTERNALDATE RFC822.SIZE)"
         )
         if status != "OK":
             raise UserError("Yahoo could not inspect recent messages.")
@@ -104,18 +104,18 @@ class MailSession:
                 continue
             received = time.mktime(date)
             if -MAX_FUTURE_SKEW_SECONDS <= now - received <= MAX_CODE_AGE_SECONDS:
-                eligible[uid.group(1)] = min(received, now)
+                eligible[int(uid.group(1))] = min(received, now)
         return eligible
 
     def _fetch_codes(self, candidates):
         new_code_count = 0
         # Return codes from the newest batch immediately. Older candidates stay
         # queued for the next poll; if no code is found, continue this check.
-        for batch in (candidates[:FETCH_BATCH_SIZE], candidates[FETCH_BATCH_SIZE:]):
+        for batch in (candidates[:INITIAL_FETCH_SIZE], candidates[INITIAL_FETCH_SIZE:]):
             if not batch:
                 continue
             status, body = self.conn.uid(
-                "fetch", b",".join(batch), "(UID BODY.PEEK[])"
+                "fetch", b",".join(str(uid).encode() for uid in batch), "(UID BODY.PEEK[])"
             )
             if status != "OK":
                 raise UserError("Yahoo could not read recent messages.")
@@ -125,7 +125,7 @@ class MailSession:
                     continue
                 uid = re.search(rb"\bUID (\d+)\b", entry[0])
                 if uid:
-                    messages[uid.group(1)] = entry[1]
+                    messages[int(uid.group(1))] = entry[1]
             for uid in batch:
                 received = self.pending_by_uid[uid]
                 if uid not in messages:
@@ -135,8 +135,8 @@ class MailSession:
                 found = extract_code(messages[uid])
                 if found:
                     found["receivedAt"] = int(received * 1000)
-                    found["uid"] = int(uid)
-                    self.codes_by_uid[int(uid)] = found
+                    found["uid"] = uid
+                    self.codes_by_uid[uid] = found
                     new_code_count += 1
                 if new_code_count == MAX_RESULTS:
                     return
@@ -170,10 +170,10 @@ class MailSession:
             self.pending_by_uid = {
                 uid: received
                 for uid, received in sorted(
-                    self.pending_by_uid.items(), key=lambda item: int(item[0]), reverse=True
+                    self.pending_by_uid.items(), key=lambda item: item[0], reverse=True
                 )
                 if 0 <= now - received <= MAX_CODE_AGE_SECONDS
-                and (cutoff is None or (int(received * 1000), int(uid)) > cutoff)
+                and (cutoff is None or (int(received * 1000), uid) > cutoff)
             }
             candidates = list(self.pending_by_uid)[:MAX_MESSAGES]
             self.pending_by_uid = {uid: self.pending_by_uid[uid] for uid in candidates}

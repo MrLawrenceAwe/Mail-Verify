@@ -1,5 +1,6 @@
-import { fillCode } from "./fill-code.js";
-import { createSuggestionView } from "./inline-view.js";
+import { handleCodeField } from "./fill-code.js";
+import { createSuggestionView } from "./inline-picker-view.js";
+import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-policy.js";
 
 export function suggestionPosition(rect, width, height, viewportWidth, viewportHeight) {
   const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
@@ -9,22 +10,22 @@ export function suggestionPosition(rect, width, height, viewportWidth, viewportH
   return { left, top };
 }
 
-export function freshCodes(codes, since, now = Date.now(), excludedUids = new Set()) {
+export function selectSuggestedCodes(codes, earliestCodeTime, now = Date.now(), excludedMessageKeys = new Set()) {
   const senders = new Set();
   return codes
-    .filter((item) => !excludedUids.has(codeIdentity(item)) && item.receivedAt >= since && item.receivedAt <= now && now - item.receivedAt <= 600_000)
+    .filter((item) => !excludedMessageKeys.has(messageKey(item)) && item.receivedAt >= earliestCodeTime && item.receivedAt <= now && now - item.receivedAt <= MAX_CODE_AGE_MS)
     .sort((a, b) => b.receivedAt - a.receivedAt)
     .filter((item) => {
-      const sender = item.sender.trim()
+      const senderKey = item.sender.trim()
         ? `sender:${item.accountEmail.toLowerCase()}:${item.sender.toLowerCase()}`
-        : `message:${codeIdentity(item)}`;
-      if (senders.has(sender)) return false;
-      senders.add(sender);
+        : `message:${messageKey(item)}`;
+      if (senders.has(senderKey)) return false;
+      senders.add(senderKey);
       return true;
     });
 }
 
-function codeIdentity(item) {
+function messageKey(item) {
   return `${item.accountEmail.toLowerCase()}:${item.uid}`;
 }
 
@@ -51,16 +52,16 @@ export function mutationAffectsPicker(records, host, contextRoots = []) {
   });
 }
 
-export function startInlinePicker({ browser = globalThis, fill = fillCode } = {}) {
+export function startInlinePicker({ browser = globalThis, handleField = handleCodeField } = {}) {
   const { document, window, location, chrome, MutationObserver, requestAnimationFrame,
     setTimeout, clearTimeout, innerWidth, innerHeight, Date: clock = Date } = browser;
   let view, timer, deadline = 0, checking = false;
   let dismissed = false, generation = 0, lastURL = location.href;
-  let requestStartedAt, anchor;
-  let knownUids = new Set(), excludedUids = new Set();
+  let earliestCodeTime, anchor;
+  let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   let candidates;
   const locate = () => {
-    const field = fill("", true, candidates);
+    const field = handleField({ action: "detect", cachedCandidates: candidates });
     candidates = field.candidates;
     return field;
   };
@@ -79,25 +80,25 @@ export function startInlinePicker({ browser = globalThis, fill = fillCode } = {}
     view.host.style.top = `${top}px`;
   }
   function mount(field) {
-    requestStartedAt ??= clock.now() - 5_000;
+    earliestCodeTime ??= clock.now() - 5_000;
     anchor = field.anchor;
     view = createSuggestionView(document, {
       onClose: () => { dismissed = true; remove(); },
-      onRetry: () => { deadline = clock.now() + 120_000; check(); },
+      onRetry: () => { deadline = clock.now() + POLL_WINDOW_MS; check(); },
       onFill: (item, button) => {
-        if (clock.now() - item.receivedAt > 600_000) {
-          view.status.textContent = "Code expired. Request a new one.";
+        if (clock.now() - item.receivedAt > MAX_CODE_AGE_MS) {
+          view.status.textContent = "This code is too old to suggest. Request a new one.";
           button.disabled = true;
           position();
           return;
         }
-        const result = fill(item.code);
+        const result = handleField({ action: "fill", code: item.code });
         if (result.ok) { dismissed = true; remove(); }
         else { view.status.textContent = "Select the code field and try again."; position(); }
       },
     });
     document.documentElement.append(view.host);
-    deadline = clock.now() + 120_000;
+    deadline = clock.now() + POLL_WINDOW_MS;
     position(field);
     check();
   }
@@ -113,8 +114,8 @@ export function startInlinePicker({ browser = globalThis, fill = fillCode } = {}
       if (current !== generation || !view) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check Yahoo.");
       checkFailed = !!response.warnings?.length;
-      for (const item of response.codes) knownUids.add(codeIdentity(item));
-      const codes = freshCodes(response.codes, requestStartedAt, clock.now(), excludedUids);
+      for (const item of response.codes) seenMessageKeys.add(messageKey(item));
+      const codes = selectSuggestedCodes(response.codes, earliestCodeTime, clock.now(), excludedMessageKeys);
       view.renderCodes(codes, location.hostname);
       view.status.textContent = response.warnings?.length
         ? `Could not check: ${response.warnings.join("; ")}`
@@ -131,13 +132,13 @@ export function startInlinePicker({ browser = globalThis, fill = fillCode } = {}
     }
   }
   function resetAttempt({ newPage = false } = {}) {
-    if (!newPage) for (const uid of knownUids) excludedUids.add(uid);
+    if (!newPage) for (const uid of seenMessageKeys) excludedMessageKeys.add(uid);
     remove();
-    requestStartedAt = undefined;
+    earliestCodeTime = undefined;
     if (newPage) {
       dismissed = false;
-      knownUids = new Set();
-      excludedUids = new Set();
+      seenMessageKeys = new Set();
+      excludedMessageKeys = new Set();
       candidates = undefined;
     }
   }
@@ -185,12 +186,12 @@ export function startInlinePicker({ browser = globalThis, fill = fillCode } = {}
     // IMAP dates have one-second precision. Codes from the resend's current
     // second cannot be distinguished from an unseen code sent just before it.
     // Start with the next second so a pending check cannot revive the old code.
-    requestStartedAt = Math.floor(clock.now() / 1000) * 1000 + 1000;
-    for (const uid of knownUids) excludedUids.add(uid);
+    earliestCodeTime = Math.floor(clock.now() / 1000) * 1000 + 1000;
+    for (const uid of seenMessageKeys) excludedMessageKeys.add(uid);
     dismissed = false;
     generation++;
     view?.clearCodes();
-    deadline = clock.now() + 120_000;
+    deadline = clock.now() + POLL_WINDOW_MS;
     if (view) { view.status.textContent = "Waiting for your new code…"; check(); }
     else scan();
   }, true);

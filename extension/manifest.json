@@ -31,8 +31,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "inline.js",
-        "inline-view.js",
+        "inline-picker.js",
+        "inline-picker-view.js",
+        "code-policy.js",
         "fill-code.js"
       ],
       "matches": [
