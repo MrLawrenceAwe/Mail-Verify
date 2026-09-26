@@ -122,7 +122,7 @@ export function createPopup({
       card.className = "card";
       for (const [tag, className, text] of [
         ["div", "code", item.code],
-        ["p", "source", item.accountEmail || accounts[0]],
+        ["p", "source", item.accountEmail],
         ["p", "sender", item.sender],
         ["p", "subject", item.subject],
       ]) {

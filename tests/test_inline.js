@@ -1,6 +1,49 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { suggestionPosition, freshCodes, mutationAffectsPicker } from "../extension/inline.js";
+import { suggestionPosition, freshCodes, mutationAffectsPicker, startInlinePicker } from "../extension/inline.js";
+
+function pickerBrowser({ fill, now = Date.now, sendMessage, onMount = () => {},
+  onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn() }) {
+  const events = new Map(), timers = [];
+  const results = {
+    dataset: {}, children: [],
+    get childElementCount() { return this.children.length; },
+    replaceChildren() { this.children = []; },
+    append(child) { this.children.push(child); },
+  };
+  const elements = { "#results": results, "#status": {}, "#close": {}, "#retry": {} };
+  const browser = {
+    Date: { now },
+    location: { href: "https://example.test", hostname: "example.test" },
+    innerWidth: 1200, innerHeight: 800,
+    document: {
+      hidden: false,
+      documentElement: { append: onMount },
+      addEventListener: (name, fn) => events.set(name, fn),
+      createElement: () => {
+        const strong = {}, small = {};
+        return {
+          strong, small, dataset: {}, style: {},
+          attachShadow: () => ({ querySelector: id => elements[id] }),
+          getBoundingClientRect: () => ({ width: 240, height: 60 }),
+          contains: () => false,
+          remove: onRemove,
+          querySelector: selector => selector === "small" ? small : strong,
+          addEventListener() {},
+          setAttribute() {},
+        };
+      },
+    },
+    window: { addEventListener: (name, fn) => events.set(name, fn) },
+    MutationObserver: class { constructor(callback) { onObserve(callback); } observe() {} },
+    requestAnimationFrame: onFrame,
+    setTimeout: fn => { timers.push(fn); return timers.length; },
+    clearTimeout: () => {},
+    chrome: { runtime: { sendMessage } },
+  };
+  startInlinePicker({ browser, fill });
+  return { browser, events, timers, results, elements };
+}
 
 test("suggestions sit below the field and stay within the viewport", () => {
   assert.deepEqual(suggestionPosition({ left: 100, top: 200, bottom: 240 }, 300, 110, 1000, 800), { left: 100, top: 244 });
@@ -8,8 +51,8 @@ test("suggestions sit below the field and stay within the viewport", () => {
 });
 
 test("old codes are withheld while waiting for this verification attempt", () => {
-  const older = { code: "111111", sender: "auth@example.test", receivedAt: 1000 };
-  const newest = { code: "222222", sender: "auth@example.test", receivedAt: 9000 };
+  const older = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 1000 };
+  const newest = { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
   assert.deepEqual(freshCodes([older], 5000, 10000), []);
   assert.deepEqual(freshCodes([older, newest], 5000, 10000), [newest]);
   assert.deepEqual(freshCodes([newest], 9500, 10000), []);
@@ -17,9 +60,9 @@ test("old codes are withheld while waiting for this verification attempt", () =>
 
 test("only the latest code per sender is suggested, without changing the response", () => {
   const codes = [
-    { code: "111111", sender: "AUTH@example.test", receivedAt: 8000 },
-    { code: "222222", sender: "auth@example.test", receivedAt: 9000 },
-    { code: "333333", sender: "other@example.test", receivedAt: 9500 },
+    { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "AUTH@example.test", receivedAt: 8000 },
+    { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 },
+    { uid: 3, accountEmail: "test@yahoo.com", code: "333333", sender: "other@example.test", receivedAt: 9500 },
   ];
   assert.deepEqual(freshCodes(codes, 5000, 10000).map(x => x.code), ["333333", "222222"]);
   assert.equal(codes[0].code, "111111");
@@ -27,16 +70,16 @@ test("only the latest code per sender is suggested, without changing the respons
 
 test("codes without a sender remain separate suggestions", () => {
   const codes = [
-    { uid: 1, code: "111111", sender: "", receivedAt: 9000 },
-    { uid: 2, code: "222222", sender: "", receivedAt: 9500 },
+    { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "", receivedAt: 9000 },
+    { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "", receivedAt: 9500 },
   ];
   assert.deepEqual(freshCodes(codes, 8000, 10000).map(item => item.code), ["222222", "111111"]);
 });
 
 test("UID exclusion distinguishes two messages received in the same second", () => {
-  const old = { uid: 7, code: "111111", sender: "auth@example.test", receivedAt: 9000 };
-  const newer = { uid: 8, code: "222222", sender: "auth@example.test", receivedAt: 9000 };
-  assert.deepEqual(freshCodes([old, newer], 9000, 9500, new Set([7])), [newer]);
+  const old = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+  const newer = { uid: 8, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
+  assert.deepEqual(freshCodes([old, newer], 9000, 9500, new Set(["test@yahoo.com:7"])), [newer]);
 });
 
 test("same sender and UID in separate accounts remain distinct", () => {
@@ -49,48 +92,15 @@ test("same sender and UID in separate accounts remain distinct", () => {
 });
 
 test("resend before the first check returns does not revive an unseen old code", async () => {
-  const { default: vm } = await import("node:vm");
-  const { readFileSync } = await import("node:fs");
-  const events = new Map(), timers = [], requests = [];
+  const requests = [];
   let now = 9500;
-  const results = {
-    dataset: {}, children: [],
-    get childElementCount() { return this.children.length; },
-    replaceChildren() { this.children = []; },
-    append(child) { this.children.push(child); },
-  };
-  const elements = { "#results": results, "#status": {}, "#close": {}, "#retry": {} };
-  const context = vm.createContext({
-    fillCode: () => ({ ok: true, anchor: {}, candidates: {}, contextRoots: [], rect: { top: 100, bottom: 130, left: 20 } }),
-    Date: { now: () => now },
-    location: { href: "https://example.test", hostname: "example.test" },
-    innerWidth: 1200, innerHeight: 800,
-    document: {
-      hidden: false,
-      documentElement: { append() {} },
-      addEventListener: (name, fn) => events.set(name, fn),
-      createElement: () => ({
-        dataset: {}, style: {},
-        attachShadow: () => ({ querySelector: id => elements[id] }),
-        getBoundingClientRect: () => ({ width: 240, height: 60 }),
-        contains: () => false,
-        remove() {},
-        querySelector: () => ({}),
-        addEventListener() {},
-        setAttribute() {},
-      }),
-    },
-    window: { addEventListener: () => {} },
-    MutationObserver: class { observe() {} },
-    setTimeout: fn => { timers.push(fn); return timers.length; },
-    clearTimeout: () => {},
-    chrome: { runtime: { sendMessage: () => new Promise(resolve => requests.push(resolve)) } },
+  const { events, timers, results } = pickerBrowser({
+    fill: () => ({ ok: true, anchor: {}, candidates: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => now,
+    sendMessage: () => new Promise(resolve => requests.push(resolve)),
   });
-  const source = readFileSync(new URL("../extension/inline.js", import.meta.url), "utf8")
-    .replace(/^import .*\n/, "").replaceAll("export function ", "function ");
   const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
-  const oldCode = { uid: 7, code: "111111", sender: "auth@example.test", receivedAt: 9000 };
-  vm.runInContext(source + "\nstartInlinePicker();", context);
+  const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   assert.equal(requests.length, 1);
   events.get("click")({ target: { closest: () => ({ textContent: "Resend code" }) } });
   requests.shift()({ ok: true, codes: [oldCode] });
@@ -102,63 +112,26 @@ test("resend before the first check returns does not revive an unseen old code",
   assert.equal(results.childElementCount, 0);
   now = 10500;
   timers.pop()();
-  const newCode = { uid: 8, code: "222222", sender: "auth@example.test", receivedAt: 10000 };
+  const newCode = { uid: 8, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 10000 };
   requests.shift()({ ok: true, codes: [oldCode, newCode] });
   await flush();
   assert.equal(results.childElementCount, 1);
 });
 
 test("a new verification field on the same URL starts a fresh code window", async () => {
-  const { default: vm } = await import("node:vm");
-  const { readFileSync } = await import("node:fs");
-  const events = new Map(), timers = [];
   let observer, now = 10_000, visible = true, anchor = {}, responses = [], warnings = [];
-  const results = {
-    dataset: {}, children: [],
-    get childElementCount() { return this.children.length; },
-    replaceChildren() { this.children = []; },
-    append(child) { this.children.push(child); },
-  };
-  const elements = { "#results": results, "#status": {}, "#close": {}, "#retry": {} };
-  const context = vm.createContext({
-    fillCode: () => ({ ok: visible, anchor, candidates: {}, contextRoots: [], rect: { top: 100, bottom: 130, left: 20 } }),
-    Date: { now: () => now },
-    location: { href: "https://example.test", hostname: "example.test" },
-    innerWidth: 1200, innerHeight: 800,
-    document: {
-      hidden: false,
-      documentElement: { append() {} },
-      addEventListener: (name, fn) => events.set(name, fn),
-      createElement: () => {
-        const strong = {}, small = {};
-        return {
-          strong, small, dataset: {}, style: {},
-          attachShadow: () => ({ querySelector: id => elements[id] }),
-          getBoundingClientRect: () => ({ width: 240, height: 60 }),
-          contains: () => false,
-          remove() {},
-          querySelector: selector => selector === "small" ? small : strong,
-          addEventListener() {},
-          setAttribute() {},
-        };
-      },
-    },
-    window: { addEventListener: (name, fn) => events.set(name, fn) },
-    MutationObserver: class { constructor(callback) { observer = callback; } observe() {} },
-    requestAnimationFrame: fn => fn(),
-    setTimeout: fn => { timers.push(fn); return timers.length; },
-    clearTimeout: () => {},
-    chrome: { runtime: { sendMessage: async () => ({ ok: true, codes: responses, warnings }) } },
+  responses = [{ uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 }];
+  const { events, timers, results, elements } = pickerBrowser({
+    fill: () => ({ ok: visible, anchor, candidates: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => now,
+    sendMessage: async () => ({ ok: true, codes: responses, warnings }),
+    onObserve: callback => { observer = callback; },
   });
-  const source = readFileSync(new URL("../extension/inline.js", import.meta.url), "utf8")
-    .replace(/^import .*\n/, "").replaceAll("export function ", "function ");
   const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
   const rescan = () => {
     observer([{ type: "attributes", target: { matches: () => true } }]);
     timers.pop()();
   };
-  responses = [{ uid: 1, code: "111111", sender: "auth@example.test", receivedAt: 9000 }];
-  vm.runInContext(source + "\nstartInlinePicker();", context);
   await flush();
   assert.equal(results.childElementCount, 1);
   warnings = ["one@yahoo.com: Yahoo took too long to respond."];
@@ -174,7 +147,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   responses = originalResponses;
   warnings = [];
   now = 9500;
-  responses = [responses[0], { uid: 2, code: "222222", sender: "auth@example.test", receivedAt: 10000 }];
+  responses = [responses[0], { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 10000 }];
   events.get("click")({ target: { closest: () => ({ textContent: "Resend code" }) } });
   await flush();
   assert.equal(results.childElementCount, 0);
@@ -191,7 +164,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   rescan();
   await flush();
   assert.equal(results.childElementCount, 0);
-  responses = [{ uid: 3, code: "333333", sender: "auth@example.test", receivedAt: 20_000 }];
+  responses = [{ uid: 3, accountEmail: "test@yahoo.com", code: "333333", sender: "auth@example.test", receivedAt: 20_000 }];
   timers.pop()();
   await flush();
   assert.equal(results.childElementCount, 1);
@@ -223,43 +196,21 @@ test("page mutations only rescan when fields or their form can change", () => {
 });
 
 test("scroll positioning uses animation frames and cached candidates; mutations rediscover", async () => {
-  const { default: vm } = await import("node:vm");
-  const { readFileSync } = await import("node:fs");
-  const events = new Map(), frames = [], timers = [];
+  const frames = [];
   let observer, discoveries = 0, detections = 0, visible = false, mounted;
   const cached = { inputs: [], contextRoots: [] };
-  const elements = Object.fromEntries(["#status", "#results", "#close", "#retry"].map(id => [id, {
-    dataset: {}, childElementCount: 0,
-  }]));
-  const context = vm.createContext({
-    fillCode: (_code, _detect, candidates) => {
+  const { events, timers, elements } = pickerBrowser({
+    fill: (_code, _detect, candidates) => {
       detections++;
       if (!candidates) discoveries++;
-      return { ok: visible, candidates: cached, contextRoots: [], rect: { top: 100, bottom: 130, left: 20 } };
+      return { ok: visible, candidates: cached, rect: { top: 100, bottom: 130, left: 20 } };
     },
-    location: { href: "https://example.test", hostname: "example.test" },
-    innerWidth: 1200, innerHeight: 800,
-    document: {
-      hidden: false,
-      documentElement: { append: node => { mounted = node; } },
-      addEventListener: (name, fn) => events.set(name, fn),
-      createElement: () => ({
-        dataset: {}, style: {},
-        attachShadow: () => ({ querySelector: id => elements[id] }),
-        getBoundingClientRect: () => ({ width: 240, height: 60 }),
-        remove: () => { mounted = undefined; },
-      }),
-    },
-    window: { addEventListener: (name, fn) => events.set(name, fn) },
-    MutationObserver: class { constructor(callback) { observer = callback; } observe() {} },
-    requestAnimationFrame: fn => { frames.push(fn); return frames.length; },
-    setTimeout: fn => { timers.push(fn); return timers.length; },
-    clearTimeout: () => {},
-    chrome: { runtime: { sendMessage: () => new Promise(() => {}) } },
+    onMount: node => { mounted = node; },
+    onRemove: () => { mounted = undefined; },
+    onObserve: callback => { observer = callback; },
+    onFrame: fn => { frames.push(fn); return frames.length; },
+    sendMessage: () => new Promise(() => {}),
   });
-  const source = readFileSync(new URL("../extension/inline.js", import.meta.url), "utf8")
-    .replace(/^import .*\n/, "").replaceAll("export function ", "function ");
-  vm.runInContext(source + "\nstartInlinePicker();", context);
   assert.equal(discoveries, 1);
   for (let i = 0; i < 20; i++) events.get("scroll")();
   assert.equal(frames.length, 1);

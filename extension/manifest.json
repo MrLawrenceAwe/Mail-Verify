@@ -32,6 +32,7 @@
     {
       "resources": [
         "inline.js",
+        "inline-view.js",
         "fill-code.js"
       ],
       "matches": [
