@@ -155,17 +155,14 @@ class InboxSession:
         eligible = sorted(
             self.pending_received_at_by_uid.items(), key=lambda item: item[0], reverse=True
         )
-        self.pending_received_at_by_uid = {
-            uid: received
+        pending = [
+            (uid, received)
             for uid, received in eligible
             if 0 <= now - received <= MAX_CODE_AGE_SECONDS
             and (cutoff is None or (int(received * 1000), uid) > cutoff)
-        }
-        candidates = list(self.pending_received_at_by_uid)[:MAX_MESSAGES]
-        self.pending_received_at_by_uid = {
-            uid: self.pending_received_at_by_uid[uid] for uid in candidates
-        }
-        return candidates
+        ][:MAX_MESSAGES]
+        self.pending_received_at_by_uid = dict(pending)
+        return [uid for uid, _ in pending]
 
     def recent_codes(self):
         try:
