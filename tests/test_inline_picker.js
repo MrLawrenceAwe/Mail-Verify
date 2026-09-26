@@ -122,6 +122,36 @@ test("recognises common resend labels without treating coupon requests as email 
   assert.equal(isCodeRequestControl({ textContent: "Send promo code" }), false);
   assert.equal(isCodeRequestControl({ textContent: "Continue" }), false);
   assert.equal(isCodeRequestControl({ textContent: "", getAttribute: () => "Resend verification code" }), true);
+  assert.equal(isCodeRequestControl({ tagName: "INPUT", value: "Resend code", getAttribute: () => null }), true);
+  assert.equal(isCodeRequestControl({ tagName: "INPUT", value: "Send promo code", getAttribute: () => null }), false);
+});
+
+test("resend input clears the old suggestion and waits for newer mail", async () => {
+  let now = 9500;
+  const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+  let codes = [oldCode];
+  const { events, timers, results } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => now,
+    sendMessage: async () => ({ ok: true, codes }),
+  });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  const resend = { tagName: "INPUT", value: "Resend code", getAttribute: () => null };
+  events.get("click")({ target: {
+    closest: selector => selector.includes("input[type=submit]") ? resend : null,
+  } });
+  assert.equal(results.childElementCount, 0);
+  timers.pop()();
+  await flush();
+  assert.equal(results.childElementCount, 0);
+  now = 11_000;
+  codes = [oldCode, { ...oldCode, uid: 8, code: "222222", receivedAt: 10_000 }];
+  timers.pop()();
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  assert.equal(results.children[0].strong.textContent, "Fill code 222222");
 });
 
 test("resend before the first check returns does not revive an unseen old code", async () => {

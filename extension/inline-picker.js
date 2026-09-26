@@ -71,7 +71,8 @@ export function mutationAffectsPicker(records, host, contextRoots = [], stepRoot
 }
 
 export function isCodeRequestControl(control) {
-  const label = (control.getAttribute?.("aria-label") || control.textContent || "")
+  const label = (control.getAttribute?.("aria-label") ||
+    (control.tagName === "INPUT" ? control.value : control.textContent) || "")
     .trim().replace(/\s+/g, " ");
   if (/\b(?:coupon|promo|discount|referral)\b/i.test(label)) return false;
   return /^(?:re-?send|send|request|get|email)\b/i.test(label) &&
@@ -244,7 +245,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     attributeFilter: ["type", "name", "id", "placeholder", "autocomplete", "aria-label", "hidden", "style", "class", "disabled", "readonly", "maxlength", "for"],
   });
   document.addEventListener("click", (event) => {
-    const control = event.target.closest?.("button, a, [role=button]");
+    const control = event.target.closest?.("button, a, [role=button], input[type=button], input[type=submit]");
     if (!control || !isCodeRequestControl(control) || !detectCodeField().ok) return;
     // IMAP dates have one-second precision. Codes from the resend's current
     // second cannot be distinguished from an unseen code sent just before it.
