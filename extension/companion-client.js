@@ -10,7 +10,7 @@ function requireSuccessfulResponse(response) {
 
 export function createCompanionClient(runtime) {
   let nativePort, pendingRequest;
-  async function sendCompanionRequest(request) {
+  async function sendOneOffRequest(request) {
     let response;
     try {
       response = await runtime.sendNativeMessage(HOST_NAME, request);
@@ -71,5 +71,5 @@ export function createCompanionClient(runtime) {
       }
     });
   }
-  return { sendCompanionRequest, sendSessionRequest, closeSession };
+  return { sendOneOffRequest, sendSessionRequest, closeSession };
 }

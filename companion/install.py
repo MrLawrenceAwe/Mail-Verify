@@ -16,7 +16,7 @@ HOST_MANIFEST_PATH = (
     / "Library/Application Support/Google/Chrome/NativeMessagingHosts/local.yahoo_code_fill.json"
 )
 
-COMPANION_FILES = ("host.py", "mail_session.py", "code_extraction.py", "keychain.py", "errors.py")
+COMPANION_FILES = ("host.py", "account_sessions.py", "mail_session.py", "code_extraction.py", "keychain.py", "errors.py")
 
 
 def main():

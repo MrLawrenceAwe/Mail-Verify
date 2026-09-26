@@ -8,31 +8,31 @@ import re
 
 # Reject the first group of a longer, formatted number rather than showing
 # a plausible but incomplete code (for example, "1234 5678").
-CODE = r"(?<![\w.+-])\d{4,8}(?!\w|[.,-]\d|[ ,]\d{4,8}\b)"
-PURPOSE = r"(?:verification|security|authentication|confirmation|login|sign[ -]?in|one[ -]?time|access)"
-LABEL = r"(?:code|passcode|otp|pin)"
+CODE_REGEX = r"(?<![\w.+-])\d{4,8}(?!\w|[.,-]\d|[ ,]\d{4,8}\b)"
+PURPOSE_REGEX = r"(?:verification|security|authentication|confirmation|login|sign[ -]?in|one[ -]?time|access)"
+LABEL_REGEX = r"(?:code|passcode|otp|pin)"
 CODE_PATTERNS = (
     # Indeed and similar providers put the service between the action and code.
     re.compile(
-        rf"\b(?:sign[ -]?in|log[ -]?in)\s+to\s+[^.!?\r\n]{{1,80}}?\s+with\s+(?:your\s+)?{LABEL}\s*[:=—-]?\s*(?P<code>{CODE})",
+        rf"\b(?:sign[ -]?in|log[ -]?in)\s+to\s+[^.!?\r\n]{{1,80}}?\s+with\s+(?:your\s+)?{LABEL_REGEX}\s*[:=—-]?\s*(?P<code>{CODE_REGEX})",
         re.I,
     ),
     re.compile(
-        rf"\b(?:your|the)\s+(?:{PURPOSE}\s+)?{LABEL}\b\s*(?:is\s*)?[:=—-]?\s*(?P<code>{CODE})",
+        rf"\b(?:your|the)\s+(?:{PURPOSE_REGEX}\s+)?{LABEL_REGEX}\b\s*(?:is\s*)?[:=—-]?\s*(?P<code>{CODE_REGEX})",
         re.I,
     ),
     re.compile(
-        rf"\b{PURPOSE}\s+{LABEL}\b\s*(?:is\s*)?[:=—-]?\s*(?P<code>{CODE})", re.I
+        rf"\b{PURPOSE_REGEX}\s+{LABEL_REGEX}\b\s*(?:is\s*)?[:=—-]?\s*(?P<code>{CODE_REGEX})", re.I
     ),
     re.compile(
-        rf"\b(?:use|enter)\s+(?P<code>{CODE})\s+to\s+(?:verify|sign[ -]?in|log[ -]?in|authenticate|confirm)\b",
+        rf"\b(?:use|enter)\s+(?P<code>{CODE_REGEX})\s+to\s+(?:verify|sign[ -]?in|log[ -]?in|authenticate|confirm)\b",
         re.I,
     ),
-    re.compile(rf"(?P<code>{CODE})\s+is\s+your\s+(?:{PURPOSE}\s+)?{LABEL}\b", re.I),
+    re.compile(rf"(?P<code>{CODE_REGEX})\s+is\s+your\s+(?:{PURPOSE_REGEX}\s+)?{LABEL_REGEX}\b", re.I),
 )
 
 
-class EmailTextParser(HTMLParser):
+class EmailHTMLTextParser(HTMLParser):
     BLOCK_TAGS = {
         "br",
         "p",
@@ -128,11 +128,11 @@ def extract_code(raw):
         except (LookupError, UnicodeError):
             continue
         if part.get_content_type() == "text/html":
-            parser = EmailTextParser()
+            parser = EmailHTMLTextParser()
             parser.feed(value)
             value = "".join(parser.parts)
             value = re.sub(r"(?<=\d)\x1f(?=\d)", "", value).replace(
-                EmailTextParser.INLINE_BREAK, " "
+                EmailHTMLTextParser.INLINE_BREAK, " "
             )
         texts.append(value)
     subject = str(msg.get("Subject", ""))
@@ -146,7 +146,7 @@ def extract_code(raw):
                 codes.add(match.group("code"))
                 # Adjacent alternatives, including "123456 (or 654321)", are ambiguous.
                 alternative = re.match(
-                    rf"\s*(?:[,([]\s*)*(?:or|/)\s*(?:(?:use|enter)\s+)?(?:code\s+)?(?P<code>{CODE})",
+                    rf"\s*(?:[,([]\s*)*(?:or|/)\s*(?:(?:use|enter)\s+)?(?:code\s+)?(?P<code>{CODE_REGEX})",
                     text[match.end() :],
                     re.I,
                 )

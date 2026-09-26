@@ -21,7 +21,7 @@ If reinstalling or setting up another Mac, first double-click **Install Companio
 ## Use
 
 1. Ask the website to send an email code.
-2. A compact blue **Fill code … / From Yahoo Mail** suggestion appears directly beneath the code field (or above it when space is limited) when a visible verification-code field is detected, including Indeed’s “Enter code” form.
+2. A compact blue **Fill code 123456 / account@yahoo.com** suggestion appears directly beneath the code field (or above it when space is limited) when a visible verification-code field is detected, including Indeed’s “Enter code” form.
 3. It checks automatically, then every 2 seconds after each response for up to 2 minutes. The destination website is shown below the suggestion. Hover over a code to see its sender and subject, then click the matching code to fill it.
 4. Use **↻** to restart checking, or × / Escape to dismiss the suggestion for this page.
 
@@ -78,8 +78,8 @@ The installer test installs into a temporary directory, launches that copy to ve
 - `extension/content-entry.js` loads `inline-picker.js` for automatic field detection and picker lifecycle; `inline-picker-view.js` renders the on-page picker. `background.js` brokers active-tab native checks.
 - `extension/popup-entry.js` starts the popup; `popup.js` manages account actions and polling, while `popup-view.js` renders its controls and code cards.
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
-- `extension/fill-code.js` exports the self-contained field detector and filler injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page. `code-policy.js` shares timing limits between the popup and inline picker.
-- `companion/host.py` handles request dispatch and native-message framing; `mail_session.py` manages IMAP connections and bounded inbox scans.
+- `extension/code-fields.js` exports the self-contained field detector and filler injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page. `code-timing.js` shares timing limits between the popup and inline picker.
+- `companion/host.py` handles request dispatch and native-message framing; `account_sessions.py` coordinates connected accounts, while `mail_session.py` manages IMAP connections and bounded inbox scans.
 - `companion/code_extraction.py` parses email content and extracts a single unambiguous code.
 - `companion/keychain.py` stores credentials; `errors.py` defines user-facing errors.
 - `companion/install.py` installs and removes the companion files listed in `COMPANION_FILES`. Update that list when adding runtime modules. Tests are grouped by the production module they cover.
@@ -91,4 +91,4 @@ After changing companion code, rerun **Install Companion.command**; after changi
 - [Chrome native messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)
 - [Yahoo IMAP access](https://help.yahoo.com/kb/SLN28681.html)
 
-To preview the suggestion with synthetic data, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/suggestion.html`. No Yahoo access is used by that fixture.
+To preview the suggestion with synthetic data, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/inline-picker-preview.html`. No Yahoo access is used by that fixture.

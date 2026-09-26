@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Yahoo Code Fill",
   "version": "0.2.4",
-  "description": "Show Yahoo verification codes on sign-in pages and fill the selected code with a click.",
+  "description": "Show verification codes from Yahoo Mail on sign-in pages and fill the selected code with a click.",
   "permissions": [
     "nativeMessaging",
     "activeTab",
@@ -10,7 +10,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Find a Yahoo verification code"
+    "default_title": "Find a verification code in Yahoo Mail"
   },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz9O0M+wj5pu3u3t3+79ljQaQpdy4v/OLlCEHnc4uKNS10szhjccxQxx585+qiRXEXNd9MzJiO1r5HfvLzqVSeKI8s2D80y9Ehgb7M0VhCHr/nHziZcsSALWp6kp/uE6KTPzT/Qzctw2CY7YcnySR1CTQSm5wiLLiLWvTkKmkBb1AfMPUS+gPT/gC+N27Vx1rjy0X/N5aV/ikE54C4qV6AqZfnfYMaOh63/hvaxTwW0L6/fB3xK/bQI812JTMdGgfsiueZHMHqNPzdMWf6DS+1UPLeSKIv7hg9/2w2tnLbuJKWudbx62kdNMD0SR3hRArPcMY7L4kyEOKjcT7vGH1ywIDAQAB",
   "background": {
@@ -33,8 +33,8 @@
       "resources": [
         "inline-picker.js",
         "inline-picker-view.js",
-        "code-policy.js",
-        "fill-code.js"
+        "code-timing.js",
+        "code-fields.js"
       ],
       "matches": [
         "https://*/*"

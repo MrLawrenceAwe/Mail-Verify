@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { handleCodeField } from "../extension/fill-code.js";
+import { handleCodeField } from "../extension/code-fields.js";
 
 // Chrome serializes this function into the page; evaluate the exported function
 // in an isolated DOM context to verify it has no module-scope dependencies.
@@ -203,9 +203,9 @@ test("generic code field uses verification context outside its form", () => {
   });
   const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context);
   assert.equal(result.ok, true);
-  assert.equal(result.candidates.contextRoots.length, 2);
-  assert.equal(result.candidates.contextRoots[0], form);
-  assert.equal(result.candidates.contextRoots[1], main);
+  assert.equal(result.candidateCache.contextRoots.length, 2);
+  assert.equal(result.candidateCache.contextRoots[0], form);
+  assert.equal(result.candidateCache.contextRoots[1], main);
   main.textContent = "Enter code to redeem a discount";
   assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
 });
@@ -242,7 +242,7 @@ test("detection reports generic code context for later page updates", () => {
   });
   const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context);
   assert.equal(result.ok, false);
-  assert.equal(result.candidates.contextRoots[0], form);
+  assert.equal(result.candidateCache.contextRoots[0], form);
 });
 
 
@@ -258,11 +258,11 @@ test("cached detection tracks offscreen candidates without rescanning unrelated 
   vm.runInContext(`var detect = (${handleCodeField.toString()}); var field = detect({ action: "detect" });`, context);
   assert.equal(context.field.ok, false);
   input.rect = { top: 100, bottom: 130, left: 0, right: 100 };
-  vm.runInContext('field = detect({ action: "detect", cachedCandidates: field.candidates });', context);
+  vm.runInContext('field = detect({ action: "detect", candidateCache: field.candidateCache });', context);
   assert.equal(context.field.ok, true);
   assert.equal(queries, 1);
   input.isConnected = false;
-  vm.runInContext('field = detect({ action: "detect", cachedCandidates: field.candidates });', context);
+  vm.runInContext('field = detect({ action: "detect", candidateCache: field.candidateCache });', context);
   assert.equal(context.field.ok, false);
   input.isConnected = true;
   input.autocomplete = "";

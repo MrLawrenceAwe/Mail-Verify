@@ -7,9 +7,49 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
     $("status").classList.toggle("error", error);
   }
 
-  function setAccountAndCheckDisabled(disabled) {
+  function showAccountSetup() {
+    $("setup").hidden = false;
+    $("email").focus();
+  }
+
+  function showCompanionSetup() {
+    $("companionSetup").hidden = false;
+  }
+
+  function setExtensionId(id) {
+    $("extensionId").value = id;
+  }
+
+  function setDestination(text) {
+    $("destination").textContent = text;
+  }
+
+  function setAddAccountDisabled(disabled) {
+    $("addAccountSubmit").disabled = disabled;
+  }
+
+  function readAndClearAccountForm() {
+    const email = $("email").value;
+    const password = $("password").value;
+    $("password").value = "";
+    return { email, password };
+  }
+
+  function clearAccountEmail() {
+    $("email").value = "";
+  }
+
+  function setRemoveAndCheckDisabled(disabled) {
     $("checkCodes").disabled = disabled;
     for (const button of $("accounts").querySelectorAll("button")) button.disabled = disabled;
+  }
+
+  function setCodeButtonsDisabled(disabled) {
+    for (const button of $("codes").querySelectorAll("button")) button.disabled = disabled;
+  }
+
+  function markCodeFilled(button) {
+    button.textContent = "Filled";
   }
 
   function renderAccounts(accounts) {
@@ -67,5 +107,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
     }
   }
 
-  return { setStatus, setAccountAndCheckDisabled, renderAccounts, clearCodes, renderCodes };
+  return { setStatus, showAccountSetup, showCompanionSetup, setExtensionId,
+    setDestination, setAddAccountDisabled, readAndClearAccountForm,
+    clearAccountEmail, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
+    markCodeFilled, renderAccounts, clearCodes, renderCodes };
 }

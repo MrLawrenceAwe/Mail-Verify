@@ -4,29 +4,15 @@
 import imaplib
 import json
 import re
-import signal
 import struct
 import sys
 
 from errors import UserError
 from keychain import keychain
-from mail_session import MailSession, connect_imap
+from mail_session import connect_imap
+from account_sessions import AccountSessions
 
-CHECK_TIMEOUT_SECONDS = 25
 MAX_FRAME_BYTES = 16_384
-
-
-def check_with_timeout(session):
-    def timeout(_signum, _frame):
-        raise UserError("Yahoo took too long to respond. Try checking again.")
-
-    previous = signal.signal(signal.SIGALRM, timeout)
-    signal.setitimer(signal.ITIMER_REAL, CHECK_TIMEOUT_SECONDS)
-    try:
-        return session.recent_codes()
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous)
 
 
 def stored_accounts():
@@ -38,53 +24,13 @@ def stored_accounts():
     return saved["accounts"] if "accounts" in saved else [saved]
 
 
-class AccountSessions:
-    def __init__(self):
-        self.sessions = {}
-
-    def close(self):
-        for session in self.sessions.values():
-            session.close()
-        self.sessions.clear()
-
-    def remove(self, email):
-        session = self.sessions.pop(email.lower(), None)
-        if session:
-            session.close()
-
-    def codes(self, accounts):
-        active = {account["email"].lower() for account in accounts}
-        for email in list(self.sessions):
-            if email not in active:
-                self.remove(email)
-        codes, errors = [], []
-        for account in accounts:
-            email = account["email"]
-            key = email.lower()
-            session = self.sessions.get(key)
-            if session and session.credentials != account:
-                self.remove(email)
-                session = None
-            if not session:
-                session = self.sessions[key] = MailSession(account)
-            try:
-                codes.extend({**item, "accountEmail": email} for item in check_with_timeout(session))
-            except (UserError, imaplib.IMAP4.error, OSError) as exc:
-                self.remove(email)
-                errors.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
-        if errors and not codes and len(errors) == len(accounts):
-            raise UserError("Could not check connected accounts: " + "; ".join(errors))
-        codes.sort(key=lambda item: item["receivedAt"], reverse=True)
-        return {"codes": codes, "warnings": errors}
-
-
 def handle_request(request, sessions):
     if not isinstance(request, dict):
         raise UserError("Invalid request.")
     action = request.get("action")
     if action == "status":
         return {"accounts": [item["email"] for item in stored_accounts()]}
-    if action == "disconnect":
+    if action == "removeAccount":
         address = request.get("email", "")
         accounts = stored_accounts()
         remaining = [item for item in accounts if item["email"].lower() != address.lower()]
@@ -96,7 +42,7 @@ def handle_request(request, sessions):
             keychain("delete")
         sessions.remove(address)
         return {"accounts": [item["email"] for item in remaining]}
-    if action == "configure":
+    if action == "saveAccount":
         address = request.get("email", "").strip()
         password = request.get("password", "").replace(" ", "")
         if (

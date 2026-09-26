@@ -1,4 +1,4 @@
-export function handleCodeField({ action, code, cachedCandidates } = {}) {
+export function handleCodeField({ action, code, candidateCache } = {}) {
   if (action !== "detect" && action !== "fill")
     return { ok: false, error: "Unsupported code field action." };
   const detectOnly = action === "detect";
@@ -43,7 +43,7 @@ export function handleCodeField({ action, code, cachedCandidates } = {}) {
     if (!/\bcode\b/i.test(hintText) || /coupon|promo|postal|zip|referral|product/i.test(hintText)) return false;
     const page = el.closest?.("main") || document.body;
     const roots = el.form && el.form !== page ? [el.form, page] : [page];
-    const verificationText = /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|we sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i;
+    const verificationText = /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i;
     for (const root of roots) {
       if (!root) continue;
       contextRoots.add(root);
@@ -63,42 +63,40 @@ export function handleCodeField({ action, code, cachedCandidates } = {}) {
   };
   const hasSupportedType = (el) =>
     ["text", "tel", "number", "password", ""].includes(el.type);
-  const getDigitInputs = () =>
-    getVisibleInputs().filter(
-      (el) => el.maxLength === 1 && hasSupportedType(el),
-    );
+  const isDigitInput = (el) => el.maxLength === 1 && hasSupportedType(el);
+  const getDigitInputs = (inputs = getVisibleInputs()) =>
+    inputs.filter(isDigitInput);
   const focused = document.activeElement;
   // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
   // Filling always rediscovers the page so cached hints cannot authorize a fill.
-  const discovery = detectOnly && cachedCandidates ? cachedCandidates : {
+  const candidateCacheResult = detectOnly && candidateCache ? candidateCache : {
     inputs: [...document.querySelectorAll("input")].filter(
       (el) => hasSupportedType(el) && hasCodeHint(el),
     ),
     contextRoots: [...contextRoots],
   };
-  const candidates = discovery.inputs.filter(isVisible);
-  const focusedCodeInput = candidates.includes(focused) ? focused : null;
+  const visibleCodeInputs = candidateCacheResult.inputs.filter(isVisible);
+  const focusedCodeInput = visibleCodeInputs.includes(focused) ? focused : null;
   // Focus alone does not identify a code field; it may be a search or account input.
   const targetInput =
-    focusedCodeInput || (candidates.length === 1 ? candidates[0] : null);
+    focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
   if (detectOnly) {
-    const anchor = targetInput || (candidates.length && candidates.every((el) => el.maxLength === 1) ? candidates[0] : null);
-    if (!anchor) return { ok: false, candidates: discovery };
+    const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every((el) => el.maxLength === 1) ? visibleCodeInputs[0] : null);
+    if (!anchor) return { ok: false, candidateCache: candidateCacheResult };
     const { top, bottom, left, right } = anchor.getBoundingClientRect();
-    return { ok: true, anchor, rect: { top, bottom, left, right }, candidates: discovery };
+    return { ok: true, anchor, rect: { top, bottom, left, right }, candidateCache: candidateCacheResult };
   }
   const inputs = getVisibleInputs();
   let fields;
   if (targetInput && targetInput.maxLength === 1) {
     fields = inputs.filter(
       (el) =>
-        el.maxLength === 1 &&
-        hasSupportedType(el) &&
+        isDigitInput(el) &&
         el.form === targetInput.form &&
         el.parentElement === targetInput.parentElement,
     );
   } else if (!targetInput) {
-    const digitInputs = getDigitInputs();
+    const digitInputs = getDigitInputs(inputs);
     if (
       digitInputs.length === code.length &&
       digitInputs.every((el) => el.form === digitInputs[0].form) &&
@@ -132,7 +130,7 @@ export function handleCodeField({ action, code, cachedCandidates } = {}) {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   };
   if (fields) {
-    const digitInputs = getDigitInputs();
+    const digitInputs = getDigitInputs(inputs);
     const start = digitInputs.indexOf(fields[0]);
     for (let index = 0; index < code.length; index++) {
       // Input handlers may replace the fields after each digit. Resolve the
