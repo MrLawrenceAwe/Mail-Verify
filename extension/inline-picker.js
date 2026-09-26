@@ -30,7 +30,21 @@ function messageKey(item) {
   return `${item.accountEmail.toLowerCase()}:${item.uid}`;
 }
 
-export function mutationAffectsPicker(records, host, contextRoots = []) {
+function verificationStepContext(anchor) {
+  const container = anchor?.form || anchor?.parentElement;
+  if (!container) return { roots: [], key: "" };
+  const roots = [container];
+  let sibling = container.previousElementSibling;
+  for (let count = 0; sibling && count < 2; count++, sibling = sibling.previousElementSibling)
+    roots.push(sibling);
+  const key = roots.map((root) => (root.textContent || "")
+    .replace(/\b\d{1,2}:\d{2}\b/g, "#")
+    .replace(/\b\d+\s*(?:seconds?|minutes?|secs?|mins?)\b/gi, "# time")
+    .replace(/\s+/g, " ").trim()).join("\n");
+  return { roots, parent: container.parentElement, key };
+}
+
+export function mutationAffectsPicker(records, host, contextRoots = [], stepRoots = [], stepParent) {
   const hasRelevantElement = (node) => node?.nodeType === 1 && (
     node.matches?.("input, label, form, main") ||
     node.querySelector?.("input, label, form, main")
@@ -43,6 +57,9 @@ export function mutationAffectsPicker(records, host, contextRoots = []) {
   return records.some((record) => {
     const target = record.target;
     if (target === host || host?.contains(target)) return false;
+    if (record.type === "childList" && target === stepParent) return true;
+    if (stepRoots.some((root) => root.contains?.(target)) &&
+        (record.type === "characterData" || record.type === "childList")) return true;
     if (contextRoots.some((root) => root.contains?.(target)) && changesContext(record)) return true;
     if (record.type === "attributes")
       return target?.matches?.("input, label") || !!target?.querySelector?.("input");
@@ -66,7 +83,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     setTimeout, clearTimeout, Date: clock = Date } = browser;
   let view, pollTimer, pollDeadline = 0, checking = false;
   let dismissed = false, attemptGeneration = 0, lastURL = location.href;
-  let minReceivedAtMs, anchor;
+  let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   let candidateCache;
   const detectCodeField = () => {
@@ -80,6 +97,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     view?.host.remove();
     view = undefined;
     anchor = undefined;
+    stepContext = undefined;
   }
   function dismissPicker() {
     dismissed = true;
@@ -99,9 +117,10 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
-  function mountPicker(field) {
+  function mountPicker(field, context = verificationStepContext(field.anchor)) {
     minReceivedAtMs ??= clock.now() - 5_000;
     anchor = field.anchor;
+    stepContext = context;
     view = createInlinePickerView(document, {
       onClose: dismissPicker,
       onRetry: restartPolling,
@@ -167,10 +186,12 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       }
     }
   }
-  function resetAttempt({ newPage = false } = {}) {
+  function resetAttempt({ newPage = false, preserveCutoff = false } = {}) {
     excludeSeenMessages();
     unmountPicker();
-    minReceivedAtMs = undefined;
+    minReceivedAtMs = preserveCutoff
+      ? Math.max(minReceivedAtMs ?? -Infinity, clock.now() - 5_000)
+      : undefined;
     if (newPage) {
       dismissed = false;
       seenMessageKeys = new Set();
@@ -193,8 +214,13 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       if (view) resetAttempt();
       return;
     }
+    const context = refreshCandidates || !view || anchor !== field.anchor
+      ? verificationStepContext(field.anchor)
+      : stepContext;
     if (view && anchor !== field.anchor) resetAttempt();
-    if (!view && !dismissed) mountPicker(field);
+    else if (view && context.key !== stepContext.key)
+      resetAttempt({ preserveCutoff: true });
+    if (!view && !dismissed) mountPicker(field, context);
     else positionPicker(field);
   }
   let scanTimer;
@@ -212,7 +238,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     });
   };
   new MutationObserver((records) => {
-    if (mutationAffectsPicker(records, view?.host, candidateCache?.contextRoots)) scheduleScan();
+    if (mutationAffectsPicker(records, view?.host, candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent)) scheduleScan();
   }).observe(document.documentElement, {
     childList: true, subtree: true, characterData: true, characterDataOldValue: true, attributes: true,
     attributeFilter: ["type", "name", "id", "placeholder", "autocomplete", "aria-label", "hidden", "style", "class", "disabled", "readonly", "maxlength", "for"],
