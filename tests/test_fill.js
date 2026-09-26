@@ -192,6 +192,24 @@ test("Indeed's Enter code requires email verification context", () => {
   assert.equal(run([input]).ok, false);
 });
 
+test("generic code field uses verification context outside its form", () => {
+  const form = { textContent: "Enter code" };
+  const main = { textContent: "We sent a code to your email. Enter code" };
+  const input = new FakeInput({ name: "code", form, closest: () => main });
+  const context = vm.createContext({
+    document: { querySelectorAll: () => [input], activeElement: input, body: main },
+    innerHeight: 800,
+    innerWidth: 1200,
+  });
+  const result = vm.runInContext(`(${fillCode.toString()})("", true)`, context);
+  assert.equal(result.ok, true);
+  assert.equal(result.contextRoots.length, 2);
+  assert.equal(result.contextRoots[0], form);
+  assert.equal(result.contextRoots[1], main);
+  main.textContent = "Enter code to redeem a discount";
+  assert.equal(vm.runInContext(`(${fillCode.toString()})("", true)`, context).ok, false);
+});
+
 test("explicit hints skip page text and generic hints read shared context once", () => {
   const explicit = new FakeInput({ autocomplete: "one-time-code", form: {
     get textContent() { throw new Error("unneeded context read"); },
