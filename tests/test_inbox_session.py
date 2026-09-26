@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
-import mail_session
+import inbox_session
 
 
 class InboxSessionTests(unittest.TestCase):
@@ -29,7 +29,7 @@ class InboxSessionTests(unittest.TestCase):
             def fetch(self, sequence, _parts):
                 self.sequence_fetches.append(sequence)
                 first, last = map(int, sequence.split(":"))
-                date = mail_session.imaplib.Time2Internaldate(time.time() - 60).encode()
+                date = inbox_session.imaplib.Time2Internaldate(time.time() - 60).encode()
                 return "OK", [
                     b"1 (UID "
                     + str(uid).encode()
@@ -49,7 +49,7 @@ class InboxSessionTests(unittest.TestCase):
                 self.fetches.append(args)
                 uids = args[0].split(b",")
                 if "INTERNALDATE" in args[1]:
-                    date = mail_session.imaplib.Time2Internaldate(time.time() - 60).encode()
+                    date = inbox_session.imaplib.Time2Internaldate(time.time() - 60).encode()
                     return "OK", [
                         b"1 (UID "
                         + uid
@@ -72,8 +72,8 @@ class InboxSessionTests(unittest.TestCase):
             )
 
         conn = FakeConnection()
-        with patch.object(mail_session, "connect_imap", return_value=conn):
-            session = mail_session.InboxSession(
+        with patch.object(inbox_session, "connect_imap", return_value=conn):
+            session = inbox_session.InboxSession(
                 {"email": "test@yahoo.com", "password": "unused"}
             )
             codes = session.recent_codes()
@@ -108,7 +108,7 @@ class InboxSessionTests(unittest.TestCase):
                 return "OK", [b"12"]
 
             def metadata(self, uids):
-                date = mail_session.imaplib.Time2Internaldate(time.time() - 60).encode()
+                date = inbox_session.imaplib.Time2Internaldate(time.time() - 60).encode()
                 return "OK", [
                     b"1 (UID " + uid + b" INTERNALDATE " + date + b" RFC822.SIZE 100)"
                     for uid in uids
@@ -136,8 +136,8 @@ class InboxSessionTests(unittest.TestCase):
                 pass
 
         conn = FakeConnection()
-        with patch.object(mail_session, "connect_imap", return_value=conn):
-            session = mail_session.InboxSession({})
+        with patch.object(inbox_session, "connect_imap", return_value=conn):
+            session = inbox_session.InboxSession({})
             self.assertEqual([x["code"] for x in session.recent_codes()], ["100012"])
             self.assertEqual(conn.batches, [[b"12", b"11", b"10", b"9", b"8"]])
             self.assertEqual(len(session.pending_received_at_by_uid), 7)
@@ -159,7 +159,7 @@ class InboxSessionTests(unittest.TestCase):
                     raise AssertionError("Expired mail must not be fetched")
                 return "OK", [b""]
 
-        session = mail_session.InboxSession({})
+        session = inbox_session.InboxSession({})
         session.conn = FakeConnection()
         session.last_seen_uid = 10
         session.pending_received_at_by_uid[9] = time.time() - 601
@@ -173,7 +173,7 @@ class InboxSessionTests(unittest.TestCase):
 
             def fetch(self, sequence, _parts):
                 self.sequence = sequence
-                date = mail_session.imaplib.Time2Internaldate(time.time() - 3600).encode()
+                date = inbox_session.imaplib.Time2Internaldate(time.time() - 3600).encode()
                 return "OK", [
                     b"1 (UID "
                     + str(uid).encode()
@@ -192,8 +192,8 @@ class InboxSessionTests(unittest.TestCase):
                 pass
 
         conn = FakeConnection()
-        with patch.object(mail_session, "connect_imap", return_value=conn):
-            session = mail_session.InboxSession(
+        with patch.object(inbox_session, "connect_imap", return_value=conn):
+            session = inbox_session.InboxSession(
                 {"email": "test@yahoo.com", "password": "unused"}
             )
             self.assertEqual(session.recent_codes(), [])
@@ -209,7 +209,7 @@ class InboxSessionTests(unittest.TestCase):
                 return "OK", [b"30"]
 
             def fetch(self, *_args):
-                date = mail_session.imaplib.Time2Internaldate(time.time() - 60).encode()
+                date = inbox_session.imaplib.Time2Internaldate(time.time() - 60).encode()
                 return "OK", [
                     b"1 (UID " + str(uid).encode() + b" INTERNALDATE " + date + b" RFC822.SIZE 100)"
                     for uid in range(1, 31)
@@ -233,8 +233,8 @@ class InboxSessionTests(unittest.TestCase):
                 pass
 
         conn = FakeConnection()
-        with patch.object(mail_session, "connect_imap", return_value=conn):
-            session = mail_session.InboxSession({"email": "test@yahoo.com", "password": "unused"})
+        with patch.object(inbox_session, "connect_imap", return_value=conn):
+            session = inbox_session.InboxSession({"email": "test@yahoo.com", "password": "unused"})
             self.assertEqual(session.recent_codes(), [])
         self.assertEqual([len(batch) for batch in conn.body_batches], [5, 25])
 
@@ -247,7 +247,7 @@ class InboxSessionTests(unittest.TestCase):
                 return "OK", [b"1"]
 
             def fetch(self, *_args):
-                future = mail_session.imaplib.Time2Internaldate(time.time() + 60).encode()
+                future = inbox_session.imaplib.Time2Internaldate(time.time() + 60).encode()
                 return "OK", [
                     b"1 (UID 10 INTERNALDATE " + future + b" RFC822.SIZE 100)"
                 ]
@@ -263,8 +263,8 @@ class InboxSessionTests(unittest.TestCase):
 
         self_message = self.message("Your verification code is 482913.")
         conn = FakeConnection()
-        with patch.object(mail_session, "connect_imap", return_value=conn):
-            session = mail_session.InboxSession(
+        with patch.object(inbox_session, "connect_imap", return_value=conn):
+            session = inbox_session.InboxSession(
                 {"email": "test@yahoo.com", "password": "unused"}
             )
             first = session.recent_codes()
@@ -288,7 +288,7 @@ class InboxSessionTests(unittest.TestCase):
                 ]
 
         self_message = self.message("Your verification code is 482913.")
-        session = mail_session.InboxSession({})
+        session = inbox_session.InboxSession({})
         conn = session.conn = FakeConnection()
         session.last_seen_uid = 10
         session.pending_received_at_by_uid[9] = time.time() - 60
@@ -311,7 +311,7 @@ class InboxSessionTests(unittest.TestCase):
                 ]
 
         self_message = self.message("Your verification code is 482913.")
-        session = mail_session.InboxSession({})
+        session = inbox_session.InboxSession({})
         session.conn = FakeConnection()
         session.last_seen_uid = 10
         session.pending_received_at_by_uid[1] = now - 10

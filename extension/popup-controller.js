@@ -24,20 +24,23 @@ export function createPopup({
     setStatus, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
     markCodeFilled, renderAccounts, clearCodes, renderCodes,
     showAccountSetup, showCompanionSetup, setExtensionId, setDestination,
-    setAddAccountDisabled, readAndClearAccountForm, clearAccountEmail,
+    setAddAccountDisabled, readCredentialsAndClearPassword, clearAccountEmail,
   } = createPopupView(document, {
     onRemoveAccount: (email) => removeAccount(email),
     onFillCode: (item, button) => fillSelectedCode(item, button),
   });
-  function updateAccounts(nextAccounts) {
+  function applyConnectedAccounts(accountEmails) {
     abortCheck();
-    renderAccounts(nextAccounts);
+    renderAccounts(accountEmails);
     clearCodes();
-    if (!nextAccounts.length) {
+    if (!accountEmails.length) {
       pollDeadline = 0;
       setStatus("No Yahoo accounts connected.");
       return;
     }
+    startPolling();
+  }
+  function startPolling() {
     pollDeadline = clock.now() + POLL_WINDOW_MS;
     checkForCodes();
   }
@@ -81,20 +84,26 @@ export function createPopup({
     } finally {
       filling = false;
       setRemoveAndCheckDisabled(false);
-      scheduleCheck();
+      if (pollDeadline) scheduleCheck();
+      else closeSession();
     }
   }
   function scheduleCheck(delay = POLL_INTERVAL_MS) {
     clearTimeout(pollTimer);
     if (!filling && !removingAccount && clock.now() < pollDeadline)
       pollTimer = setTimeout(checkForCodes, delay);
-    else if (clock.now() >= pollDeadline) closeSession();
+    else if (clock.now() >= pollDeadline) {
+      closeSession();
+      if (!filling && !removingAccount)
+        setStatus("Automatic checking finished. Check again for newer codes.");
+    }
   }
   async function checkForCodes() {
     if (filling || removingAccount) return;
     if (clock.now() >= pollDeadline) {
       clearTimeout(pollTimer);
       closeSession();
+      setStatus("Automatic checking finished. Check again for newer codes.");
       return;
     }
     if (checking) abortCheck();
@@ -135,14 +144,13 @@ export function createPopup({
     }
   }
   $("checkCodes").addEventListener("click", () => {
-    pollDeadline = clock.now() + POLL_WINDOW_MS;
-    checkForCodes();
+    startPolling();
   });
   $("addAccountForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     setAddAccountDisabled(true);
     setStatus("Checking your Yahoo connection…");
-    const { email, password } = readAndClearAccountForm();
+    const { email, password } = readCredentialsAndClearPassword();
     try {
       const result = await sendOneOffRequest({
         action: "saveAccount",
@@ -150,7 +158,7 @@ export function createPopup({
         password,
       });
       clearAccountEmail();
-      updateAccounts(result.accounts);
+      applyConnectedAccounts(result.accountEmails);
     } catch (error) {
       setStatus(error.message, true);
     } finally {
@@ -167,14 +175,15 @@ export function createPopup({
     setRemoveAndCheckDisabled(true);
     try {
       const result = await sendOneOffRequest({ action: "removeAccount", email });
-      updateAccounts(result.accounts);
+      removingAccount = false;
+      applyConnectedAccounts(result.accountEmails);
     } catch (error) {
       setStatus(error.message, true);
       pollDeadline = clock.now() + POLL_WINDOW_MS;
     } finally {
       removingAccount = false;
       setRemoveAndCheckDisabled(false);
-      if (pollDeadline) scheduleCheck();
+      if (pollDeadline && !checking) scheduleCheck();
     }
   }
   async function initialize() {
@@ -189,7 +198,7 @@ export function createPopup({
       : "an HTTPS sign-in page");
     try {
       const result = await sendSessionRequest("status");
-      if (result.accounts?.length) updateAccounts(result.accounts);
+      if (result.accountEmails?.length) applyConnectedAccounts(result.accountEmails);
       else {
         showAccountSetup();
         setStatus("Connect once. No Yahoo tab needed.");

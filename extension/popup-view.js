@@ -8,7 +8,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
   }
 
   function showAccountSetup() {
-    $("setup").hidden = false;
+    $("accountSetup").hidden = false;
     $("email").focus();
   }
 
@@ -28,7 +28,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
     $("addAccountSubmit").disabled = disabled;
   }
 
-  function readAndClearAccountForm() {
+  function readCredentialsAndClearPassword() {
     const email = $("email").value;
     const password = $("password").value;
     $("password").value = "";
@@ -53,9 +53,9 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
   }
 
   function renderAccounts(accounts) {
-    $("setup").hidden = accounts.length > 0;
+    $("accountSetup").hidden = accounts.length > 0;
     $("companionSetup").hidden = true;
-    $("codeResults").hidden = accounts.length === 0;
+    $("connectedAccountPanel").hidden = accounts.length === 0;
     $("accounts").replaceChildren();
     for (const email of accounts) {
       const row = document.createElement("div");
@@ -87,7 +87,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
       card.className = "card";
       for (const [tag, className, value] of [
         ["div", "code", item.code],
-        ["p", "source", item.accountEmail],
+        ["p", "account-email", item.accountEmail],
         ["p", "sender", item.sender],
         ["p", "subject", item.subject],
       ]) {
@@ -108,7 +108,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
   }
 
   return { setStatus, showAccountSetup, showCompanionSetup, setExtensionId,
-    setDestination, setAddAccountDisabled, readAndClearAccountForm,
+    setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
     clearAccountEmail, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
     markCodeFilled, renderAccounts, clearCodes, renderCodes };
 }

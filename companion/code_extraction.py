@@ -117,7 +117,7 @@ def iter_non_attachment_parts(part):
         yield part
 
 
-def extract_code(raw):
+def extract_code_details(raw):
     msg = email.message_from_bytes(raw, policy=policy.default)
     texts = []
     for part in iter_non_attachment_parts(msg):

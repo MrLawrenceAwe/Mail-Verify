@@ -27,7 +27,11 @@ class InstallerTests(unittest.TestCase):
             ), patch.object(sys, "argv", ["install.py"]), contextlib.redirect_stdout(
                 io.StringIO()
             ):
+                destination.mkdir(parents=True)
+                obsolete = destination / "mail_session.py"
+                obsolete.write_text("old installed module")
                 install.main()
+                self.assertFalse(obsolete.exists())
                 manifest = json.loads(manifest_path.read_text())
                 self.assertEqual(
                     manifest["allowed_origins"],

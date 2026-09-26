@@ -1,6 +1,6 @@
 const HOST_NAME = "local.yahoo_code_fill";
 const COMPANION_UNAVAILABLE =
-  "Mac companion unavailable. Run the companion installer, then reopen this popup.";
+  "Mac companion unavailable. Run Install Companion.command, then try again.";
 
 function requireSuccessfulResponse(response) {
   if (!response?.ok)
