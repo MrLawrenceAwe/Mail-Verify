@@ -128,8 +128,11 @@ class MailSession:
                     messages[uid.group(1)] = entry[1]
             for uid in batch:
                 received = eligible[uid]
+                if uid not in messages:
+                    # An OK fetch can omit a body. Try this UID again on the next poll.
+                    continue
                 self.pending_by_uid.pop(uid, None)
-                found = extract_code(messages[uid]) if uid in messages else None
+                found = extract_code(messages[uid])
                 if found:
                     found["receivedAt"] = int(received * 1000)
                     found["uid"] = int(uid)
@@ -158,15 +161,19 @@ class MailSession:
             self.pending_by_uid.update(self._eligible_messages(metadata, now))
             # Keep deferred work bounded, fresh, and behind newly arrived mail.
             cutoff = (
-                sorted(self.codes_by_uid, reverse=True)[MAX_RESULTS - 1]
-                if len(self.codes_by_uid) >= MAX_RESULTS else 0
+                sorted(
+                    (item["receivedAt"], uid)
+                    for uid, item in self.codes_by_uid.items()
+                )[-MAX_RESULTS]
+                if len(self.codes_by_uid) >= MAX_RESULTS else None
             )
             self.pending_by_uid = {
                 uid: received
                 for uid, received in sorted(
                     self.pending_by_uid.items(), key=lambda item: int(item[0]), reverse=True
                 )
-                if int(uid) > cutoff and 0 <= now - received <= MAX_CODE_AGE_SECONDS
+                if 0 <= now - received <= MAX_CODE_AGE_SECONDS
+                and (cutoff is None or (int(received * 1000), int(uid)) > cutoff)
             }
             candidates = list(self.pending_by_uid)[:MAX_MESSAGES]
             self.pending_by_uid = {uid: self.pending_by_uid[uid] for uid in candidates}
@@ -177,7 +184,8 @@ class MailSession:
             raise
 
     def _results(self):
-        return [
-            item
-            for _, item in sorted(self.codes_by_uid.items(), reverse=True)[:MAX_RESULTS]
-        ]
+        return sorted(
+            self.codes_by_uid.values(),
+            key=lambda item: (item["receivedAt"], item["uid"]),
+            reverse=True,
+        )[:MAX_RESULTS]

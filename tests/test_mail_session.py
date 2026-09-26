@@ -273,6 +273,56 @@ class MailSessionTests(unittest.TestCase):
             self.assertEqual(session.recent_codes(), first)
         self.assertEqual(conn.body_fetches, 1)
 
+    def test_missing_body_is_retried_on_next_poll(self):
+        class FakeConnection:
+            body_fetches = 0
+
+            def uid(self, command, *_args):
+                if command == "search":
+                    return "OK", [b""]
+                self.body_fetches += 1
+                if self.body_fetches == 1:
+                    return "OK", [None]
+                return "OK", [
+                    (b"1 (UID 9 BODY[] {80}", self_message)
+                ]
+
+        self_message = self.message("Your verification code is 482913.")
+        session = mail_session.MailSession({})
+        conn = session.conn = FakeConnection()
+        session.last_seen_uid = 10
+        session.pending_by_uid[b"9"] = time.time() - 60
+
+        self.assertEqual(session.recent_codes(), [])
+        self.assertIn(b"9", session.pending_by_uid)
+        self.assertEqual(session.recent_codes()[0]["code"], "482913")
+        self.assertEqual(conn.body_fetches, 2)
+        self.assertNotIn(b"9", session.pending_by_uid)
+
+    def test_older_uid_with_newer_arrival_time_can_enter_results(self):
+        now = time.time()
+
+        class FakeConnection:
+            def uid(self, command, *_args):
+                if command == "search":
+                    return "OK", [b""]
+                return "OK", [
+                    (b"1 (UID 1 BODY[] {80}", self_message)
+                ]
+
+        self_message = self.message("Your verification code is 482913.")
+        session = mail_session.MailSession({})
+        session.conn = FakeConnection()
+        session.last_seen_uid = 10
+        session.pending_by_uid[b"1"] = now - 10
+        session.codes_by_uid = {
+            uid: {"uid": uid, "code": str(uid), "receivedAt": int((now - 60) * 1000)}
+            for uid in range(2, 7)
+        }
+
+        results = session.recent_codes()
+        self.assertEqual([item["uid"] for item in results], [1, 6, 5, 4, 3])
+
 
 
 if __name__ == "__main__":
