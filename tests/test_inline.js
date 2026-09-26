@@ -33,7 +33,7 @@ test("codes without a sender remain separate suggestions", () => {
   assert.deepEqual(freshCodes(codes, 8000, 10000).map(item => item.code), ["222222", "111111"]);
 });
 
-test("resend excludes an already seen message but accepts a new UID in the same second", () => {
+test("UID exclusion distinguishes two messages received in the same second", () => {
   const old = { uid: 7, code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   const newer = { uid: 8, code: "222222", sender: "auth@example.test", receivedAt: 9000 };
   assert.deepEqual(freshCodes([old, newer], 9000, 9500, new Set([7])), [newer]);
@@ -46,6 +46,66 @@ test("same sender and UID in separate accounts remain distinct", () => {
   ];
   assert.deepEqual(freshCodes(codes, 8000, 10000).map(x => x.code), ["222222", "111111"]);
   assert.deepEqual(freshCodes(codes, 8000, 10000, new Set(["one@yahoo.com:7"])).map(x => x.code), ["222222"]);
+});
+
+test("resend before the first check returns does not revive an unseen old code", async () => {
+  const { default: vm } = await import("node:vm");
+  const { readFileSync } = await import("node:fs");
+  const events = new Map(), timers = [], requests = [];
+  let now = 9500;
+  const results = {
+    dataset: {}, children: [],
+    get childElementCount() { return this.children.length; },
+    replaceChildren() { this.children = []; },
+    append(child) { this.children.push(child); },
+  };
+  const elements = { "#results": results, "#status": {}, "#close": {}, "#retry": {} };
+  const context = vm.createContext({
+    fillCode: () => ({ ok: true, anchor: {}, candidates: {}, contextRoots: [], rect: { top: 100, bottom: 130, left: 20 } }),
+    Date: { now: () => now },
+    location: { href: "https://example.test", hostname: "example.test" },
+    innerWidth: 1200, innerHeight: 800,
+    document: {
+      hidden: false,
+      documentElement: { append() {} },
+      addEventListener: (name, fn) => events.set(name, fn),
+      createElement: () => ({
+        dataset: {}, style: {},
+        attachShadow: () => ({ querySelector: id => elements[id] }),
+        getBoundingClientRect: () => ({ width: 240, height: 60 }),
+        contains: () => false,
+        remove() {},
+        querySelector: () => ({}),
+        addEventListener() {},
+        setAttribute() {},
+      }),
+    },
+    window: { addEventListener: () => {} },
+    MutationObserver: class { observe() {} },
+    setTimeout: fn => { timers.push(fn); return timers.length; },
+    clearTimeout: () => {},
+    chrome: { runtime: { sendMessage: () => new Promise(resolve => requests.push(resolve)) } },
+  });
+  const source = readFileSync(new URL("../extension/inline.js", import.meta.url), "utf8")
+    .replace(/^import .*\n/, "").replaceAll("export function ", "function ");
+  const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
+  const oldCode = { uid: 7, code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+  vm.runInContext(source + "\nstartInlinePicker();", context);
+  assert.equal(requests.length, 1);
+  events.get("click")({ target: { closest: () => ({ textContent: "Resend code" }) } });
+  requests.shift()({ ok: true, codes: [oldCode] });
+  await flush();
+  timers.pop()();
+  assert.equal(requests.length, 1);
+  requests.shift()({ ok: true, codes: [oldCode] });
+  await flush();
+  assert.equal(results.childElementCount, 0);
+  now = 10500;
+  timers.pop()();
+  const newCode = { uid: 8, code: "222222", sender: "auth@example.test", receivedAt: 10000 };
+  requests.shift()({ ok: true, codes: [oldCode, newCode] });
+  await flush();
+  assert.equal(results.childElementCount, 1);
 });
 
 test("a new verification field on the same URL starts a fresh code window", async () => {
@@ -114,8 +174,12 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   responses = originalResponses;
   warnings = [];
   now = 9500;
-  responses = [responses[0], { uid: 2, code: "222222", sender: "auth@example.test", receivedAt: 9000 }];
+  responses = [responses[0], { uid: 2, code: "222222", sender: "auth@example.test", receivedAt: 10000 }];
   events.get("click")({ target: { closest: () => ({ textContent: "Resend code" }) } });
+  await flush();
+  assert.equal(results.childElementCount, 0);
+  now = 10500;
+  timers.pop()();
   await flush();
   assert.equal(results.childElementCount, 1);
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
