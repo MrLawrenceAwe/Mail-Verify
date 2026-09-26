@@ -193,9 +193,10 @@ test("Indeed's Enter code requires email verification context", () => {
 });
 
 test("generic code field uses verification context outside its form", () => {
-  const form = { textContent: "Enter code" };
+  const instructions = { textContent: "We sent a code to your email." };
   const main = { textContent: "We sent a code to your email. Enter code" };
-  const input = new FakeInput({ name: "code", form, closest: () => main });
+  const form = { textContent: "Enter code", parentElement: main, previousElementSibling: instructions };
+  const input = new FakeInput({ name: "code", form });
   const context = vm.createContext({
     document: { querySelectorAll: () => [input], activeElement: input, body: main },
     innerHeight: 800,
@@ -203,11 +204,25 @@ test("generic code field uses verification context outside its form", () => {
   });
   const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context);
   assert.equal(result.ok, true);
-  assert.equal(result.candidateCache.contextRoots.length, 2);
-  assert.equal(result.candidateCache.contextRoots[0], form);
-  assert.equal(result.candidateCache.contextRoots[1], main);
-  main.textContent = "Enter code to redeem a discount";
+  assert.equal(result.candidateCache.contextRoots.length, 3);
+  assert.equal(result.candidateCache.contextRoots.includes(form), true);
+  assert.equal(result.candidateCache.contextRoots.includes(instructions), true);
+  instructions.textContent = "Enter code to redeem a discount";
   assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
+});
+
+test("unrelated verification text elsewhere in main does not identify a generic field", () => {
+  const main = { textContent: "Verification code for account settings. Redeem your gift code." };
+  const couponInstructions = { textContent: "Redeem your gift code." };
+  const form = { textContent: "Code", parentElement: main, previousElementSibling: couponInstructions };
+  const input = new FakeInput({ name: "code", form });
+  const context = vm.createContext({
+    document: { querySelectorAll: () => [input], activeElement: input, body: main },
+    innerHeight: 800, innerWidth: 1200,
+  });
+  assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
+  couponInstructions.textContent = "We sent a code to your email.";
+  assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, true);
 });
 
 test("explicit hints skip page text and generic hints read shared context once", () => {

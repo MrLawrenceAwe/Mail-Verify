@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { suggestionPosition, selectSuggestedCodes, mutationAffectsPicker, startInlinePicker } from "../extension/inline-picker.js";
+import { suggestionPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl, startInlinePicker } from "../extension/inline-picker.js";
 
 function pickerBrowser({ handleField, now = Date.now, sendMessage, onMount = () => {},
   onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn() }) {
@@ -34,7 +34,10 @@ function pickerBrowser({ handleField, now = Date.now, sendMessage, onMount = () 
         };
       },
     },
-    window: { addEventListener: (name, fn) => events.set(name, fn) },
+    window: {
+      addEventListener: (name, fn) => events.set(name, fn),
+      navigation: { addEventListener: (name, fn) => events.set(`navigation:${name}`, fn) },
+    },
     MutationObserver: class { constructor(callback) { onObserve(callback); } observe() {} },
     requestAnimationFrame: onFrame,
     setTimeout: fn => { timers.push(fn); return timers.length; },
@@ -113,6 +116,14 @@ test("same sender and UID in separate accounts remain distinct", () => {
   assert.deepEqual(selectSuggestedCodes(codes, 8000, 10000, new Set(["one@yahoo.com:7"])).map(x => x.code), ["222222"]);
 });
 
+test("recognises common resend labels without treating coupon requests as email codes", () => {
+  for (const textContent of ["Resend code", "Send another verification code", "Request a new code", "Get a new OTP", "Resend"])
+    assert.equal(isCodeRequestControl({ textContent }), true, textContent);
+  assert.equal(isCodeRequestControl({ textContent: "Send promo code" }), false);
+  assert.equal(isCodeRequestControl({ textContent: "Continue" }), false);
+  assert.equal(isCodeRequestControl({ textContent: "", getAttribute: () => "Resend verification code" }), true);
+});
+
 test("resend before the first check returns does not revive an unseen old code", async () => {
   const requests = [];
   let now = 9500;
@@ -124,7 +135,7 @@ test("resend before the first check returns does not revive an unseen old code",
   const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   assert.equal(requests.length, 1);
-  events.get("click")({ target: { closest: () => ({ textContent: "Resend code" }) } });
+  events.get("click")({ target: { closest: () => ({ textContent: "Send another verification code" }) } });
   requests.shift()({ ok: true, codes: [oldCode] });
   await flush();
   timers.pop()();
@@ -138,6 +149,32 @@ test("resend before the first check returns does not revive an unseen old code",
   requests.shift()({ ok: true, codes: [oldCode, newCode] });
   await flush();
   assert.equal(results.childElementCount, 1);
+});
+
+test("new route clears suggestions even when the code field is reused", async () => {
+  let now = 10_000;
+  const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+  let responses = [oldCode];
+  const anchor = {};
+  const { browser, events, timers, results } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => now,
+    sendMessage: async () => ({ ok: true, codes: responses }),
+  });
+  const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  now = 10_500;
+  browser.location.href = "https://example.test/second-step";
+  events.get("navigation:currententrychange")();
+  await flush();
+  assert.equal(results.childElementCount, 0);
+  responses = [{ ...oldCode, uid: 2, code: "222222", receivedAt: 11_000 }];
+  now = 12_000;
+  timers.pop()();
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  assert.equal(results.children[0].strong.textContent, "Fill code 222222");
 });
 
 test("a new verification field on the same URL starts a fresh code window", async () => {

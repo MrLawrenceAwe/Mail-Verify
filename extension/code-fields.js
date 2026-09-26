@@ -41,8 +41,14 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
   const hasContextualCodeHint = (el, hints) => {
     const hintText = hints.filter(Boolean).join(" ");
     if (!/\bcode\b/i.test(hintText) || /coupon|promo|postal|zip|referral|product/i.test(hintText)) return false;
-    const page = el.closest?.("main") || document.body;
-    const roots = el.form && el.form !== page ? [el.form, page] : [page];
+    const container = el.form || el.parentElement;
+    const roots = [container];
+    // Instructions are often just before the form, but text elsewhere in
+    // <main> can describe a different code field on the page.
+    let sibling = container?.previousElementSibling;
+    for (let count = 0; sibling && count < 2; count++, sibling = sibling.previousElementSibling)
+      roots.push(sibling);
+    if (container?.parentElement) contextRoots.add(container.parentElement);
     const verificationText = /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i;
     for (const root of roots) {
       if (!root) continue;
