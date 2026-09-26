@@ -1,5 +1,5 @@
-import { handleCodeField } from "./fill-code.js";
-import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-policy.js";
+import { handleCodeField } from "./code-fields.js";
+import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
 import { createPopupView } from "./popup-view.js";
 
 const POLL_INTERVAL_MS = 8_000;
@@ -14,25 +14,26 @@ export function createPopup({
   clearTimeout = globalThis.clearTimeout,
 }) {
   const $ = (id) => document.getElementById(id);
-  const { sendCompanionRequest, sendSessionRequest, closeSession } = client;
+  const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
   let targetTab;
-  let accounts = [];
   let checking = false,
     filling = false,
     removingAccount = false;
   let pollTimer, pollDeadline = 0, checkGeneration = 0;
   const {
-    setStatus, setAccountAndCheckDisabled, renderAccounts, clearCodes, renderCodes,
+    setStatus, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
+    markCodeFilled, renderAccounts, clearCodes, renderCodes,
+    showAccountSetup, showCompanionSetup, setExtensionId, setDestination,
+    setAddAccountDisabled, readAndClearAccountForm, clearAccountEmail,
   } = createPopupView(document, {
     onRemoveAccount: (email) => removeAccount(email),
     onFillCode: (item, button) => fillSelectedCode(item, button),
   });
   function updateAccounts(nextAccounts) {
     abortCheck();
-    accounts = nextAccounts;
-    renderAccounts(accounts);
+    renderAccounts(nextAccounts);
     clearCodes();
-    if (!accounts.length) {
+    if (!nextAccounts.length) {
       pollDeadline = 0;
       setStatus("No Yahoo accounts connected.");
       return;
@@ -50,9 +51,8 @@ export function createPopup({
     if (filling) return;
     filling = true;
     abortCheck();
-    setAccountAndCheckDisabled(true);
-    const buttons = [...$("codes").querySelectorAll("button")];
-    for (const control of buttons) control.disabled = true;
+    setRemoveAndCheckDisabled(true);
+    setCodeButtonsDisabled(true);
     try {
       if (clock.now() - item.receivedAt > MAX_CODE_AGE_MS)
         throw new Error("This code is too old. Request a new code.");
@@ -74,13 +74,13 @@ export function createPopup({
         throw new Error(result?.error || "Could not fill this page.");
       pollDeadline = 0;
       setStatus("Code filled. The website may continue automatically.");
-      button.textContent = "Filled";
+      markCodeFilled(button);
     } catch (error) {
       setStatus(error.message, true);
-      for (const control of buttons) control.disabled = false;
+      setCodeButtonsDisabled(false);
     } finally {
       filling = false;
-      setAccountAndCheckDisabled(false);
+      setRemoveAndCheckDisabled(false);
       scheduleCheck();
     }
   }
@@ -122,7 +122,7 @@ export function createPopup({
     } finally {
       if (requestGeneration === checkGeneration) {
         checking = false;
-        setAccountAndCheckDisabled(filling || removingAccount);
+        setRemoveAndCheckDisabled(filling || removingAccount);
         scheduleCheck(
           failed
             ? POLL_INTERVAL_MS
@@ -138,67 +138,65 @@ export function createPopup({
     pollDeadline = clock.now() + POLL_WINDOW_MS;
     checkForCodes();
   });
-  $("connectForm").addEventListener("submit", async (event) => {
+  $("addAccountForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    $("connect").disabled = true;
+    setAddAccountDisabled(true);
     setStatus("Checking your Yahoo connection…");
-    const password = $("password").value;
-    $("password").value = "";
+    const { email, password } = readAndClearAccountForm();
     try {
-      const result = await sendCompanionRequest({
-        action: "configure",
-        email: $("email").value,
+      const result = await sendOneOffRequest({
+        action: "saveAccount",
+        email,
         password,
       });
-      $("email").value = "";
+      clearAccountEmail();
       updateAccounts(result.accounts);
     } catch (error) {
       setStatus(error.message, true);
     } finally {
-      $("connect").disabled = false;
+      setAddAccountDisabled(false);
     }
   });
   $("addAccount").addEventListener("click", () => {
-    $("setup").hidden = false;
-    $("email").focus();
+    showAccountSetup();
   });
   async function removeAccount(email) {
     pollDeadline = 0;
     removingAccount = true;
     abortCheck();
-    setAccountAndCheckDisabled(true);
+    setRemoveAndCheckDisabled(true);
     try {
-      const result = await sendCompanionRequest({ action: "disconnect", email });
+      const result = await sendOneOffRequest({ action: "removeAccount", email });
       updateAccounts(result.accounts);
     } catch (error) {
       setStatus(error.message, true);
       pollDeadline = clock.now() + POLL_WINDOW_MS;
     } finally {
       removingAccount = false;
-      setAccountAndCheckDisabled(false);
+      setRemoveAndCheckDisabled(false);
       if (pollDeadline) scheduleCheck();
     }
   }
   async function initialize() {
-    $("extensionId").value = chrome.runtime.id;
+    setExtensionId(chrome.runtime.id);
     const [tab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,
     });
     if (tab?.url?.startsWith("https://")) targetTab = tab;
-    $("destination").textContent = targetTab
+    setDestination(targetTab
       ? new URL(targetTab.url).hostname
-      : "an HTTPS sign-in page";
+      : "an HTTPS sign-in page");
     try {
       const result = await sendSessionRequest("status");
       if (result.accounts?.length) updateAccounts(result.accounts);
       else {
-        $("setup").hidden = false;
+        showAccountSetup();
         setStatus("Connect once. No Yahoo tab needed.");
       }
     } catch (error) {
       setStatus(error.message, true);
-      $("companionSetup").hidden = false;
+      showCompanionSetup();
     }
   }
 

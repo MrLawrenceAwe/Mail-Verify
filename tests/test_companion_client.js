@@ -79,7 +79,7 @@ test("uses the same response errors for one-off and session requests", async () 
       disconnect() {},
     }),
   });
-  await assert.rejects(client.sendCompanionRequest({ action: "configure" }), /Denied/);
+  await assert.rejects(client.sendOneOffRequest({ action: "saveAccount" }), /Denied/);
   const request = client.sendSessionRequest("codes");
   reply({ ok: false, error: "Denied" });
   await assert.rejects(request, /Denied/);

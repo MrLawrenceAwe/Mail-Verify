@@ -1,4 +1,4 @@
-export function createSuggestionView(document, { onClose, onRetry, onFill }) {
+export function createInlinePickerView(document, { onClose, onRetry, onFill }) {
   const host = document.createElement("div");
   host.dataset.yahooCodeFill = "suggestion";
   host.style.cssText = "position:fixed;z-index:2147483647;left:0;top:0";
@@ -23,18 +23,19 @@ export function createSuggestionView(document, { onClose, onRetry, onFill }) {
   </style><section aria-label="Yahoo Mail code suggestions"><div id="results"></div><div class="controls"><p id="status" role="status"></p><button id="retry" title="Check Yahoo again" aria-label="Check Yahoo again">↻</button><button id="close" aria-label="Dismiss code suggestions">×</button></div></section>`;
   const status = root.querySelector("#status");
   const results = root.querySelector("#results");
+  let renderedCodesKey;
   root.querySelector("#close").onclick = onClose;
   root.querySelector("#retry").onclick = onRetry;
 
   function clearCodes() {
     results.replaceChildren();
-    delete results.dataset.codes;
+    renderedCodesKey = undefined;
   }
 
   function renderCodes(codes, hostname) {
     const key = JSON.stringify(codes);
-    if (results.dataset.codes === key) return;
-    results.dataset.codes = key;
+    if (renderedCodesKey === key) return;
+    renderedCodesKey = key;
     results.replaceChildren();
     for (const item of codes) {
       const button = document.createElement("button");
@@ -50,5 +51,17 @@ export function createSuggestionView(document, { onClose, onRetry, onFill }) {
     }
   }
 
-  return { host, status, results, clearCodes, renderCodes };
+  function setStatus(message) {
+    status.textContent = message;
+  }
+
+  function hasCodes() {
+    return results.childElementCount > 0;
+  }
+
+  function disableCodeButton(button) {
+    button.disabled = true;
+  }
+
+  return { host, clearCodes, renderCodes, setStatus, hasCodes, disableCodeButton };
 }

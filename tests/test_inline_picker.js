@@ -50,6 +50,28 @@ test("suggestions sit below the field and stay within the viewport", () => {
   assert.deepEqual(suggestionPosition({ left: 900, top: 700, bottom: 740 }, 300, 110, 1000, 800), { left: 692, top: 586 });
 });
 
+test("picker repositions using the current viewport after resize", () => {
+  const frames = [];
+  const anchor = {};
+  let mounted;
+  const { browser, events } = pickerBrowser({
+    handleField: () => ({
+      ok: true, anchor,
+      rect: { left: 900, top: 100, bottom: 130 },
+    }),
+    onMount: node => { mounted = node; },
+    onFrame: fn => { frames.push(fn); return frames.length; },
+    sendMessage: () => new Promise(() => {}),
+  });
+  assert.equal(mounted.style.left, "900px");
+  browser.innerWidth = 1000;
+  browser.innerHeight = 150;
+  events.get("resize")();
+  frames.shift()();
+  assert.equal(mounted.style.left, "752px");
+  assert.equal(mounted.style.top, "36px");
+});
+
 test("old codes are withheld while waiting for this verification attempt", () => {
   const older = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 1000 };
   const newest = { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
@@ -95,7 +117,7 @@ test("resend before the first check returns does not revive an unseen old code",
   const requests = [];
   let now = 9500;
   const { events, timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor: {}, candidates: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     sendMessage: () => new Promise(resolve => requests.push(resolve)),
   });
@@ -122,7 +144,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   let observer, now = 10_000, visible = true, anchor = {}, responses = [], warnings = [];
   responses = [{ uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 }];
   const { events, timers, results, elements } = pickerBrowser({
-    handleField: () => ({ ok: visible, anchor, candidates: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    handleField: () => ({ ok: visible, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     sendMessage: async () => ({ ok: true, codes: responses, warnings }),
     onObserve: callback => { observer = callback; },
@@ -200,10 +222,10 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   let observer, discoveries = 0, detections = 0, visible = false, mounted;
   const cached = { inputs: [], contextRoots: [] };
   const { events, timers, elements } = pickerBrowser({
-    handleField: ({ cachedCandidates: candidates }) => {
+    handleField: ({ candidateCache: candidates }) => {
       detections++;
       if (!candidates) discoveries++;
-      return { ok: visible, candidates: cached, rect: { top: 100, bottom: 130, left: 20 } };
+      return { ok: visible, candidateCache: cached, rect: { top: 100, bottom: 130, left: 20 } };
     },
     onMount: node => { mounted = node; },
     onRemove: () => { mounted = undefined; },

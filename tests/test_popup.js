@@ -57,8 +57,8 @@ async function setup({ codes = [code], account = "test@yahoo.com" } = {}) {
       "setup",
       "companionSetup",
       "codeResults",
-      "connectForm",
-      "connect",
+      "addAccountForm",
+      "addAccountSubmit",
       "password",
       "email",
       "extensionId",
@@ -86,10 +86,10 @@ async function setup({ codes = [code], account = "test@yahoo.com" } = {}) {
         ? { accounts: account ? [account] : [] }
         : { codes: await state.fetchCodes() };
     },
-    async sendCompanionRequest(request) {
+    async sendOneOffRequest(request) {
       state.requests.push(request);
       if (state.failRemove) throw Error("Keychain unavailable");
-      return { accounts: request.action === "disconnect" ? [] : [request.email] };
+      return { accounts: request.action === "removeAccount" ? [] : [request.email] };
     },
   };
   const popup = createPopup({
@@ -253,7 +253,7 @@ test("removes an account and recovers from errors", async () => {
     const { controls, scheduled, state } = await setup();
     state.failRemove = failRemove;
     await controls.accounts.querySelectorAll("button")[0].trigger();
-    assert.equal(state.requests[0].action, "disconnect");
+    assert.equal(state.requests[0].action, "removeAccount");
     assert.equal(state.requests[0].email, "test@yahoo.com");
     assert.equal(scheduled.size, failRemove ? 1 : 0);
     assert.equal(controls.codeResults.hidden, !failRemove);
@@ -266,11 +266,11 @@ test("connects an account without retaining the form password", async () => {
   assert.equal(controls.setup.hidden, false);
   controls.email.value = "test@yahoo.com";
   controls.password.value = "app-password";
-  await controls.connectForm.trigger("submit");
+  await controls.addAccountForm.trigger("submit");
   await settle();
   assert.equal(controls.password.value, "");
   assert.deepEqual(state.requests[0], {
-    action: "configure",
+    action: "saveAccount",
     email: "test@yahoo.com",
     password: "app-password",
   });

@@ -1,12 +1,13 @@
-import { handleCodeField } from "./fill-code.js";
-import { createSuggestionView } from "./inline-picker-view.js";
-import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-policy.js";
+import { handleCodeField } from "./code-fields.js";
+import { createInlinePickerView } from "./inline-picker-view.js";
+import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
 
 export function suggestionPosition(rect, width, height, viewportWidth, viewportHeight) {
   const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
   const below = rect.bottom + 4;
   const top = below + height <= viewportHeight - 8
-    ? below : Math.max(8, rect.top - height - 4);
+    ? below
+    : Math.max(8, rect.top - height - 4);
   return { left, top };
 }
 
@@ -54,92 +55,108 @@ export function mutationAffectsPicker(records, host, contextRoots = []) {
 
 export function startInlinePicker({ browser = globalThis, handleField = handleCodeField } = {}) {
   const { document, window, location, chrome, MutationObserver, requestAnimationFrame,
-    setTimeout, clearTimeout, innerWidth, innerHeight, Date: clock = Date } = browser;
-  let view, timer, deadline = 0, checking = false;
-  let dismissed = false, generation = 0, lastURL = location.href;
+    setTimeout, clearTimeout, Date: clock = Date } = browser;
+  let view, pollTimer, pollDeadline = 0, checking = false;
+  let dismissed = false, attemptGeneration = 0, lastURL = location.href;
   let earliestCodeTime, anchor;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
-  let candidates;
+  let candidateCache;
   const locate = () => {
-    const field = handleField({ action: "detect", cachedCandidates: candidates });
-    candidates = field.candidates;
+    const field = handleField({ action: "detect", candidateCache });
+    candidateCache = field.candidateCache;
     return field;
   };
-  function remove() {
-    generation++;
-    clearTimeout(timer);
+  function unmountPicker() {
+    attemptGeneration++;
+    clearTimeout(pollTimer);
     view?.host.remove();
     view = undefined;
     anchor = undefined;
   }
-  function position(field = locate()) {
+  function positionPicker(field = locate()) {
     if (!view || !field.ok) return;
     const bounds = view.host.getBoundingClientRect();
-    const { left, top } = suggestionPosition(field.rect, bounds.width, bounds.height, innerWidth, innerHeight);
+    const { left, top } = suggestionPosition(field.rect, bounds.width, bounds.height, browser.innerWidth, browser.innerHeight);
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
-  function mount(field) {
+  function mountPicker(field) {
     earliestCodeTime ??= clock.now() - 5_000;
     anchor = field.anchor;
-    view = createSuggestionView(document, {
-      onClose: () => { dismissed = true; remove(); },
-      onRetry: () => { deadline = clock.now() + POLL_WINDOW_MS; check(); },
+    view = createInlinePickerView(document, {
+      onClose: () => {
+        dismissed = true;
+        unmountPicker();
+      },
+      onRetry: () => {
+        pollDeadline = clock.now() + POLL_WINDOW_MS;
+        checkForCodes();
+      },
       onFill: (item, button) => {
         if (clock.now() - item.receivedAt > MAX_CODE_AGE_MS) {
-          view.status.textContent = "This code is too old to suggest. Request a new one.";
-          button.disabled = true;
-          position();
+          view.setStatus("This code is too old to suggest. Request a new one.");
+          view.disableCodeButton(button);
+          positionPicker();
           return;
         }
         const result = handleField({ action: "fill", code: item.code });
-        if (result.ok) { dismissed = true; remove(); }
-        else { view.status.textContent = "Select the code field and try again."; position(); }
+        if (result.ok) {
+          dismissed = true;
+          unmountPicker();
+        } else {
+          view.setStatus("Select the code field and try again.");
+          positionPicker();
+        }
       },
     });
     document.documentElement.append(view.host);
-    deadline = clock.now() + POLL_WINDOW_MS;
-    position(field);
-    check();
+    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    positionPicker(field);
+    checkForCodes();
   }
-  async function check() {
-    clearTimeout(timer);
+  async function checkForCodes() {
+    clearTimeout(pollTimer);
     if (checking || !view || document.hidden || !locate().ok) return;
     checking = true;
-    const current = generation;
+    const requestGeneration = attemptGeneration;
     let checkFailed = false;
-    if (!view.results.childElementCount) view.status.textContent = "Checking Yahoo Mail…";
+    if (!view.hasCodes()) view.setStatus("Checking Yahoo Mail…");
     try {
       const response = await chrome.runtime.sendMessage({ type: "yahoo-inline-codes" });
-      if (current !== generation || !view) return;
+      if (requestGeneration !== attemptGeneration || !view) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check Yahoo.");
       checkFailed = !!response.warnings?.length;
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
       const codes = selectSuggestedCodes(response.codes, earliestCodeTime, clock.now(), excludedMessageKeys);
       view.renderCodes(codes, location.hostname);
-      view.status.textContent = response.warnings?.length
+      const status = response.warnings?.length
         ? `Could not check: ${response.warnings.join("; ")}`
-        : codes.length ? location.hostname : "Waiting for a Yahoo email code…";
+        : codes.length
+          ? location.hostname
+          : "Waiting for a Yahoo email code…";
+      view.setStatus(status);
     } catch (error) {
       checkFailed = true;
-      if (current === generation && view) view.status.textContent = error.message;
+      if (requestGeneration === attemptGeneration && view) view.setStatus(error.message);
     } finally {
       checking = false;
-      if (view) position();
-      if (view && clock.now() < deadline)
-        timer = setTimeout(check, current === generation ? 2000 : 0);
-      else if (view && !view.results.childElementCount && !checkFailed) view.status.textContent = "No code found. Click ↻ to check again.";
+      if (view) positionPicker();
+      if (view && clock.now() < pollDeadline) {
+        pollTimer = setTimeout(checkForCodes, requestGeneration === attemptGeneration ? 2000 : 0);
+      } else if (view && !view.hasCodes() && !checkFailed) {
+        view.setStatus("No code found. Click ↻ to check again.");
+      }
     }
   }
   function resetAttempt({ newPage = false } = {}) {
-    if (!newPage) for (const uid of seenMessageKeys) excludedMessageKeys.add(uid);
-    remove();
+    if (!newPage) for (const messageKey of seenMessageKeys) excludedMessageKeys.add(messageKey);
+    unmountPicker();
     earliestCodeTime = undefined;
     if (newPage) {
       dismissed = false;
       seenMessageKeys = new Set();
       excludedMessageKeys = new Set();
-      candidates = undefined;
+      candidateCache = undefined;
     }
   }
   function scan(refresh = true) {
@@ -147,17 +164,20 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       resetAttempt({ newPage: true });
       lastURL = location.href;
     }
-    if (document.hidden) { remove(); return; }
+    if (document.hidden) {
+      unmountPicker();
+      return;
+    }
     if (dismissed) return;
-    if (refresh) candidates = undefined;
+    if (refresh) candidateCache = undefined;
     const field = locate();
     if (!field.ok) {
       if (view) resetAttempt();
       return;
     }
     if (view && anchor !== field.anchor) resetAttempt();
-    if (!view && !dismissed) mount(field);
-    else position(field);
+    if (!view && !dismissed) mountPicker(field);
+    else positionPicker(field);
   }
   let scanTimer;
   const scheduleScan = () => {
@@ -174,7 +194,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     });
   };
   new MutationObserver((records) => {
-    if (mutationAffectsPicker(records, view?.host, candidates?.contextRoots)) scheduleScan();
+    if (mutationAffectsPicker(records, view?.host, candidateCache?.contextRoots)) scheduleScan();
   }).observe(document.documentElement, {
     childList: true, subtree: true, characterData: true, characterDataOldValue: true, attributes: true,
     attributeFilter: ["type", "name", "id", "placeholder", "autocomplete", "aria-label", "hidden", "style", "class", "disabled", "readonly", "maxlength", "for"],
@@ -187,18 +207,25 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     // second cannot be distinguished from an unseen code sent just before it.
     // Start with the next second so a pending check cannot revive the old code.
     earliestCodeTime = Math.floor(clock.now() / 1000) * 1000 + 1000;
-    for (const uid of seenMessageKeys) excludedMessageKeys.add(uid);
+    for (const messageKey of seenMessageKeys) excludedMessageKeys.add(messageKey);
     dismissed = false;
-    generation++;
+    attemptGeneration++;
     view?.clearCodes();
-    deadline = clock.now() + POLL_WINDOW_MS;
-    if (view) { view.status.textContent = "Waiting for your new code…"; check(); }
-    else scan();
+    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    if (view) {
+      view.setStatus("Waiting for your new code…");
+      checkForCodes();
+    } else {
+      scan();
+    }
   }, true);
   document.addEventListener("focusin", scheduleScan);
   document.addEventListener("visibilitychange", scheduleScan);
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && view) { dismissed = true; remove(); }
+    if (event.key === "Escape" && view) {
+      dismissed = true;
+      unmountPicker();
+    }
   });
   window.addEventListener("scroll", schedulePosition, true);
   window.addEventListener("resize", schedulePosition);
