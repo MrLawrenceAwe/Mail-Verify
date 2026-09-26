@@ -53,6 +53,14 @@ export function mutationAffectsPicker(records, host, contextRoots = []) {
   });
 }
 
+export function isCodeRequestControl(control) {
+  const label = (control.getAttribute?.("aria-label") || control.textContent || "")
+    .trim().replace(/\s+/g, " ");
+  if (/\b(?:coupon|promo|discount|referral)\b/i.test(label)) return false;
+  return /^(?:re-?send|send|request|get|email)\b/i.test(label) &&
+    (/\b(?:code|otp|passcode)\b/i.test(label) || /^re-?send(?: again)?$/i.test(label));
+}
+
 export function startInlinePicker({ browser = globalThis, handleField = handleCodeField } = {}) {
   const { document, window, location, chrome, MutationObserver, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
@@ -119,6 +127,10 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   }
   async function checkForCodes() {
     clearTimeout(pollTimer);
+    if (lastURL !== location.href) {
+      syncPicker();
+      return;
+    }
     if (checking || !view || document.hidden || !detectCodeField().ok) return;
     checking = true;
     const requestGeneration = attemptGeneration;
@@ -126,6 +138,10 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     if (!view.hasCodes()) view.setStatus("Checking Yahoo Mail…");
     try {
       const response = await chrome.runtime.sendMessage({ type: "yahoo-inline-codes" });
+      if (lastURL !== location.href) {
+        syncPicker();
+        return;
+      }
       if (requestGeneration !== attemptGeneration || !view) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check Yahoo.");
       checkFailed = !!response.warnings?.length;
@@ -152,13 +168,12 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     }
   }
   function resetAttempt({ newPage = false } = {}) {
-    if (!newPage) excludeSeenMessages();
+    excludeSeenMessages();
     unmountPicker();
     minReceivedAtMs = undefined;
     if (newPage) {
       dismissed = false;
       seenMessageKeys = new Set();
-      excludedMessageKeys = new Set();
       candidateCache = undefined;
     }
   }
@@ -204,8 +219,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button]");
-    if (!control ||
-        !/^(?:send (?:a )?(?:new|another) code|resend(?: (?:the )?code)?)$/i.test((control.textContent || "").trim()) || !detectCodeField().ok) return;
+    if (!control || !isCodeRequestControl(control) || !detectCodeField().ok) return;
     // IMAP dates have one-second precision. Codes from the resend's current
     // second cannot be distinguished from an unseen code sent just before it.
     // Start with the next second so a pending check cannot revive the old code.
@@ -231,5 +245,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   window.addEventListener("scroll", schedulePosition, true);
   window.addEventListener("resize", schedulePosition);
   window.addEventListener("popstate", scheduleScan);
+  window.addEventListener("hashchange", scheduleScan);
+  window.navigation?.addEventListener("currententrychange", syncPicker);
   syncPicker();
 }
