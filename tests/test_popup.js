@@ -40,6 +40,7 @@ class FakeElement {
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const code = {
   code: "123456",
+  accountEmail: "test@yahoo.com",
   sender: "sender@example.com",
   subject: "Sign in",
   receivedAt: 1000,

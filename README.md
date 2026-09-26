@@ -75,7 +75,7 @@ The installer test installs into a temporary directory, launches that copy to ve
 
 ## Code organisation
 
-- `extension/content-entry.js` loads `inline.js` for automatic field detection and the on-page picker; `background.js` brokers active-tab native checks.
+- `extension/content-entry.js` loads `inline.js` for automatic field detection and picker lifecycle; `inline-view.js` renders the on-page picker. `background.js` brokers active-tab native checks.
 - `extension/popup-entry.js` starts the popup; `popup.js` owns its controls, rendering, and polling.
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
 - `extension/fill-code.js` exports the self-contained function injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page.

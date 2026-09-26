@@ -78,9 +78,9 @@ export function fillCode(code, detectOnly = false, cachedCandidates = null) {
     focusedCodeInput || (candidates.length === 1 ? candidates[0] : null);
   if (detectOnly) {
     const anchor = targetInput || (candidates.length && candidates.every((el) => el.maxLength === 1) ? candidates[0] : null);
-    if (!anchor) return { ok: false, contextRoots: discovery.contextRoots, candidates: discovery };
+    if (!anchor) return { ok: false, candidates: discovery };
     const { top, bottom, left, right } = anchor.getBoundingClientRect();
-    return { ok: true, anchor, rect: { top, bottom, left, right }, contextRoots: discovery.contextRoots, candidates: discovery };
+    return { ok: true, anchor, rect: { top, bottom, left, right }, candidates: discovery };
   }
   const inputs = getVisibleInputs();
   let fields;

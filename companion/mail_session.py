@@ -57,7 +57,7 @@ class MailSession:
             # Sequence numbers bound the first scan to the newest messages.
             if not self.message_count:
                 self.last_seen_uid = 0
-                return [], []
+                return []
             first = max(1, self.message_count - MAX_MESSAGES + 1)
             status, metadata = self.conn.fetch(
                 f"{first}:{self.message_count}", "(UID INTERNALDATE RFC822.SIZE)"
@@ -71,7 +71,7 @@ class MailSession:
                 if (match := re.search(rb"\bUID (\d+)\b", entry))
             ]
             self.last_seen_uid = max(map(int, uids), default=0)
-            return uids, metadata
+            return metadata
 
         status, data = self.conn.uid(
             "search", None, "UID", f"{self.last_seen_uid + 1}:*"
@@ -84,13 +84,13 @@ class MailSession:
         if all_uids:
             self.last_seen_uid = int(all_uids[-1])
         if not uids:
-            return [], []
+            return []
         status, metadata = self.conn.uid(
             "fetch", b",".join(uids), "(UID INTERNALDATE RFC822.SIZE)"
         )
         if status != "OK":
             raise UserError("Yahoo could not inspect recent messages.")
-        return uids, metadata
+        return metadata
 
     def _eligible_messages(self, metadata, now):
         eligible = {}
@@ -107,7 +107,7 @@ class MailSession:
                 eligible[uid.group(1)] = min(received, now)
         return eligible
 
-    def _fetch_codes(self, candidates, eligible):
+    def _fetch_codes(self, candidates):
         new_code_count = 0
         # Return codes from the newest batch immediately. Older candidates stay
         # queued for the next poll; if no code is found, continue this check.
@@ -127,7 +127,7 @@ class MailSession:
                 if uid:
                     messages[uid.group(1)] = entry[1]
             for uid in batch:
-                received = eligible[uid]
+                received = self.pending_by_uid[uid]
                 if uid not in messages:
                     # An OK fetch can omit a body. Try this UID again on the next poll.
                     continue
@@ -157,7 +157,7 @@ class MailSession:
                 for uid, item in self.codes_by_uid.items()
                 if 0 <= now - item["receivedAt"] / 1000 <= MAX_CODE_AGE_SECONDS
             }
-            _, metadata = self._new_message_metadata()
+            metadata = self._new_message_metadata()
             self.pending_by_uid.update(self._eligible_messages(metadata, now))
             # Keep deferred work bounded, fresh, and behind newly arrived mail.
             cutoff = (
@@ -177,7 +177,7 @@ class MailSession:
             }
             candidates = list(self.pending_by_uid)[:MAX_MESSAGES]
             self.pending_by_uid = {uid: self.pending_by_uid[uid] for uid in candidates}
-            self._fetch_codes(candidates, self.pending_by_uid)
+            self._fetch_codes(candidates)
             return self._results()
         except Exception:
             self.close()

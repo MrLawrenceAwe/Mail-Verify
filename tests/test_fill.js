@@ -203,9 +203,9 @@ test("generic code field uses verification context outside its form", () => {
   });
   const result = vm.runInContext(`(${fillCode.toString()})("", true)`, context);
   assert.equal(result.ok, true);
-  assert.equal(result.contextRoots.length, 2);
-  assert.equal(result.contextRoots[0], form);
-  assert.equal(result.contextRoots[1], main);
+  assert.equal(result.candidates.contextRoots.length, 2);
+  assert.equal(result.candidates.contextRoots[0], form);
+  assert.equal(result.candidates.contextRoots[1], main);
   main.textContent = "Enter code to redeem a discount";
   assert.equal(vm.runInContext(`(${fillCode.toString()})("", true)`, context).ok, false);
 });
@@ -242,7 +242,7 @@ test("detection reports generic code context for later page updates", () => {
   });
   const result = vm.runInContext(`(${fillCode.toString()})("", true)`, context);
   assert.equal(result.ok, false);
-  assert.equal(result.contextRoots[0], form);
+  assert.equal(result.candidates.contextRoots[0], form);
 });
 
 

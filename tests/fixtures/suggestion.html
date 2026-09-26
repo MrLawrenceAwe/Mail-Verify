@@ -4,7 +4,7 @@
 <script type="module">
 import { startInlinePicker } from '/extension/inline.js';
 // Synthetic mail response; no native bridge or real inbox access in this fixture.
-window.chrome = {runtime:{sendMessage:async()=>({ok:true,codes:[{code:'331519',sender:'auth@example.test',subject:'Your security code',receivedAt:Date.now()}]})}};
+window.chrome = {runtime:{sendMessage:async()=>({ok:true,codes:[{uid:1,accountEmail:'preview@yahoo.com',code:'331519',sender:'auth@example.test',subject:'Your security code',receivedAt:Date.now()}]})}};
 document.querySelector('input').focus();
 document.querySelector('input').addEventListener('input',e=>document.querySelector('#feedback').textContent=e.target.value==='331519'?'Code filled successfully.':'');
 startInlinePicker();
