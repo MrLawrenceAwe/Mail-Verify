@@ -1,4 +1,9 @@
-export function fillCode(code, detectOnly = false, cachedCandidates = null) {
+export function handleCodeField({ action, code, cachedCandidates } = {}) {
+  if (action !== "detect" && action !== "fill")
+    return { ok: false, error: "Unsupported code field action." };
+  const detectOnly = action === "detect";
+  if (!detectOnly && typeof code !== "string")
+    return { ok: false, error: "Missing verification code." };
   // Detection is read-only; filling happens only after the user selects a code.
   const isVisible = (el) => {
     if (

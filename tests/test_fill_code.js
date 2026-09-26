@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { fillCode } from "../extension/fill-code.js";
+import { handleCodeField } from "../extension/fill-code.js";
 
 // Chrome serializes this function into the page; evaluate the exported function
 // in an isolated DOM context to verify it has no module-scope dependencies.
@@ -62,7 +62,7 @@ function run(inputs, activeElement = null) {
     },
   };
   vm.createContext(ctx);
-  return vm.runInContext(`(${fillCode.toString()})("123456")`, ctx);
+  return vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456" })`, ctx);
 }
 
 test("fills labelled fields and rejects unrelated or hidden fields", () => {
@@ -173,7 +173,7 @@ test("follows split fields replaced after each digit", () => {
   };
   vm.createContext(rerenderCtx);
   assert.equal(
-    vm.runInContext(`(${fillCode.toString()})("123456")`, rerenderCtx).ok,
+    vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456" })`, rerenderCtx).ok,
     true,
   );
   assert.equal(current.map((x) => x.value).join(""), "123456");
@@ -201,13 +201,13 @@ test("generic code field uses verification context outside its form", () => {
     innerHeight: 800,
     innerWidth: 1200,
   });
-  const result = vm.runInContext(`(${fillCode.toString()})("", true)`, context);
+  const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context);
   assert.equal(result.ok, true);
   assert.equal(result.candidates.contextRoots.length, 2);
   assert.equal(result.candidates.contextRoots[0], form);
   assert.equal(result.candidates.contextRoots[1], main);
   main.textContent = "Enter code to redeem a discount";
-  assert.equal(vm.runInContext(`(${fillCode.toString()})("", true)`, context).ok, false);
+  assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
 });
 
 test("explicit hints skip page text and generic hints read shared context once", () => {
@@ -228,7 +228,7 @@ test("automatic detection does not fill or dispatch events", () => {
     document: { querySelectorAll: () => [input], activeElement: input },
     innerHeight: 800, innerWidth: 1200,
   });
-  assert.equal(vm.runInContext(`(${fillCode.toString()})("", true)`, context).ok, true);
+  assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, true);
   assert.equal(input.value, undefined);
   assert.deepEqual(input.events, []);
 });
@@ -240,7 +240,7 @@ test("detection reports generic code context for later page updates", () => {
     document: { querySelectorAll: () => [input], activeElement: input },
     innerHeight: 800, innerWidth: 1200,
   });
-  const result = vm.runInContext(`(${fillCode.toString()})("", true)`, context);
+  const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context);
   assert.equal(result.ok, false);
   assert.equal(result.candidates.contextRoots[0], form);
 });
@@ -255,18 +255,18 @@ test("cached detection tracks offscreen candidates without rescanning unrelated 
     document: { querySelectorAll: () => { queries++; return [input, unrelated]; }, activeElement: null },
     innerHeight: 800, innerWidth: 1200,
   });
-  vm.runInContext(`var detect = (${fillCode.toString()}); var field = detect("", true);`, context);
+  vm.runInContext(`var detect = (${handleCodeField.toString()}); var field = detect({ action: "detect" });`, context);
   assert.equal(context.field.ok, false);
   input.rect = { top: 100, bottom: 130, left: 0, right: 100 };
-  vm.runInContext('field = detect("", true, field.candidates);', context);
+  vm.runInContext('field = detect({ action: "detect", cachedCandidates: field.candidates });', context);
   assert.equal(context.field.ok, true);
   assert.equal(queries, 1);
   input.isConnected = false;
-  vm.runInContext('field = detect("", true, field.candidates);', context);
+  vm.runInContext('field = detect({ action: "detect", cachedCandidates: field.candidates });', context);
   assert.equal(context.field.ok, false);
   input.isConnected = true;
   input.autocomplete = "";
-  vm.runInContext('field = detect("", true);', context);
+  vm.runInContext('field = detect({ action: "detect" });', context);
   assert.equal(context.field.ok, false);
   assert.equal(queries, 2);
 });

@@ -9,7 +9,7 @@ The Mac companion has already been installed by Codex. Finish these steps:
 1. In Chrome, type `chrome://extensions` into the address bar.
 2. Turn on **Developer mode**, choose **Load unpacked**, and select the `extension` folder beside this guide.
 3. Pin **Yahoo Code Fill** using Chrome’s Extensions menu, then open it.
-4. Enter your Yahoo email and a **Yahoo-generated app password**, then click **Add account securely**. Generate that password in [Yahoo Account Security](https://login.yahoo.com/account/security). Use an app password, not your normal account password. Enter it in the extension, not in chat. Use **Add another Yahoo account** for each additional inbox.
+4. Enter your Yahoo email and a **Yahoo-generated app password**, then click **Add account**. Generate that password in [Yahoo Account Security](https://login.yahoo.com/account/security). Use an app password, not your normal account password. Enter it in the extension, not in chat. Use **Add another Yahoo account** for each additional inbox.
 5. If macOS asks for Keychain access, approve access for the companion’s Python process.
 
 Expected extension ID: `ggmcbkkmgcdiimnpkekakaegmclkgkjj`.
@@ -75,10 +75,10 @@ The installer test installs into a temporary directory, launches that copy to ve
 
 ## Code organisation
 
-- `extension/content-entry.js` loads `inline.js` for automatic field detection and picker lifecycle; `inline-view.js` renders the on-page picker. `background.js` brokers active-tab native checks.
-- `extension/popup-entry.js` starts the popup; `popup.js` owns its controls, rendering, and polling.
+- `extension/content-entry.js` loads `inline-picker.js` for automatic field detection and picker lifecycle; `inline-picker-view.js` renders the on-page picker. `background.js` brokers active-tab native checks.
+- `extension/popup-entry.js` starts the popup; `popup.js` manages account actions and polling, while `popup-view.js` renders its controls and code cards.
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
-- `extension/fill-code.js` exports the self-contained function injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page.
+- `extension/fill-code.js` exports the self-contained field detector and filler injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page. `code-policy.js` shares timing limits between the popup and inline picker.
 - `companion/host.py` handles request dispatch and native-message framing; `mail_session.py` manages IMAP connections and bounded inbox scans.
 - `companion/code_extraction.py` parses email content and extracts a single unambiguous code.
 - `companion/keychain.py` stores credentials; `errors.py` defines user-facing errors.

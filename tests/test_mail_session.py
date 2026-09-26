@@ -148,7 +148,7 @@ class MailSessionTests(unittest.TestCase):
             self.assertEqual(conn.batches[2], [b"3", b"2", b"1"])
             session.recent_codes()
             self.assertEqual(len(conn.batches), 3)
-            session.pending_by_uid[b"99"] = time.time()
+            session.pending_by_uid[99] = time.time()
             session.close()
             self.assertEqual(session.pending_by_uid, {})
 
@@ -162,7 +162,7 @@ class MailSessionTests(unittest.TestCase):
         session = mail_session.MailSession({})
         session.conn = FakeConnection()
         session.last_seen_uid = 10
-        session.pending_by_uid[b"9"] = time.time() - 601
+        session.pending_by_uid[9] = time.time() - 601
         self.assertEqual(session.recent_codes(), [])
         self.assertEqual(session.pending_by_uid, {})
 
@@ -291,13 +291,13 @@ class MailSessionTests(unittest.TestCase):
         session = mail_session.MailSession({})
         conn = session.conn = FakeConnection()
         session.last_seen_uid = 10
-        session.pending_by_uid[b"9"] = time.time() - 60
+        session.pending_by_uid[9] = time.time() - 60
 
         self.assertEqual(session.recent_codes(), [])
-        self.assertIn(b"9", session.pending_by_uid)
+        self.assertIn(9, session.pending_by_uid)
         self.assertEqual(session.recent_codes()[0]["code"], "482913")
         self.assertEqual(conn.body_fetches, 2)
-        self.assertNotIn(b"9", session.pending_by_uid)
+        self.assertNotIn(9, session.pending_by_uid)
 
     def test_older_uid_with_newer_arrival_time_can_enter_results(self):
         now = time.time()
@@ -314,7 +314,7 @@ class MailSessionTests(unittest.TestCase):
         session = mail_session.MailSession({})
         session.conn = FakeConnection()
         session.last_seen_uid = 10
-        session.pending_by_uid[b"1"] = now - 10
+        session.pending_by_uid[1] = now - 10
         session.codes_by_uid = {
             uid: {"uid": uid, "code": str(uid), "receivedAt": int((now - 60) * 1000)}
             for uid in range(2, 7)

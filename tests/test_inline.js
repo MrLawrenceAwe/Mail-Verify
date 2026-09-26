@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { suggestionPosition, freshCodes, mutationAffectsPicker, startInlinePicker } from "../extension/inline.js";
+import { suggestionPosition, selectSuggestedCodes, mutationAffectsPicker, startInlinePicker } from "../extension/inline-picker.js";
 
-function pickerBrowser({ fill, now = Date.now, sendMessage, onMount = () => {},
+function pickerBrowser({ handleField, now = Date.now, sendMessage, onMount = () => {},
   onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn() }) {
   const events = new Map(), timers = [];
   const results = {
@@ -41,7 +41,7 @@ function pickerBrowser({ fill, now = Date.now, sendMessage, onMount = () => {},
     clearTimeout: () => {},
     chrome: { runtime: { sendMessage } },
   };
-  startInlinePicker({ browser, fill });
+  startInlinePicker({ browser, handleField });
   return { browser, events, timers, results, elements };
 }
 
@@ -53,9 +53,9 @@ test("suggestions sit below the field and stay within the viewport", () => {
 test("old codes are withheld while waiting for this verification attempt", () => {
   const older = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 1000 };
   const newest = { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
-  assert.deepEqual(freshCodes([older], 5000, 10000), []);
-  assert.deepEqual(freshCodes([older, newest], 5000, 10000), [newest]);
-  assert.deepEqual(freshCodes([newest], 9500, 10000), []);
+  assert.deepEqual(selectSuggestedCodes([older], 5000, 10000), []);
+  assert.deepEqual(selectSuggestedCodes([older, newest], 5000, 10000), [newest]);
+  assert.deepEqual(selectSuggestedCodes([newest], 9500, 10000), []);
 });
 
 test("only the latest code per sender is suggested, without changing the response", () => {
@@ -64,7 +64,7 @@ test("only the latest code per sender is suggested, without changing the respons
     { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 },
     { uid: 3, accountEmail: "test@yahoo.com", code: "333333", sender: "other@example.test", receivedAt: 9500 },
   ];
-  assert.deepEqual(freshCodes(codes, 5000, 10000).map(x => x.code), ["333333", "222222"]);
+  assert.deepEqual(selectSuggestedCodes(codes, 5000, 10000).map(x => x.code), ["333333", "222222"]);
   assert.equal(codes[0].code, "111111");
 });
 
@@ -73,13 +73,13 @@ test("codes without a sender remain separate suggestions", () => {
     { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "", receivedAt: 9000 },
     { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "", receivedAt: 9500 },
   ];
-  assert.deepEqual(freshCodes(codes, 8000, 10000).map(item => item.code), ["222222", "111111"]);
+  assert.deepEqual(selectSuggestedCodes(codes, 8000, 10000).map(item => item.code), ["222222", "111111"]);
 });
 
 test("UID exclusion distinguishes two messages received in the same second", () => {
   const old = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   const newer = { uid: 8, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
-  assert.deepEqual(freshCodes([old, newer], 9000, 9500, new Set(["test@yahoo.com:7"])), [newer]);
+  assert.deepEqual(selectSuggestedCodes([old, newer], 9000, 9500, new Set(["test@yahoo.com:7"])), [newer]);
 });
 
 test("same sender and UID in separate accounts remain distinct", () => {
@@ -87,15 +87,15 @@ test("same sender and UID in separate accounts remain distinct", () => {
     { uid: 7, code: "111111", sender: "auth@example.test", accountEmail: "one@yahoo.com", receivedAt: 9000 },
     { uid: 7, code: "222222", sender: "auth@example.test", accountEmail: "two@yahoo.com", receivedAt: 9100 },
   ];
-  assert.deepEqual(freshCodes(codes, 8000, 10000).map(x => x.code), ["222222", "111111"]);
-  assert.deepEqual(freshCodes(codes, 8000, 10000, new Set(["one@yahoo.com:7"])).map(x => x.code), ["222222"]);
+  assert.deepEqual(selectSuggestedCodes(codes, 8000, 10000).map(x => x.code), ["222222", "111111"]);
+  assert.deepEqual(selectSuggestedCodes(codes, 8000, 10000, new Set(["one@yahoo.com:7"])).map(x => x.code), ["222222"]);
 });
 
 test("resend before the first check returns does not revive an unseen old code", async () => {
   const requests = [];
   let now = 9500;
   const { events, timers, results } = pickerBrowser({
-    fill: () => ({ ok: true, anchor: {}, candidates: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    handleField: () => ({ ok: true, anchor: {}, candidates: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     sendMessage: () => new Promise(resolve => requests.push(resolve)),
   });
@@ -122,7 +122,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   let observer, now = 10_000, visible = true, anchor = {}, responses = [], warnings = [];
   responses = [{ uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 }];
   const { events, timers, results, elements } = pickerBrowser({
-    fill: () => ({ ok: visible, anchor, candidates: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    handleField: () => ({ ok: visible, anchor, candidates: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     sendMessage: async () => ({ ok: true, codes: responses, warnings }),
     onObserve: callback => { observer = callback; },
@@ -200,7 +200,7 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   let observer, discoveries = 0, detections = 0, visible = false, mounted;
   const cached = { inputs: [], contextRoots: [] };
   const { events, timers, elements } = pickerBrowser({
-    fill: (_code, _detect, candidates) => {
+    handleField: ({ cachedCandidates: candidates }) => {
       detections++;
       if (!candidates) discoveries++;
       return { ok: visible, candidates: cached, rect: { top: 100, bottom: 130, left: 20 } };
