@@ -221,9 +221,10 @@ export function startInlinePicker() {
     const control = event.target.closest?.("button, a, [role=button]");
     if (!control ||
         !/^(?:send (?:a )?(?:new|another) code|resend(?: (?:the )?code)?)$/i.test((control.textContent || "").trim()) || !locate().ok) return;
-    // A resend invalidates the previous suggestion immediately, including any
-    // old response already in flight. IMAP dates have one-second precision.
-    requestStartedAt = Math.floor(Date.now() / 1000) * 1000;
+    // IMAP dates have one-second precision. Codes from the resend's current
+    // second cannot be distinguished from an unseen code sent just before it.
+    // Start with the next second so a pending check cannot revive the old code.
+    requestStartedAt = Math.floor(Date.now() / 1000) * 1000 + 1000;
     for (const uid of knownUids) excludedUids.add(uid);
     dismissed = false;
     generation++;

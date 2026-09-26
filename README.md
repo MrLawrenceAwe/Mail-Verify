@@ -25,7 +25,7 @@ If reinstalling or setting up another Mac, first double-click **Install Companio
 3. It checks automatically, then every 2 seconds after each response for up to 2 minutes. The destination website is shown below the suggestion. Hover over a code to see its sender and subject, then click the matching code to fill it.
 4. Use **↻** to restart checking, or × / Escape to dismiss the suggestion for this page.
 
-The inline suggestion only shows mail received since the current code step began, with a five-second allowance for mail that arrived just before the field appeared. It keeps the newest code per sender. Clicking “Send new code” or “Resend code” clears the old suggestion immediately and waits for newer mail. The toolbar popup remains available for manually choosing older codes.
+The inline suggestion only shows mail received since the current code step began, with a five-second allowance for mail that arrived just before the field appeared. It keeps the newest code per sender. Clicking “Send new code” or “Resend code” clears the old suggestion immediately and waits for newer mail. Since Yahoo's IMAP arrival times have one-second precision, the picker skips codes dated in the same second as the resend click; use the toolbar popup if a new code arrives that quickly. The popup also remains available for manually choosing older codes.
 
 No toolbar popup is required after setup. Hidden tabs stop checking. Scroll and resize updates reuse cached candidate fields and position the picker on the next animation frame; relevant page changes refresh field discovery. The extension does not click Submit, although some websites submit automatically when all digits are entered.
 
