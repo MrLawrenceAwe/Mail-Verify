@@ -207,6 +207,60 @@ test("new route clears suggestions even when the code field is reused", async ()
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
 });
 
+test("scrolling away and back keeps a code from the same verification step", async () => {
+  let now = 10_000, visible = true;
+  const anchor = {
+    parentElement: { textContent: "Enter the verification code" },
+    getClientRects: () => [1],
+    checkVisibility: () => true,
+    getBoundingClientRect: () => visible
+      ? { left: 20, right: 120, top: 100, bottom: 130 }
+      : { left: 20, right: 120, top: -130, bottom: -100 },
+  };
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
+  const { events, results } = pickerBrowser({
+    handleField: () => ({ ok: visible, anchor, candidateCache: { inputs: [anchor], contextRoots: [] }, rect: anchor.getBoundingClientRect() }),
+    now: () => now,
+    sendMessage: async () => ({ ok: true, codes: [code] }),
+  });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  visible = false;
+  events.get("scroll")();
+  now = 30_000;
+  visible = true;
+  events.get("scroll")();
+  await flush();
+  assert.equal(results.childElementCount, 1);
+  assert.equal(results.children[0].strong.textContent, "Fill code 111111");
+});
+
+test("returning to a hidden tab starts a check while the old one is pending", async () => {
+  const requests = [];
+  const anchor = {};
+  const { browser, events, timers, results } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { left: 20, top: 100, bottom: 130 } }),
+    now: () => 10_000,
+    sendMessage: () => new Promise(resolve => requests.push(resolve)),
+  });
+  assert.equal(requests.length, 1);
+  browser.document.hidden = true;
+  events.get("visibilitychange")();
+  timers.shift()();
+  browser.document.hidden = false;
+  events.get("visibilitychange")();
+  timers.shift()();
+  assert.equal(requests.length, 2);
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
+  requests[0]({ ok: true, codes: [] });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(results.childElementCount, 0);
+  requests[1]({ ok: true, codes: [code] });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(results.children[0].strong.textContent, "Fill code 111111");
+});
+
 test("changed verification instructions reset codes on the same field and URL", async () => {
   let observer, now = 10_000, mounts = 0;
   const parent = {};
@@ -330,12 +384,13 @@ test("page mutations only rescan when fields or their form can change", () => {
 test("scroll positioning uses animation frames and cached candidates; mutations rediscover", async () => {
   const frames = [];
   let observer, discoveries = 0, detections = 0, visible = false, mounted;
+  const anchor = {};
   const cached = { inputs: [], contextRoots: [] };
   const { events, timers, elements } = pickerBrowser({
     handleField: ({ candidateCache: candidates }) => {
       detections++;
       if (!candidates) discoveries++;
-      return { ok: visible, candidateCache: cached, rect: { top: 100, bottom: 130, left: 20 } };
+      return { ok: visible, anchor, candidateCache: cached, rect: { top: 100, bottom: 130, left: 20 } };
     },
     onMount: node => { mounted = node; },
     onRemove: () => { mounted = undefined; },

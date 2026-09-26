@@ -82,7 +82,7 @@ export function isCodeRequestControl(control) {
 export function startInlinePicker({ browser = globalThis, handleField = handleCodeField } = {}) {
   const { document, window, location, chrome, MutationObserver, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
-  let view, pollTimer, pollDeadline = 0, checking = false;
+  let view, pollTimer, pollDeadline = 0, activeCheck;
   let dismissed = false, attemptGeneration = 0, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
@@ -92,13 +92,16 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     candidateCache = field.candidateCache;
     return field;
   };
-  function unmountPicker() {
+  function unmountPicker({ preserveStep = false } = {}) {
     attemptGeneration++;
+    activeCheck = undefined;
     clearTimeout(pollTimer);
     view?.host.remove();
     view = undefined;
-    anchor = undefined;
-    stepContext = undefined;
+    if (!preserveStep) {
+      anchor = undefined;
+      stepContext = undefined;
+    }
   }
   function dismissPicker() {
     dismissed = true;
@@ -151,8 +154,8 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       syncPicker();
       return;
     }
-    if (checking || !view || document.hidden || !detectCodeField().ok) return;
-    checking = true;
+    if (activeCheck || !view || document.hidden || !detectCodeField().ok) return;
+    const check = activeCheck = {};
     const requestGeneration = attemptGeneration;
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking Yahoo Mail…");
@@ -178,7 +181,8 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       checkFailed = true;
       if (requestGeneration === attemptGeneration && view) view.setStatus(error.message);
     } finally {
-      checking = false;
+      if (activeCheck !== check) return;
+      activeCheck = undefined;
       if (view) positionPicker();
       if (view && clock.now() < pollDeadline) {
         pollTimer = setTimeout(checkForCodes, requestGeneration === attemptGeneration ? 2000 : 0);
@@ -199,27 +203,38 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       candidateCache = undefined;
     }
   }
+  function anchorIsOffscreen(field) {
+    if (!anchor || !field.candidateCache?.inputs?.includes(anchor) ||
+        anchor.isConnected === false || anchor.disabled || anchor.readOnly ||
+        anchor.type === "hidden" || !anchor.getClientRects?.().length ||
+        !anchor.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true })) return false;
+    const rect = anchor.getBoundingClientRect();
+    return rect.bottom <= 0 || rect.right <= 0 ||
+      rect.top >= browser.innerHeight || rect.left >= browser.innerWidth;
+  }
   function syncPicker({ refreshCandidates = true } = {}) {
     if (lastURL !== location.href) {
       resetAttempt({ newPage: true });
       lastURL = location.href;
     }
     if (document.hidden) {
-      unmountPicker();
+      if (view) unmountPicker({ preserveStep: true });
       return;
     }
     if (dismissed) return;
     if (refreshCandidates) candidateCache = undefined;
     const field = detectCodeField();
     if (!field.ok) {
-      if (view) resetAttempt();
+      if (anchorIsOffscreen(field)) {
+        if (view) unmountPicker({ preserveStep: true });
+      } else if (anchor) resetAttempt();
       return;
     }
     const context = refreshCandidates || !view || anchor !== field.anchor
       ? verificationStepContext(field.anchor)
       : stepContext;
-    if (view && anchor !== field.anchor) resetAttempt();
-    else if (view && context.key !== stepContext.key)
+    if (anchor && anchor !== field.anchor) resetAttempt();
+    else if (stepContext && context.key !== stepContext.key)
       resetAttempt({ preserveCutoff: true });
     if (!view && !dismissed) mountPicker(field, context);
     else positionPicker(field);
