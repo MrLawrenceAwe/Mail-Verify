@@ -135,6 +135,39 @@ test("fills split digit fields only when the group fits", () => {
   );
 });
 
+test("fills split digits when each box has its own wrapper", () => {
+  const group = {};
+  const form = {};
+  const singles = Array.from({ length: 6 }, (_, index) => new FakeInput({
+    maxLength: 1,
+    parentElement: { parentElement: group },
+    form,
+    name: index === 0 ? "verification_code" : "",
+  }));
+  assert.equal(run(singles, singles[0]).ok, true);
+  assert.equal(singles.map((input) => input.value).join(""), "123456");
+});
+
+test("fills numeric OTP boxes without maxlength and does not fill incomplete groups", () => {
+  const group = {};
+  const form = {};
+  const numbers = Array.from({ length: 6 }, (_, index) => new FakeInput({
+    type: "number",
+    parentElement: { parentElement: group },
+    form,
+    name: index === 0 ? "verification_code" : "",
+  }));
+  assert.equal(run(numbers, numbers[0]).ok, true);
+  assert.equal(numbers.map((input) => input.value).join(""), "123456");
+  const incomplete = numbers.slice(0, 5);
+  for (const input of incomplete) input.value = "";
+  assert.equal(run(incomplete, incomplete[0]).ok, false);
+  assert.equal(incomplete.every((input) => input.value === ""), true);
+  const single = new FakeInput({ type: "number", name: "verification_code" });
+  assert.equal(run([single]).ok, true);
+  assert.equal(single.value, "123456");
+});
+
 test("follows split fields replaced after each digit", () => {
   let rerenderParent = {};
   let current = Array.from(
