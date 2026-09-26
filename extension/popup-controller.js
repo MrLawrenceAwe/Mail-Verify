@@ -89,21 +89,24 @@ export function createPopup({
     }
   }
   function scheduleCheck(delay = POLL_INTERVAL_MS) {
-    clearTimeout(pollTimer);
-    if (!filling && !removingAccount && clock.now() < pollDeadline)
-      pollTimer = setTimeout(checkForCodes, delay);
-    else if (clock.now() >= pollDeadline) {
-      closeSession();
-      if (!filling && !removingAccount)
-        setStatus("Automatic checking finished. Check again for newer codes.");
+    if (clock.now() >= pollDeadline) {
+      finishPolling();
+      return;
     }
+    clearTimeout(pollTimer);
+    if (!filling && !removingAccount)
+      pollTimer = setTimeout(checkForCodes, delay);
+  }
+  function finishPolling() {
+    clearTimeout(pollTimer);
+    closeSession();
+    if (!filling && !removingAccount)
+      setStatus("Automatic checking finished. Check again for newer codes.");
   }
   async function checkForCodes() {
     if (filling || removingAccount) return;
     if (clock.now() >= pollDeadline) {
-      clearTimeout(pollTimer);
-      closeSession();
-      setStatus("Automatic checking finished. Check again for newer codes.");
+      finishPolling();
       return;
     }
     if (checking) abortCheck();

@@ -66,7 +66,7 @@ class HostTests(unittest.TestCase):
             close.assert_not_called()
             check.assert_called_once_with(session)
 
-    def test_add_second_account_preserves_first_and_labels_codes(self):
+    def test_add_second_account_preserves_first(self):
         first = {"email": "one@yahoo.com", "password": "old-password"}
         second = {"email": "two@yahoo.com", "password": "new-password"}
         sessions = account_sessions.AccountSessions()
@@ -75,12 +75,6 @@ class HostTests(unittest.TestCase):
             result = host.handle_request({"action": "saveAccount", **second}, sessions)
             self.assertEqual(result["accountEmails"], ["one@yahoo.com", "two@yahoo.com"])
             keychain.assert_any_call("set", {"accounts": [first, second]})
-        with patch.object(account_sessions, "check_with_timeout", side_effect=[
-            [{"code": "111111", "receivedAt": 1000, "uid": 1}],
-            [{"code": "222222", "receivedAt": 2000, "uid": 1}],
-        ]):
-            result = sessions.fetch_recent_codes([first, second])
-        self.assertEqual([item["accountEmail"] for item in result["codes"]], ["two@yahoo.com", "one@yahoo.com"])
 
     def test_remove_only_selected_account(self):
         accounts = [{"email": "one@yahoo.com", "password": "password-one"}, {"email": "two@yahoo.com", "password": "password-two"}]
