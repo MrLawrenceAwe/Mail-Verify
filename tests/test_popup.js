@@ -74,6 +74,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     failRemove: false,
     scriptArgs: null,
     requests: [],
+    sendOneOff: null,
   };
   const tab = { id: 1, url: "https://example.com/login" };
   let nextTimer = 0;
@@ -88,6 +89,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);
+      if (state.sendOneOff) return state.sendOneOff(request);
       if (state.failRemove) throw Error("Keychain unavailable");
       return { accountEmails: request.action === "removeAccount" ? remainingAccountEmails : [request.email] };
     },
@@ -273,6 +275,23 @@ test("checks remaining accounts immediately after removal", async () => {
   assert.equal(checks, 1);
   assert.equal(controls.accounts.children[0].children[0].textContent, "other@yahoo.com");
   assert.equal(scheduled.size, 1);
+});
+
+test("does not remove an account while another account is being added", async () => {
+  const { controls, state } = await setup();
+  let finishAdd;
+  state.sendOneOff = () => new Promise((resolve) => { finishAdd = resolve; });
+  controls.addAccount.trigger();
+  controls.email.value = "two@yahoo.com";
+  controls.password.value = "new-password";
+  const adding = controls.addAccountForm.trigger("submit");
+  assert.equal(controls.accounts.querySelectorAll("button")[0].disabled, true);
+  await controls.accounts.querySelectorAll("button")[0].trigger();
+  assert.equal(state.requests.length, 1);
+  assert.equal(state.requests[0].action, "saveAccount");
+  finishAdd({ accountEmails: ["test@yahoo.com", "two@yahoo.com"] });
+  await adding;
+  assert.equal(controls.accounts.querySelectorAll("button")[0].disabled, false);
 });
 
 test("connects an account without retaining the form password", async () => {

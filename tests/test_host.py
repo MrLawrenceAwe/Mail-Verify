@@ -2,9 +2,12 @@
 
 import io
 import json
+import copy
 from pathlib import Path
 import struct
 import sys
+import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -14,6 +17,13 @@ import account_sessions
 
 
 class HostTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        lock_patch = patch.object(host, "ACCOUNT_LOCK_PATH", Path(temporary.name) / "accounts.lock")
+        lock_patch.start()
+        self.addCleanup(lock_patch.stop)
+
     def test_frame(self):
         p = json.dumps({"action": "status"}).encode()
         self.assertEqual(
@@ -82,6 +92,58 @@ class HostTests(unittest.TestCase):
             result = host.handle_request({"action": "removeAccount", "email": "one@yahoo.com"}, account_sessions.AccountSessions())
             self.assertEqual(result, {"accountEmails": ["two@yahoo.com"]})
             keychain.assert_any_call("set", {"accounts": [accounts[1]]})
+
+    def test_overlapping_add_and_remove_preserve_the_final_account_list(self):
+        first = {"email": "one@yahoo.com", "password": "old-password"}
+        second = {"email": "two@yahoo.com", "password": "new-password"}
+        saved = {"accounts": [first]}
+        first_read = threading.Event()
+        release_first_read = threading.Event()
+        second_started = threading.Event()
+        second_read = threading.Event()
+        results = []
+
+        def keychain(action, value=None):
+            nonlocal saved
+            if action == "get":
+                if not first_read.is_set():
+                    snapshot = copy.deepcopy(saved)
+                    first_read.set()
+                    self.assertTrue(release_first_read.wait(2))
+                    return snapshot
+                second_read.set()
+                return copy.deepcopy(saved)
+            if action == "set":
+                saved = copy.deepcopy(value)
+            elif action == "delete":
+                saved = None
+
+        def add():
+            results.append(host.handle_request({"action": "saveAccount", **second}, account_sessions.AccountSessions()))
+
+        def remove():
+            second_started.set()
+            results.append(host.handle_request({"action": "removeAccount", "email": first["email"]}, account_sessions.AccountSessions()))
+
+        with patch.object(host, "keychain", side_effect=keychain), patch.object(host, "connect_imap") as connect:
+            connect.return_value.__enter__.return_value = None
+            add_thread = threading.Thread(target=add)
+            remove_thread = threading.Thread(target=remove)
+            add_thread.start()
+            try:
+                self.assertTrue(first_read.wait(2))
+                remove_thread.start()
+                self.assertTrue(second_started.wait(2))
+                self.assertFalse(second_read.wait(0.1), "the second request must wait for the first write")
+            finally:
+                release_first_read.set()
+                add_thread.join(2)
+                if remove_thread.ident is not None:
+                    remove_thread.join(2)
+
+        self.assertFalse(add_thread.is_alive() or remove_thread.is_alive())
+        self.assertEqual(saved, {"accounts": [second]})
+        self.assertEqual(len(results), 2)
 
 if __name__ == "__main__":
     unittest.main()
