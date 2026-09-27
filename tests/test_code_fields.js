@@ -176,6 +176,24 @@ test("fills split digit fields only when the group fits", () => {
   );
 });
 
+test("does not report success when split digits are cleared after the final input", () => {
+  const parent = {};
+  const digits = Array.from({ length: 6 }, (_, index) => new FakeInput({
+    maxLength: 1,
+    parentElement: parent,
+    name: index === 0 ? "verification_code" : "",
+  }));
+  digits[5].dispatchEvent = function (event) {
+    this.events.push(event.type);
+    if (event.type === "input") for (const digit of digits) digit.value = "";
+  };
+
+  const result = run(digits, digits[0]);
+  assert.equal(result.ok, false);
+  assert.equal(digits.every((digit) => digit.value === ""), true);
+  assert.equal(digits[5].focused, undefined);
+});
+
 test("fills split digits when each box has its own wrapper", () => {
   const group = {};
   const form = {};

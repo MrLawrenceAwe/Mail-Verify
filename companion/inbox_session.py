@@ -145,12 +145,10 @@ class InboxSession:
 
     def _prune_pending_messages(self, now):
         # Keep deferred work bounded, fresh, and behind newly arrived mail.
+        distinct_senders = self._newest_distinct_senders()
         cutoff = (
-            sorted(
-                (item["receivedAt"], uid)
-                for uid, item in self.codes_by_uid.items()
-            )[-MAX_RESULTS]
-            if len(self.codes_by_uid) >= MAX_RESULTS else None
+            (distinct_senders[-1]["receivedAt"], distinct_senders[-1]["uid"])
+            if len(distinct_senders) == MAX_RESULTS else None
         )
         eligible = sorted(
             self.pending_received_at_by_uid.items(), key=lambda item: item[0], reverse=True
@@ -188,8 +186,34 @@ class InboxSession:
             raise
 
     def _results(self):
-        return sorted(
+        newest = sorted(
             self.codes_by_uid.values(),
             key=lambda item: (item["receivedAt"], item["uid"]),
             reverse=True,
-        )[:MAX_RESULTS]
+        )
+        newest_overall = newest[:MAX_RESULTS]
+        newest_by_sender = self._newest_distinct_senders(newest)
+        retained_uids = {item["uid"] for item in (*newest_overall, *newest_by_sender)}
+        results = [item for item in newest if item["uid"] in retained_uids]
+        self.codes_by_uid = {item["uid"]: item for item in results}
+        return results
+
+    def _newest_distinct_senders(self, newest=None):
+        if newest is None:
+            newest = sorted(
+                self.codes_by_uid.values(),
+                key=lambda item: (item["receivedAt"], item["uid"]),
+                reverse=True,
+            )
+        senders = set()
+        distinct = []
+        for item in newest:
+            sender = item.get("sender", "").strip().lower()
+            key = sender if sender else item["uid"]
+            if key in senders:
+                continue
+            senders.add(key)
+            distinct.append(item)
+            if len(distinct) == MAX_RESULTS:
+                break
+        return distinct

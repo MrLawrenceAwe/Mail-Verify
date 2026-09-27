@@ -182,7 +182,9 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor }
     const currentGroup = currentDigitInputs.includes(group[0])
       ? digitGroup(group[0], currentDigitInputs, code.length)
       : uniqueDigitGroup(currentDigitInputs, code.length);
-    currentGroup?.[code.length - 1].focus();
+    if (!currentGroup || currentGroup.some((input, index) => input.value !== code[index]))
+      return { ok: false, error: "The verification-code fields changed while filling them. Try again." };
+    currentGroup[code.length - 1].focus();
     return { ok: true };
   }
   setInputValue(targetInput, code);
