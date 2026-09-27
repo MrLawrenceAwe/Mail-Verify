@@ -122,6 +122,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     view.host.style.top = `${top}px`;
   }
   function mountPicker(field, context = verificationStepContext(field.anchor)) {
+    const mountedAnchor = field.anchor;
     minReceivedAtMs ??= clock.now() - 5_000;
     anchor = field.anchor;
     stepContext = context;
@@ -135,7 +136,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
           positionPicker();
           return;
         }
-        const result = handleField({ action: "fill", code: item.code });
+        const result = handleField({ action: "fill", code: item.code, expectedAnchor: mountedAnchor });
         if (result.ok) {
           dismissPicker();
         } else {

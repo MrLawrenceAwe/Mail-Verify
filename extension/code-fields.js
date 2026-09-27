@@ -1,4 +1,4 @@
-export function handleCodeField({ action, code, candidateCache } = {}) {
+export function handleCodeField({ action, code, candidateCache, expectedAnchor } = {}) {
   if (action !== "detect" && action !== "fill")
     return { ok: false, error: "Unsupported code field action." };
   const detectOnly = action === "detect";
@@ -112,10 +112,13 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
     contextRoots: [...contextRoots],
   };
   const visibleCodeInputs = candidates.inputs.filter(isUsableInput);
+  if (!detectOnly && expectedAnchor && !visibleCodeInputs.includes(expectedAnchor))
+    return { ok: false, error: "The verification-code field changed. Select it and try again." };
   const focusedCodeInput = visibleCodeInputs.includes(focused) ? focused : null;
   // Focus alone does not identify a code field; it may be a search or account input.
+  // An inline suggestion is bound to the field beside which it was mounted.
   const targetInput =
-    focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
+    (!detectOnly && expectedAnchor) || focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
   if (detectOnly) {
     const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every(isDigitInput) ? visibleCodeInputs[0] : null);
     if (!anchor) return { ok: false, candidateCache: candidates };
