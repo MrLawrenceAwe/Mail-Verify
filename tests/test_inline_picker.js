@@ -306,6 +306,10 @@ test("changed verification instructions reset codes on the same field and URL", 
   assert.equal(results.childElementCount, 1);
   changeInstructions("We sent a code to alice@example.test. Resend in 29 seconds");
   assert.equal(mounts, 1);
+  changeInstructions("We sent a code to alice@example.test. Resend in 28");
+  changeInstructions("We sent a code to alice@example.test. Resend in 27");
+  assert.equal(mounts, 1);
+  assert.equal(results.children[0].strong.textContent, "Fill code 111111");
   now = 20_000;
   changeInstructions("We sent a code to bob@example.test. Resend in 30 seconds");
   await flush();

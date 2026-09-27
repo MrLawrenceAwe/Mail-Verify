@@ -186,6 +186,10 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor }
     return { ok: true };
   }
   setInputValue(targetInput, code);
+  if (targetInput.isConnected === false ||
+      ![...document.querySelectorAll("input")].includes(targetInput) ||
+      targetInput.value !== code)
+    return { ok: false, error: "The verification-code field changed while filling it. Try again." };
   targetInput.focus();
   return { ok: true };
 }
