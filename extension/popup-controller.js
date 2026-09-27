@@ -18,7 +18,8 @@ export function createPopup({
   let targetTab;
   let checking = false,
     filling = false,
-    removingAccount = false;
+    removingAccount = false,
+    addingAccount = false;
   let pollTimer, pollDeadline = 0, checkGeneration = 0;
   const {
     setStatus, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
@@ -83,7 +84,7 @@ export function createPopup({
       setCodeButtonsDisabled(false);
     } finally {
       filling = false;
-      setRemoveAndCheckDisabled(false);
+      setRemoveAndCheckDisabled(addingAccount);
       if (pollDeadline) scheduleCheck();
       else closeSession();
     }
@@ -134,7 +135,7 @@ export function createPopup({
     } finally {
       if (requestGeneration === checkGeneration) {
         checking = false;
-        setRemoveAndCheckDisabled(filling || removingAccount);
+        setRemoveAndCheckDisabled(filling || removingAccount || addingAccount);
         scheduleCheck(
           failed
             ? POLL_INTERVAL_MS
@@ -151,7 +152,10 @@ export function createPopup({
   });
   $("addAccountForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (addingAccount || removingAccount) return;
+    addingAccount = true;
     setAddAccountDisabled(true);
+    setRemoveAndCheckDisabled(true);
     setStatus("Checking your Yahoo connection…");
     const { email, password } = readCredentialsAndClearPassword();
     try {
@@ -165,13 +169,16 @@ export function createPopup({
     } catch (error) {
       setStatus(error.message, true);
     } finally {
+      addingAccount = false;
       setAddAccountDisabled(false);
+      setRemoveAndCheckDisabled(filling || removingAccount);
     }
   });
   $("addAccount").addEventListener("click", () => {
     showAccountSetup();
   });
   async function removeAccount(email) {
+    if (addingAccount || removingAccount) return;
     pollDeadline = 0;
     removingAccount = true;
     abortCheck();

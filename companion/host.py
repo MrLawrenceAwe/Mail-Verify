@@ -3,9 +3,13 @@
 
 import imaplib
 import json
+import fcntl
+import os
 import re
 import struct
 import sys
+from contextlib import contextmanager
+from pathlib import Path
 
 from errors import UserError
 from keychain import keychain
@@ -13,6 +17,19 @@ from inbox_session import connect_imap
 from account_sessions import AccountSessions
 
 MAX_FRAME_BYTES = 16_384
+ACCOUNT_LOCK_PATH = Path.home() / "Library/Application Support/Yahoo Code Fill/accounts.lock"
+
+
+@contextmanager
+def account_lock():
+    """Serialize Keychain read-modify-write operations across native hosts."""
+    ACCOUNT_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(ACCOUNT_LOCK_PATH, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
 
 
 def load_account_credentials():
@@ -32,14 +49,15 @@ def handle_request(request, sessions):
         return {"accountEmails": [item["email"] for item in load_account_credentials()]}
     if action == "removeAccount":
         address = request.get("email", "")
-        credentials = load_account_credentials()
-        remaining = [item for item in credentials if item["email"].lower() != address.lower()]
-        if len(remaining) == len(credentials):
-            raise UserError("That Yahoo account is not connected.")
-        if remaining:
-            keychain("set", {"accounts": remaining})
-        else:
-            keychain("delete")
+        with account_lock():
+            credentials = load_account_credentials()
+            remaining = [item for item in credentials if item["email"].lower() != address.lower()]
+            if len(remaining) == len(credentials):
+                raise UserError("That Yahoo account is not connected.")
+            if remaining:
+                keychain("set", {"accounts": remaining})
+            else:
+                keychain("delete")
         sessions.remove(address)
         return {"accountEmails": [item["email"] for item in remaining]}
     if action == "saveAccount":
@@ -53,10 +71,11 @@ def handle_request(request, sessions):
         credentials = {"email": address, "password": password}
         with connect_imap(credentials):
             pass
-        account_credentials = load_account_credentials()
-        account_credentials = [item for item in account_credentials if item["email"].lower() != address.lower()]
-        account_credentials.append(credentials)
-        keychain("set", {"accounts": account_credentials})
+        with account_lock():
+            account_credentials = load_account_credentials()
+            account_credentials = [item for item in account_credentials if item["email"].lower() != address.lower()]
+            account_credentials.append(credentials)
+            keychain("set", {"accounts": account_credentials})
         sessions.remove(address)
         return {"accountEmails": [item["email"] for item in account_credentials]}
     if action == "codes":

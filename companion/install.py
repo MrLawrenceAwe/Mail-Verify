@@ -26,7 +26,7 @@ def main():
     if "--uninstall" in sys.argv:
         HOST_MANIFEST_PATH.unlink(missing_ok=True)
         # Only remove files owned by this installer. Use Remove account in the popup first.
-        for name in (*COMPANION_FILES, *OBSOLETE_COMPANION_FILES, "launch-host"):
+        for name in (*COMPANION_FILES, *OBSOLETE_COMPANION_FILES, "launch-host", "accounts.lock"):
             (INSTALL_DIR / name).unlink(missing_ok=True)
         print(
             "Companion removed. Remove the extension in Chrome. To remove credentials, delete local.yahoo_code_fill in Keychain Access."
