@@ -168,6 +168,15 @@ test("fills numeric OTP boxes without maxlength and does not fill incomplete gro
   assert.equal(single.value, "123456");
 });
 
+test("fills a numeric code field beside an unrelated numeric field", () => {
+  const form = {};
+  const code = new FakeInput({ type: "number", name: "verification_code", form });
+  const age = new FakeInput({ type: "number", name: "age", form });
+  assert.equal(run([code, age], code).ok, true);
+  assert.equal(code.value, "123456");
+  assert.equal(age.value, undefined);
+});
+
 test("follows split fields replaced after each digit", () => {
   let rerenderParent = {};
   let current = Array.from(

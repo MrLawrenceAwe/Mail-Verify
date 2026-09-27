@@ -133,7 +133,10 @@ export function handleCodeField({ action, code, candidateCache } = {}) {
   if (!fields && (
     !targetInput ||
     targetInput.maxLength === 1 ||
-    (targetInput.type === "number" && digitInputs.filter((el) => el.form === targetInput.form).length > 1) ||
+    (targetInput.type === "number" && digitInputs.filter((el) =>
+      el.form === targetInput.form &&
+      (el === targetInput || hasCodeHint(el) || !getInputHints(el).some(Boolean))
+    ).length > 1) ||
     (targetInput.maxLength > 0 && targetInput.maxLength < code.length)
   )) {
     return {
