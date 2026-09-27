@@ -79,16 +79,18 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor }
       if (parent === ancestor) return true;
     return false;
   };
+  const isCodeDigit = (el) => hasCodeHint(el) || getInputHints(el).every((hint) =>
+    !hint || /^(?:(?:enter )?(?:digit|character|box|cell|otp|pin|code)[\s_-]*\d*|\d)$/i.test(hint.trim()));
   const digitGroup = (anchor, digitInputs, length) => {
     for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
       const group = digitInputs.filter((el) =>
         el.form === anchor.form && isInside(el, parent));
-      if (group.length === length && group.some(hasCodeHint)) return group;
+      if (group.length === length && group.some(hasCodeHint) && group.every(isCodeDigit)) return group;
     }
     // A form can own inputs placed outside its DOM subtree via the form attribute.
     if (anchor.form) {
       const group = digitInputs.filter((el) => el.form === anchor.form);
-      if (group.length === length && group.some(hasCodeHint)) return group;
+      if (group.length === length && group.some(hasCodeHint) && group.every(isCodeDigit)) return group;
     }
     return null;
   };

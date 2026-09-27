@@ -192,6 +192,31 @@ test("fills a numeric code field beside an unrelated numeric field", () => {
   assert.equal(age.value, undefined);
 });
 
+test("does not spread a code across unrelated numeric fields in the same form", () => {
+  const form = {};
+  const inputs = [
+    new FakeInput({ type: "number", name: "verification_code", form }),
+    ...["age", "quantity", "year", "month", "day"].map((name) =>
+      new FakeInput({ type: "number", name, form })),
+  ];
+  assert.equal(run(inputs, inputs[0]).ok, true);
+  assert.equal(inputs[0].value, "123456");
+  assert.equal(inputs.slice(1).every((input) => input.value === undefined), true);
+});
+
+test("fills named numeric digit boxes in a shared form", () => {
+  const form = {};
+  const group = {};
+  const inputs = Array.from({ length: 6 }, (_, index) => new FakeInput({
+    type: "number",
+    name: index === 0 ? "verification_code" : `digit_${index + 1}`,
+    form,
+    parentElement: { parentElement: group },
+  }));
+  assert.equal(run(inputs, inputs[0]).ok, true);
+  assert.equal(inputs.map((input) => input.value).join(""), "123456");
+});
+
 test("follows split fields replaced after each digit", () => {
   let rerenderParent = {};
   let current = Array.from(
