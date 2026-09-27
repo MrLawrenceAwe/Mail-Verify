@@ -130,6 +130,32 @@ test("inline fill stays on its mounted field when focus moves", () => {
   assert.equal(focused.value, undefined);
 });
 
+test("does not report success when a single code field is replaced or cleared", () => {
+  for (const replace of [true, false]) {
+    let current = new FakeInput({ name: "verification_code" });
+    const original = current;
+    original.dispatchEvent = function (event) {
+      this.events.push(event.type);
+      if (event.type !== "input") return;
+      if (replace) {
+        this.isConnected = false;
+        current = new FakeInput({ name: "verification_code" });
+      } else {
+        this.value = "";
+      }
+    };
+    const context = vm.createContext({
+      document: { querySelectorAll: () => [current], activeElement: original },
+      HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
+      Event: class { constructor(type) { this.type = type; } },
+    });
+    const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456" })`, context);
+    assert.equal(result.ok, false);
+    assert.equal(original.focused, undefined);
+    if (replace) assert.equal(current.value, undefined);
+  }
+});
+
 test("fills split digit fields only when the group fits", () => {
   const parent = {};
   const singles = Array.from(
