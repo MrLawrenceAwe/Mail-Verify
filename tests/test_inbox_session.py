@@ -79,19 +79,20 @@ class InboxSessionTests(unittest.TestCase):
             codes = session.recent_codes()
             self.assertEqual(session.recent_codes(), codes)
             self.assertEqual(
-                len(conn.fetches), 1, "unchanged mail should not be fetched again"
+                conn.fetches[1][0], b"7,6,5,4,3",
+                "the next poll should inspect older mail for a distinct sender",
             )
             conn.count = 13
             self.assertEqual(session.recent_codes()[0]["code"], "100013")
-            self.assertEqual(conn.fetches[1][0], b"13")
             self.assertEqual(conn.fetches[2][0], b"13")
+            self.assertEqual(conn.fetches[3][0], b"13,2,1")
             session.close()
         self.assertEqual(
             [item["code"] for item in codes],
             ["100012", "100011", "100010", "100009", "100008"],
         )
         self.assertEqual([item["uid"] for item in codes], [12, 11, 10, 9, 8])
-        self.assertEqual(len(conn.fetches), 3)
+        self.assertEqual(len(conn.fetches), 4)
         self.assertEqual(conn.sequence_fetches, ["1:12"])
         self.assertEqual(conn.fetches[0][0], b"12,11,10,9,8")
         self.assertEqual(conn.searches[0], (None, "UID", "13:*"))
@@ -322,6 +323,35 @@ class InboxSessionTests(unittest.TestCase):
 
         results = session.recent_codes()
         self.assertEqual([item["uid"] for item in results], [1, 6, 5, 4, 3])
+
+    def test_repeated_sender_does_not_hide_older_distinct_sender(self):
+        now = time.time()
+        message = b"From: other@example.com\r\n\r\nYour code is 482913."
+
+        class FakeConnection:
+            def uid(self, command, *_args):
+                if command == "search":
+                    return "OK", [b""]
+                return "OK", [(b"1 (UID 5 BODY[] {80}", message)]
+
+        session = inbox_session.InboxSession({})
+        session.conn = FakeConnection()
+        session.last_seen_uid = 10
+        session.codes_by_uid = {
+            uid: {
+                "uid": uid,
+                "code": str(100000 + uid),
+                "sender": "same@example.com",
+                "receivedAt": int((now - (11 - uid)) * 1000),
+            }
+            for uid in range(6, 11)
+        }
+        session.pending_received_at_by_uid[5] = now - 7
+
+        results = session.recent_codes()
+        self.assertEqual([item["uid"] for item in results], [10, 9, 8, 7, 6, 5])
+        self.assertEqual(results[-1]["sender"], "other@example.com")
+        self.assertEqual(session.pending_received_at_by_uid, {})
 
 
 
