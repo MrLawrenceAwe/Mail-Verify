@@ -49,8 +49,9 @@ class FakeInput {
     this.focused = true;
   }
 }
-function run(inputs, activeElement = null) {
+function run(inputs, activeElement = null, expectedAnchor = null) {
   const ctx = {
+    expectedAnchor,
     document: { querySelectorAll: () => inputs, activeElement },
     HTMLInputElement: FakeInput,
     innerHeight: 800,
@@ -62,7 +63,7 @@ function run(inputs, activeElement = null) {
     },
   };
   vm.createContext(ctx);
-  return vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456" })`, ctx);
+  return vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456", expectedAnchor })`, ctx);
 }
 
 test("fills labelled fields and rejects unrelated or hidden fields", () => {
@@ -113,6 +114,20 @@ test("fills labelled fields and rejects unrelated or hidden fields", () => {
     ]).ok,
     false,
   );
+});
+
+test("inline fill stays on its mounted field when focus moves", () => {
+  const mounted = new FakeInput({ name: "verification_code" });
+  const focused = new FakeInput({ name: "security_code" });
+  assert.equal(run([mounted, focused], focused, mounted).ok, true);
+  assert.equal(mounted.value, "123456");
+  assert.equal(focused.value, undefined);
+
+  mounted.value = "";
+  mounted.isConnected = false;
+  assert.equal(run([mounted, focused], focused, mounted).ok, false);
+  assert.equal(mounted.value, "");
+  assert.equal(focused.value, undefined);
 });
 
 test("fills split digit fields only when the group fits", () => {

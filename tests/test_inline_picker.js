@@ -75,6 +75,27 @@ test("picker repositions using the current viewport after resize", () => {
   assert.equal(mounted.style.top, "36px");
 });
 
+test("picker passes its mounted field to the fill action", async () => {
+  const anchor = {};
+  const fills = [];
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9_000 };
+  const { results } = pickerBrowser({
+    handleField: (request) => {
+      if (request.action === "fill") {
+        fills.push(request);
+        return { ok: true };
+      }
+      return { ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } };
+    },
+    now: () => 10_000,
+    sendMessage: async () => ({ ok: true, codes: [code] }),
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  results.children[0].onclick();
+  assert.equal(fills.length, 1);
+  assert.equal(fills[0].expectedAnchor, anchor);
+});
+
 test("old codes are withheld while waiting for this verification attempt", () => {
   const older = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 1000 };
   const newest = { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
