@@ -16,7 +16,7 @@ HOST_MANIFEST_PATH = (
     / "Library/Application Support/Google/Chrome/NativeMessagingHosts/local.yahoo_code_fill.json"
 )
 
-COMPANION_FILES = ("host.py", "account_sessions.py", "inbox_session.py", "code_extraction.py", "keychain.py", "errors.py")
+COMPANION_FILES = ("host.py", "account_sessions.py", "inbox_session.py", "code_extraction.py", "link_extraction.py", "keychain.py", "errors.py")
 OBSOLETE_COMPANION_FILES = ("mail_session.py",)
 
 
@@ -54,7 +54,7 @@ def main():
         json.dumps(
             {
                 "name": "local.yahoo_code_fill",
-                "description": "Local Yahoo verification code companion",
+                "description": "Mail Verify local email verification companion",
                 "path": str(launcher),
                 "type": "stdio",
                 "allowed_origins": [f"chrome-extension://{extension_id}/"],

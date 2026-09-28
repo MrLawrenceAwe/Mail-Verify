@@ -1,6 +1,6 @@
 export function createInlinePickerView(document, { onClose, onRetry, onFill }) {
   const host = document.createElement("div");
-  host.dataset.yahooCodeFill = "suggestion";
+  host.dataset.mailVerify = "suggestion";
   host.style.cssText = "position:fixed;z-index:2147483647;left:0;top:0";
   const root = host.attachShadow({ mode: "closed" });
   root.innerHTML = `<style>
@@ -20,7 +20,7 @@ export function createInlinePickerView(document, { onClose, onRetry, onFill }) {
     #retry, #close { color:#555d6b; background:transparent; padding:1px 4px; border-radius:3px; line-height:18px; }
     #retry:hover, #close:hover { background:#0001; }
     [hidden] { display:none !important; }
-  </style><section aria-label="Yahoo Mail code suggestions"><div id="results"></div><div class="controls"><p id="status" role="status"></p><button id="retry" title="Check Yahoo again" aria-label="Check Yahoo again">↻</button><button id="close" aria-label="Dismiss code suggestions">×</button></div></section>`;
+  </style><section aria-label="Mail Verify code suggestions"><div id="results"></div><div class="controls"><p id="status" role="status"></p><button id="retry" title="Check mail again" aria-label="Check mail again">↻</button><button id="close" aria-label="Dismiss code suggestions">×</button></div></section>`;
   const status = root.querySelector("#status");
   const results = root.querySelector("#results");
   let renderedCodesKey;

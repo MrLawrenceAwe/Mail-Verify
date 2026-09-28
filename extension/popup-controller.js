@@ -16,6 +16,7 @@ export function createPopup({
   const $ = (id) => document.getElementById(id);
   const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
   let targetTab;
+  let mode = "codes";
   let checking = false,
     filling = false,
     removingAccount = false,
@@ -23,12 +24,13 @@ export function createPopup({
   let pollTimer, pollDeadline = 0, checkGeneration = 0;
   const {
     setStatus, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
-    markCodeFilled, renderAccounts, clearCodes, renderCodes,
+    markCodeFilled, renderAccounts, clearCodes, renderCodes, renderLinks,
     showAccountSetup, showCompanionSetup, setExtensionId, setDestination,
     setAddAccountDisabled, readCredentialsAndClearPassword, clearAccountEmail,
   } = createPopupView(document, {
     onRemoveAccount: (email) => removeAccount(email),
     onFillCode: (item, button) => fillSelectedCode(item, button),
+    onOpenLink: (item, button) => openSelectedLink(item, button),
   });
   function applyConnectedAccounts(accountEmails) {
     abortCheck();
@@ -36,7 +38,7 @@ export function createPopup({
     clearCodes();
     if (!accountEmails.length) {
       pollDeadline = 0;
-      setStatus("No Yahoo accounts connected.");
+      setStatus("No email accounts connected.");
       return;
     }
     startPolling();
@@ -67,7 +69,7 @@ export function createPopup({
       });
       if (active?.id !== targetTab.id || current.url !== targetTab.url)
         throw new Error(
-          "The page changed. Reopen Code Fill on the intended page.",
+          "The page changed. Reopen Mail Verify on the intended page.",
         );
       const [{ result }] = await chrome.scripting.executeScript({
         target: { tabId: targetTab.id },
@@ -79,6 +81,32 @@ export function createPopup({
       pollDeadline = 0;
       setStatus("Code filled. The website may continue automatically.");
       markCodeFilled(button);
+    } catch (error) {
+      setStatus(error.message, true);
+      setCodeButtonsDisabled(false);
+    } finally {
+      filling = false;
+      setRemoveAndCheckDisabled(addingAccount);
+      if (pollDeadline) scheduleCheck();
+      else closeSession();
+    }
+  }
+  async function openSelectedLink(item, button) {
+    if (filling || removingAccount || addingAccount) return;
+    filling = true;
+    abortCheck();
+    setRemoveAndCheckDisabled(true);
+    setCodeButtonsDisabled(true);
+    try {
+      if (!Number.isFinite(item.receivedAt) || clock.now() - item.receivedAt > MAX_CODE_AGE_MS || item.receivedAt > clock.now())
+        throw new Error("This link is too old. Request a new confirmation email.");
+      const url = new URL(item.url);
+      if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.port || /[\s\\]/.test(item.url))
+        throw new Error("This confirmation link is not supported.");
+      await chrome.tabs.create({ url: item.url });
+      pollDeadline = 0;
+      button.textContent = "Opened";
+      setStatus("Confirmation link opened in a new tab.");
     } catch (error) {
       setStatus(error.message, true);
       setCodeButtonsDisabled(false);
@@ -102,7 +130,7 @@ export function createPopup({
     clearTimeout(pollTimer);
     closeSession();
     if (!filling && !removingAccount)
-      setStatus("Automatic checking finished. Check again for newer codes.");
+      setStatus(`Automatic checking finished. Check again for newer ${mode}.`);
   }
   async function checkForCodes() {
     if (filling || removingAccount) return;
@@ -116,16 +144,17 @@ export function createPopup({
     const requestGeneration = ++checkGeneration;
     const startedAt = clock.now();
     let failed = false;
-    setStatus("Checking your connected Yahoo inboxes…");
+    setStatus("Checking your connected inboxes…");
     try {
-      const response = await sendSessionRequest("codes");
-      const codes = response.codes;
+      const response = await sendSessionRequest(mode);
+      const codes = response[mode];
       if (!filling && requestGeneration === checkGeneration) {
-        renderCodes(codes, targetTab);
+        if (mode === "links") renderLinks(codes);
+        else renderCodes(codes, targetTab);
         setStatus(
           response.warnings?.length ? `Some accounts could not be checked: ${response.warnings.join("; ")}` : codes.length
-            ? "Choose the code for this website. Checking for newer codes…"
-            : "No recent code yet. Request one on the website; keep this popup open.",
+            ? mode === "links" ? "Check the sender and destination, then open your confirmation link." : "Choose the code for this website. Checking for newer codes…"
+            : mode === "links" ? "No recent confirmation link yet. Request one and keep this popup open." : "No recent code yet. Request one on the website; keep this popup open.",
         );
       }
     } catch (error) {
@@ -147,9 +176,15 @@ export function createPopup({
       }
     }
   }
-  $("checkCodes").addEventListener("click", () => {
+  function selectMode(nextMode) {
+    if (filling || removingAccount || addingAccount) return;
+    abortCheck();
+    if (mode !== nextMode) clearCodes();
+    mode = nextMode;
     startPolling();
-  });
+  }
+  $("checkCodes").addEventListener("click", () => selectMode("codes"));
+  $("checkLinks").addEventListener("click", () => selectMode("links"));
   $("addAccountForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (addingAccount || removingAccount) return;
@@ -211,7 +246,7 @@ export function createPopup({
       if (result.accountEmails?.length) applyConnectedAccounts(result.accountEmails);
       else {
         showAccountSetup();
-        setStatus("Connect once. No Yahoo tab needed.");
+        setStatus("Connect once. No webmail tab needed.");
       }
     } catch (error) {
       setStatus(error.message, true);

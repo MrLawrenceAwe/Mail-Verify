@@ -1,0 +1,205 @@
+import { handleCodeField } from "./code-fields.js";
+import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
+
+export function isConfirmationScreen(text) {
+  const value = text.replace(/\s+/g, " ").trim();
+  if (!value || value.length > 2500 || /\b(?:reset|forgot|change)\b.{0,35}\bpassword\b|\b(?:newsletter|unsubscribe)\b/i.test(value)) return false;
+  return /\bcheck\s+(?:your\s+)?(?:e-?mail|inbox)\b/i.test(value) ||
+    /\b(?:we(?:'ve| have)?\s+)?sent\b.{0,65}\b(?:confirmation|verification|activation)\s+(?:e-?mail|link)\b/i.test(value) ||
+    /\b(?:click|follow|open)\b.{0,45}\blink\b.{0,70}\b(?:confirm|verify|activate)\b.{0,30}\b(?:e-?mail|account)\b/i.test(value);
+}
+
+export function detectConfirmationScreen(document) {
+  // Inspect short visible task panels, never hidden templates or the extension card.
+  const panels = [...document.querySelectorAll("main, [role=main], form, [role=dialog]")];
+  if (!panels.length) panels.push(document.body);
+  return panels.some((panel) => panel && panel.getClientRects().length &&
+    panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
+    isConfirmationScreen(panel.innerText || ""));
+}
+
+export function selectConfirmationLinks(items, since, now) {
+  return items.filter((item) => {
+    if (!Number.isFinite(item.receivedAt) || item.receivedAt < since || item.receivedAt > now || now - item.receivedAt > MAX_CODE_AGE_MS) return false;
+    try {
+      const url = new URL(item.url);
+      return url.protocol === "https:" && !!url.hostname && !url.username && !url.password && !url.port && !/[\s\\]/.test(item.url);
+    } catch { return false; }
+  }).sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 5);
+}
+
+export function createConfirmationView(document, { onClose, onRetry, canOpen }) {
+  const host = document.createElement("div");
+  host.dataset.mailVerify = "confirmation";
+  host.style.cssText = "position:fixed;z-index:2147483647;right:16px;bottom:16px";
+  const root = host.attachShadow({ mode: "closed" });
+  root.innerHTML = `<style>
+    :host { all:initial; }
+    section { box-sizing:border-box;width:320px;max-width:calc(100vw - 32px);max-height:55vh;overflow:auto;padding:16px;border:1px solid #d3dcea;border-radius:14px;background:#fff;color:#26344d;box-shadow:0 6px 28px #162c482b;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    header { display:flex;align-items:center;gap:8px; } strong { flex:1;font-size:14px; }
+    button { border:0;background:#edf2fa;border-radius:6px;padding:4px 8px;color:#26344d;font:inherit;cursor:pointer; }
+    button:focus-visible,a:focus-visible { outline:2px solid #225bd3;outline-offset:2px; }
+    p { margin:8px 0;overflow-wrap:anywhere; } small { font-size:11px;color:#5c687c; }
+    article { border-top:1px solid #e2e8f1;padding-top:8px;margin-top:10px; }
+    a { display:block;background:#2763dc;color:white;text-decoration:none;padding:8px 10px;border-radius:7px;text-align:center; }
+  </style><section aria-label="Mail Verify confirmation links"><header><strong>Mail Verify confirmation links</strong><button id="retry" aria-label="Check mail again">↻</button><button id="close" aria-label="Dismiss confirmation links">×</button></header><p id="status" role="status" aria-live="polite"></p><div id="results"></div><small>Check the sender and destination. Opening a link may confirm your account.</small></section>`;
+  root.querySelector("#close").onclick = onClose;
+  root.querySelector("#retry").onclick = onRetry;
+  const results = root.querySelector("#results");
+  let rendered;
+  return {
+    host,
+    setStatus(text) { root.querySelector("#status").textContent = text; },
+    renderLinks(items) {
+      const key = JSON.stringify(items);
+      if (key === rendered) return;
+      rendered = key;
+      results.replaceChildren();
+      for (const item of items) {
+        const card = document.createElement("article");
+        for (const text of [item.accountEmail, item.sender, item.subject, `Destination: ${new URL(item.url).hostname}`]) {
+          const line = document.createElement("p");
+          line.textContent = text;
+          card.append(line);
+        }
+        const link = document.createElement("a");
+        link.textContent = "Open confirmation link ↗";
+        link.href = item.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.addEventListener("click", (event) => { if (!canOpen(item)) event.preventDefault(); });
+        link.addEventListener("auxclick", (event) => { if (!canOpen(item)) event.preventDefault(); });
+        card.append(link);
+        results.append(card);
+      }
+    },
+  };
+}
+
+export function startConfirmationCard({ browser = globalThis, detect = detectConfirmationScreen,
+  detectCode = () => handleCodeField({ action: "detect" }).ok, createView = createConfirmationView } = {}) {
+  const { document, window, location, chrome, MutationObserver, setTimeout, clearTimeout, Date: clock = Date } = browser;
+  let view, timer, scanTimer, generation = 0, activeAttempt, inFlight = false, retryAfterFlight = false;
+  let lastURL = location.href, dismissed = false, since, deadline = 0, screenActive = false;
+  let currentItems = [];
+  function unmount() {
+    generation++;
+    inFlight = false;
+    activeAttempt = undefined;
+    retryAfterFlight = false;
+    clearTimeout(timer);
+    view?.host.remove();
+    view = undefined;
+  }
+  function dismiss() { dismissed = true; unmount(); }
+  function restart() {
+    deadline = clock.now() + POLL_WINDOW_MS;
+    if (inFlight) {
+      // Ignore the current response and run one new check as soon as it ends.
+      generation++;
+      retryAfterFlight = true;
+      return;
+    }
+    check();
+  }
+  async function check() {
+    clearTimeout(timer);
+    if (!view || document.hidden || inFlight) return;
+    if (lastURL !== location.href || !detect(document) || detectCode()) { sync(); return; }
+    if (clock.now() >= deadline) {
+      view.setStatus("Checking finished. Click ↻ to check again.");
+      return;
+    }
+    const attempt = generation;
+    inFlight = true;
+    activeAttempt = attempt;
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "mail-verify-inline-links" });
+      if (attempt !== generation || !view || document.hidden) return;
+      if (lastURL !== location.href || !detect(document) || detectCode()) { sync(); return; }
+      if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
+      currentItems = selectConfirmationLinks(response.links || [], since, clock.now());
+      view.renderLinks(currentItems);
+      view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
+        currentItems.length ? "Choose the email for this signup." : "Waiting for your confirmation email…");
+    } catch (error) {
+      if (attempt === generation && view) view.setStatus(error.message);
+    } finally {
+      if (activeAttempt === attempt && retryAfterFlight && view && !document.hidden) {
+        retryAfterFlight = false;
+        inFlight = false;
+        activeAttempt = undefined;
+        check();
+      } else if (activeAttempt === attempt && attempt === generation) {
+        inFlight = false;
+        activeAttempt = undefined;
+        if (view && !document.hidden) timer = setTimeout(check, 8000);
+      }
+    }
+  }
+  function sync() {
+    if (lastURL !== location.href) {
+      unmount();
+      lastURL = location.href;
+      dismissed = false;
+      screenActive = false;
+      since = undefined;
+    }
+    if (document.hidden) { unmount(); return; }
+    const matches = detect(document) && !detectCode();
+    if (!matches) {
+      unmount();
+      screenActive = false;
+      since = undefined;
+      deadline = 0;
+      return;
+    }
+    if (dismissed) return;
+    if (!screenActive) {
+      screenActive = true;
+      since = clock.now() - 5000;
+      deadline = clock.now() + POLL_WINDOW_MS;
+    }
+    if (view) return;
+    currentItems = [];
+    view = createView(document, {
+      onClose: dismiss, onRetry: restart,
+      canOpen(item) {
+        if (document.hidden || lastURL !== location.href || !detect(document) || detectCode() ||
+            !selectConfirmationLinks([item], since, clock.now()).length) {
+          view?.setStatus("This link is no longer current. Request a new email or check again.");
+          return false;
+        }
+        dismiss();
+        return true;
+      },
+    });
+    document.documentElement.append(view.host);
+    view.setStatus("Waiting for your confirmation email…");
+    check();
+  }
+  function scheduleScan() {
+    if (scanTimer) return;
+    scanTimer = setTimeout(() => { scanTimer = undefined; sync(); }, 250);
+  }
+  new MutationObserver((records) => {
+    if (records.some((record) => record.target !== view?.host && !view?.host.contains(record.target))) scheduleScan();
+  }).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true,
+    attributeFilter: ["hidden", "class", "style"] });
+  document.addEventListener("visibilitychange", scheduleScan);
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismiss(); });
+  document.addEventListener("click", (event) => {
+    const control = event.target.closest?.("button, a, [role=button], input[type=submit]");
+    const label = control?.textContent || control?.value || "";
+    if (!screenActive || !/^(?:re-?send|send again)\b/i.test(label.trim())) return;
+    since = Math.floor(clock.now() / 1000) * 1000 + 1000;
+    dismissed = false;
+    unmount();
+    deadline = clock.now() + POLL_WINDOW_MS;
+    sync();
+  }, true);
+  window.addEventListener("popstate", scheduleScan);
+  window.addEventListener("hashchange", scheduleScan);
+  window.navigation?.addEventListener("currententrychange", scheduleScan);
+  sync();
+}

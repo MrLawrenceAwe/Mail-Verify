@@ -50,6 +50,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
   const controls = Object.fromEntries(
     [
       "checkCodes",
+      "checkLinks",
       "accounts",
       "addAccount",
       "codes",
@@ -70,6 +71,8 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     now: 1000,
     closes: 0,
     fetchCodes: async () => codes,
+    fetchLinks: async () => [],
+    opened: [],
     failFill: false,
     failRemove: false,
     scriptArgs: null,
@@ -85,7 +88,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     async sendSessionRequest(action) {
       return action === "status"
         ? { accountEmails: account ? [account] : [] }
-        : { codes: await state.fetchCodes() };
+        : action === "links" ? { links: await state.fetchLinks() } : { codes: await state.fetchCodes() };
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);
@@ -103,6 +106,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       runtime: { id: "test-extension" },
       tabs: {
         query: async () => [tab],
+        create: async (options) => { state.opened.push(options); },
         get: async () => {
           if (state.failFill) throw Error("Tab unavailable");
           return tab;
@@ -320,4 +324,48 @@ test("shows multiple accounts and labels codes with their inbox", async () => {
   controls.addAccount.trigger();
   assert.equal(controls.accountSetup.hidden, false);
   assert.equal(controls.connectedAccountPanel.hidden, false);
+});
+
+const link = { ...code, url: "https://example.com/confirm?token=secret" };
+test("finds links only on request and opens only the selected link", async () => {
+  const { controls, state, scheduled } = await setup();
+  state.fetchLinks = async () => [link];
+  assert.deepEqual(state.opened, []);
+  controls.checkLinks.trigger();
+  await settle();
+  assert.deepEqual(state.opened, []);
+  const button = controls.codes.querySelectorAll("button")[0];
+  assert.equal(button.textContent, "Open confirmation link ↗");
+  await button.trigger();
+  assert.deepEqual(state.opened, [{ url: link.url }]);
+  assert.equal(scheduled.size, 0);
+});
+
+test("rejects expired and unsafe links at click time", async () => {
+  for (const item of [{ ...link, receivedAt: -700000 }, { ...link, url: "http://example.com/confirm" }]) {
+    const { controls, state } = await setup();
+    state.fetchLinks = async () => [item];
+    controls.checkLinks.trigger();
+    await settle();
+    await controls.codes.querySelectorAll("button")[0].trigger();
+    assert.deepEqual(state.opened, []);
+    assert.match(controls.status.textContent, /too old|not supported/);
+  }
+});
+
+test("switching modes ignores a pending code response", async () => {
+  const { controls, state } = await setup();
+  let resolve;
+  state.fetchCodes = () => new Promise((done) => { resolve = done; });
+  controls.checkCodes.trigger();
+  state.fetchLinks = async () => [link];
+  controls.checkLinks.trigger();
+  await settle();
+  resolve([code]);
+  await settle();
+  assert.equal(controls.codes.querySelectorAll("button")[0].textContent, "Open confirmation link ↗");
+  state.fetchCodes = async () => [code];
+  controls.checkCodes.trigger();
+  await settle();
+  assert.match(controls.codes.querySelectorAll("button")[0].textContent, /Fill on/);
 });

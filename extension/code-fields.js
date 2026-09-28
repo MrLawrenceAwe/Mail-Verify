@@ -147,7 +147,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor }
     return {
       ok: false,
       error:
-        "Click the verification-code field on the page, then reopen Code Fill. Embedded forms may not be supported.",
+        "Click the verification-code field on the page, then reopen Mail Verify. Embedded forms may not be supported.",
     };
   }
   const setter = Object.getOwnPropertyDescriptor(
