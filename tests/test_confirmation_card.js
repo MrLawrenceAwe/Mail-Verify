@@ -8,7 +8,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 function setup() {
   const timers = new Map(), events = {}, windowEvents = {};
   let id = 0;
-  const state = { now: 10000, detected: true, code: false, requests: 0, views: [], respond: async () => ({ ok: true, links: [item] }) };
+  const state = { now: 10000, detected: true, screenKey: "first signup", code: false, requests: 0, views: [], respond: async () => ({ ok: true, links: [item] }) };
   const document = { hidden: false, documentElement: { append() {} }, addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
   startConfirmationCard({
@@ -17,7 +17,7 @@ function setup() {
       Date: { now: () => state.now },
       setTimeout(fn, delay) { const key = ++id; timers.set(key, { fn, delay }); return key; }, clearTimeout(key) { timers.delete(key); },
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
-    }, detect: () => state.detected, detectCode: () => state.code,
+    }, detect: () => state.detected, getScreenKey: () => state.screenKey, detectCode: () => state.code,
     createView(_document, callbacks) {
       const view = { callbacks, removed: false, links: [], host: { remove() { view.removed = true; }, contains() { return false; } },
         setStatus(text) { view.status = text; }, renderLinks(items) { view.links = items; } };
@@ -86,6 +86,19 @@ test("resend clears old links and expiry prevents opening", async () => {
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now += 700000;
   assert.equal(f.state.views.at(-1).callbacks.canOpen(item), false);
+});
+
+test("a new confirmation step on the same URL clears links from the previous step", async () => {
+  const f = setup(); await settle();
+  const oldView = f.state.views[0];
+  assert.deepEqual(oldView.links, [item]);
+  f.state.now = 20_000;
+  f.state.screenKey = "second signup";
+  f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 20_000 }] });
+  f.state.mutate([{ target: {} }]); await f.run(250);
+  assert.equal(oldView.removed, true);
+  assert.equal(oldView.callbacks.canOpen(item), false);
+  assert.deepEqual(f.state.views.at(-1).links.map(link => link.uid), [2]);
 });
 
 test("retry during an active check ignores its response and immediately checks again", async () => {

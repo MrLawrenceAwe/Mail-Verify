@@ -96,6 +96,13 @@ def extract_link_details(raw):
             for match in re.finditer(r"https://[^\s<>\"']+", value):
                 context = value[max(0, match.start() - 180):match.start()]
                 context = re.split(r"\n\s*\n", context)[-1]
+                # A confirmation phrase in an earlier sentence must not turn a
+                # later help, privacy, or other unrelated URL into a candidate.
+                sentences = re.split(r"[.!?](?:\s+|$)", context)
+                context = next(
+                    (sentence for sentence in reversed(sentences) if sentence.strip()),
+                    "",
+                )
                 links.append((match.group().rstrip(".,);]"), context))
             candidates = plain_candidates
         for url, label in links:
