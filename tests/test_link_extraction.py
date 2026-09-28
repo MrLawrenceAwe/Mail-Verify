@@ -23,6 +23,13 @@ class LinkExtractionTests(unittest.TestCase):
         result = extract_link_details(self.message('Confirm your account:\nhttps://example.com/activate?token=abc', 'plain'))
         self.assertEqual(result["url"], 'https://example.com/activate?token=abc')
 
+    def test_plain_text_confirmation_does_not_label_a_later_unrelated_url(self):
+        body = (
+            "Confirm your account by using the button in your dashboard. "
+            "For help, read https://example.com/help"
+        )
+        self.assertIsNone(extract_link_details(self.message(body, "plain")))
+
     def test_html_and_plain_are_alternative_renderings(self):
         msg = EmailMessage()
         msg["From"] = "Service <hello@example.com>"

@@ -9,13 +9,23 @@ export function isConfirmationScreen(text) {
     /\b(?:click|follow|open)\b.{0,45}\blink\b.{0,70}\b(?:confirm|verify|activate)\b.{0,30}\b(?:e-?mail|account)\b/i.test(value);
 }
 
-export function detectConfirmationScreen(document) {
+export function confirmationScreenKey(document) {
   // Inspect short visible task panels, never hidden templates or the extension card.
   const panels = [...document.querySelectorAll("main, [role=main], form, [role=dialog]")];
   if (!panels.length) panels.push(document.body);
-  return panels.some((panel) => panel && panel.getClientRects().length &&
+  const panel = panels.find((panel) => panel && panel.getClientRects().length &&
     panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
     isConfirmationScreen(panel.innerText || ""));
+  if (!panel) return null;
+  return (panel.innerText || "")
+    .replace(/\b\d{1,2}:\d{2}\b/g, "#")
+    .replace(/\b\d+\s*(?:seconds?|minutes?|secs?|mins?)\b/gi, "# time")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function detectConfirmationScreen(document) {
+  return confirmationScreenKey(document) !== null;
 }
 
 export function selectConfirmationLinks(items, since, now) {
@@ -77,10 +87,11 @@ export function createConfirmationView(document, { onClose, onRetry, canOpen }) 
 }
 
 export function startConfirmationCard({ browser = globalThis, detect = detectConfirmationScreen,
+  getScreenKey = detect === detectConfirmationScreen ? confirmationScreenKey : () => "",
   detectCode = () => handleCodeField({ action: "detect" }).ok, createView = createConfirmationView } = {}) {
   const { document, window, location, chrome, MutationObserver, setTimeout, clearTimeout, Date: clock = Date } = browser;
   let view, timer, scanTimer, generation = 0, activeAttempt, inFlight = false, retryAfterFlight = false;
-  let lastURL = location.href, dismissed = false, since, deadline = 0, screenActive = false;
+  let lastURL = location.href, dismissed = false, since, deadline = 0, screenActive = false, screenKey;
   let currentItems = [];
   function unmount() {
     generation++;
@@ -105,7 +116,7 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
   async function check() {
     clearTimeout(timer);
     if (!view || document.hidden || inFlight) return;
-    if (lastURL !== location.href || !detect(document) || detectCode()) { sync(); return; }
+    if (lastURL !== location.href || !detect(document) || detectCode() || getScreenKey(document) !== screenKey) { sync(); return; }
     if (clock.now() >= deadline) {
       view.setStatus("Checking finished. Click ↻ to check again.");
       return;
@@ -116,7 +127,7 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
     try {
       const response = await chrome.runtime.sendMessage({ type: "mail-verify-inline-links" });
       if (attempt !== generation || !view || document.hidden) return;
-      if (lastURL !== location.href || !detect(document) || detectCode()) { sync(); return; }
+      if (lastURL !== location.href || !detect(document) || detectCode() || getScreenKey(document) !== screenKey) { sync(); return; }
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
       currentItems = selectConfirmationLinks(response.links || [], since, clock.now());
       view.renderLinks(currentItems);
@@ -147,16 +158,26 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
     }
     if (document.hidden) { unmount(); return; }
     const matches = detect(document) && !detectCode();
+    const nextScreenKey = matches ? getScreenKey(document) : undefined;
     if (!matches) {
       unmount();
       screenActive = false;
+      screenKey = undefined;
       since = undefined;
       deadline = 0;
       return;
     }
+    if (screenActive && nextScreenKey !== screenKey) {
+      unmount();
+      dismissed = false;
+      screenActive = false;
+      since = undefined;
+      deadline = 0;
+    }
     if (dismissed) return;
     if (!screenActive) {
       screenActive = true;
+      screenKey = nextScreenKey;
       since = clock.now() - 5000;
       deadline = clock.now() + POLL_WINDOW_MS;
     }
@@ -166,6 +187,7 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
       onClose: dismiss, onRetry: restart,
       canOpen(item) {
         if (document.hidden || lastURL !== location.href || !detect(document) || detectCode() ||
+            getScreenKey(document) !== screenKey ||
             !selectConfirmationLinks([item], since, clock.now()).length) {
           view?.setStatus("This link is no longer current. Request a new email or check again.");
           return false;
