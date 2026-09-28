@@ -1,4 +1,4 @@
-export function createPopupView(document, { onRemoveAccount, onFillCode }) {
+export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenLink }) {
   const $ = (id) => document.getElementById(id);
   let renderedCodesKey;
 
@@ -41,6 +41,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
 
   function setRemoveAndCheckDisabled(disabled) {
     $("checkCodes").disabled = disabled;
+    $("checkLinks").disabled = disabled;
     for (const button of $("accounts").querySelectorAll("button")) button.disabled = disabled;
   }
 
@@ -107,8 +108,30 @@ export function createPopupView(document, { onRemoveAccount, onFillCode }) {
     }
   }
 
+  function renderLinks(links) {
+    const key = "links:" + JSON.stringify(links);
+    if (key === renderedCodesKey) return;
+    renderedCodesKey = key;
+    $("codes").replaceChildren();
+    for (const item of links) {
+      const card = document.createElement("article");
+      card.className = "card";
+      for (const value of [item.accountEmail, item.sender, item.subject, `Destination: ${new URL(item.url).hostname}`]) {
+        const line = document.createElement("p");
+        line.textContent = value;
+        line.className = "sender";
+        card.append(line);
+      }
+      const button = document.createElement("button");
+      button.textContent = "Open confirmation link ↗";
+      button.addEventListener("click", () => onOpenLink(item, button));
+      card.append(button);
+      $("codes").append(card);
+    }
+  }
+
   return { setStatus, showAccountSetup, showCompanionSetup, setExtensionId,
     setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
     clearAccountEmail, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
-    markCodeFilled, renderAccounts, clearCodes, renderCodes };
+    markCodeFilled, renderAccounts, clearCodes, renderCodes, renderLinks };
 }

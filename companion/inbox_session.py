@@ -6,6 +6,7 @@ import ssl
 import time
 
 from code_extraction import extract_code_details
+from link_extraction import extract_link_details
 from errors import UserError
 
 MAX_CODE_AGE_SECONDS = 600
@@ -32,19 +33,20 @@ def connect_imap(credentials):
 
 
 class InboxSession:
-    def __init__(self, credentials):
+    def __init__(self, credentials, kind="codes"):
+        self.extract_details = extract_link_details if kind == "links" else extract_code_details
         self.credentials = credentials
         self.conn = None
         self.last_seen_uid = None
         self.message_count = 0
-        self.codes_by_uid = {}
+        self.items_by_uid = {}
         self.pending_received_at_by_uid = {}
 
     def close(self):
         conn, self.conn = self.conn, None
         self.last_seen_uid = None
         self.message_count = 0
-        self.codes_by_uid.clear()
+        self.items_by_uid.clear()
         self.pending_received_at_by_uid.clear()
         if conn:
             try:
@@ -107,8 +109,8 @@ class InboxSession:
                 eligible[int(uid.group(1))] = min(received, now)
         return eligible
 
-    def _fetch_codes(self, candidates):
-        new_code_count = 0
+    def _fetch_items(self, candidates):
+        new_item_count = 0
         # Return codes from the newest batch immediately. Older candidates stay
         # queued for the next poll; if no code is found, continue this check.
         for batch in (candidates[:FIRST_BATCH_SIZE], candidates[FIRST_BATCH_SIZE:]):
@@ -132,15 +134,15 @@ class InboxSession:
                     # An OK fetch can omit a body. Try this UID again on the next poll.
                     continue
                 self.pending_received_at_by_uid.pop(uid, None)
-                found = extract_code_details(messages[uid])
+                found = self.extract_details(messages[uid])
                 if found:
                     found["receivedAt"] = int(received * 1000)
                     found["uid"] = uid
-                    self.codes_by_uid[uid] = found
-                    new_code_count += 1
-                if new_code_count == MAX_RESULTS:
+                    self.items_by_uid[uid] = found
+                    new_item_count += 1
+                if new_item_count == MAX_RESULTS:
                     return
-            if new_code_count:
+            if new_item_count:
                 return
 
     def _prune_pending_messages(self, now):
@@ -162,7 +164,7 @@ class InboxSession:
         self.pending_received_at_by_uid = dict(pending)
         return [uid for uid, _ in pending]
 
-    def recent_codes(self):
+    def recent_items(self):
         try:
             if self.conn is None:
                 self.conn = connect_imap(self.credentials)
@@ -171,15 +173,15 @@ class InboxSession:
                     raise UserError("Yahoo could not open your inbox.")
                 self.message_count = int(count[0])
             now = time.time()
-            self.codes_by_uid = {
+            self.items_by_uid = {
                 uid: item
-                for uid, item in self.codes_by_uid.items()
+                for uid, item in self.items_by_uid.items()
                 if 0 <= now - item["receivedAt"] / 1000 <= MAX_CODE_AGE_SECONDS
             }
             metadata = self._new_message_metadata()
             self.pending_received_at_by_uid.update(self._eligible_messages(metadata, now))
             candidates = self._prune_pending_messages(now)
-            self._fetch_codes(candidates)
+            self._fetch_items(candidates)
             return self._results()
         except Exception:
             self.close()
@@ -187,7 +189,7 @@ class InboxSession:
 
     def _results(self):
         newest = sorted(
-            self.codes_by_uid.values(),
+            self.items_by_uid.values(),
             key=lambda item: (item["receivedAt"], item["uid"]),
             reverse=True,
         )
@@ -195,13 +197,13 @@ class InboxSession:
         newest_by_sender = self._newest_distinct_senders(newest)
         retained_uids = {item["uid"] for item in (*newest_overall, *newest_by_sender)}
         results = [item for item in newest if item["uid"] in retained_uids]
-        self.codes_by_uid = {item["uid"]: item for item in results}
+        self.items_by_uid = {item["uid"]: item for item in results}
         return results
 
     def _newest_distinct_senders(self, newest=None):
         if newest is None:
             newest = sorted(
-                self.codes_by_uid.values(),
+                self.items_by_uid.values(),
                 key=lambda item: (item["receivedAt"], item["uid"]),
                 reverse=True,
             )

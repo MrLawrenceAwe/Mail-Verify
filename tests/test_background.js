@@ -22,8 +22,8 @@ function setup(nativeResponse = { ok: true, codes: [] }) {
   };
   registerInlineRequests(chrome, { setTimeout(fn) { idle = fn; return 1; }, clearTimeout() { idle = undefined; } });
   const sender = { id: "extension", frameId: 0, url: "https://secure.indeed.com/auth", tab: { id: 1 } };
-  const request = (overrides = {}) => new Promise(resolve => listener(
-    { type: "yahoo-inline-codes" }, { ...sender, ...overrides }, resolve));
+  const request = (overrides = {}, type = "mail-verify-inline-codes") => new Promise(resolve => listener(
+    { type }, { ...sender, ...overrides }, resolve));
   return { request, expire() { idle(); }, get checks() { return checks; }, get closed() { return closed; } };
 }
 
@@ -53,4 +53,12 @@ test("automatic checks pass partial account warnings to the picker", async () =>
   const warnings = ["one@yahoo.com: Yahoo took too long to respond."];
   const result = await setup({ ok: true, codes: [], warnings }).request();
   assert.deepEqual(result, { ok: true, codes: [], warnings });
+});
+
+
+test("link requests use their own result type and enforce active tab access", async () => {
+  const links = [{ url: "https://example.com/confirm", receivedAt: 1000 }];
+  const fixture = setup({ ok: true, links });
+  assert.deepEqual(await fixture.request({}, "mail-verify-inline-links"), { ok: true, links, warnings: [] });
+  assert.equal((await fixture.request({ tab: { id: 2 } }, "mail-verify-inline-links")).ok, false);
 });

@@ -1,6 +1,6 @@
-# Yahoo Code Fill
+# Mail Verify
 
-A working local prototype for desktop Chrome on macOS. No Yahoo browser tab is needed. A code picker appears automatically on supported HTTPS verification forms. Click the matching email code to fill it; the toolbar popup is only needed for account setup or manual checks.
+Email verification codes and confirmation links for desktop Chrome on macOS. The project has provider-neutral branding; Yahoo is the only connected email provider currently supported. Other providers will need their own connection support. No webmail browser tab is needed. A code picker appears automatically on supported HTTPS verification forms. Click the matching email code to fill it; the toolbar popup is only needed for account setup or manual checks.
 
 ## Set up on this Mac
 
@@ -8,13 +8,13 @@ The Mac companion has already been installed by Codex. Finish these steps:
 
 1. In Chrome, type `chrome://extensions` into the address bar.
 2. Turn on **Developer mode**, choose **Load unpacked**, and select the `extension` folder beside this guide.
-3. Pin **Yahoo Code Fill** using Chrome’s Extensions menu, then open it.
+3. Pin **Mail Verify** using Chrome’s Extensions menu, then open it.
 4. Enter your Yahoo email and a **Yahoo-generated app password**, then click **Add account**. Generate that password in [Yahoo Account Security](https://login.yahoo.com/account/security). Use an app password, not your normal account password. Enter it in the extension, not in chat. Use **Add another Yahoo account** for each additional inbox.
 5. If macOS asks for Keychain access, approve access for the companion’s Python process.
 
 Expected extension ID: `ggmcbkkmgcdiimnpkekakaegmclkgkjj`.
 
-If you loaded an earlier version, click **Reload** for Yahoo Code Fill on Chrome’s Extensions page after installing this update.
+If you loaded an earlier version, click **Reload** for Mail Verify on Chrome’s Extensions page after installing this update.
 
 If reinstalling or setting up another Mac, first double-click **Install Companion.command**. The installer requires Python 3.9+ and records that Python executable’s path. If Python is moved or removed, rerun the installer after restoring Python.
 
@@ -28,6 +28,14 @@ If reinstalling or setting up another Mac, first double-click **Install Companio
 The inline suggestion only shows mail received since the current code step began, with a five-second allowance for mail that arrived just before the field appeared. It keeps the newest code per sender. Clicking “Send new code” or “Resend code” clears the old suggestion immediately and waits for newer mail. Since Yahoo's IMAP arrival times have one-second precision, the picker skips codes dated in the same second as the resend click; use the toolbar popup if a new code arrives that quickly. The popup also remains available for manually choosing older codes.
 
 No toolbar popup is required after setup. Hidden tabs stop checking. Scroll and resize updates reuse cached candidate fields and position the picker on the next animation frame; relevant page changes refresh field discovery. The extension does not click Submit, although some websites submit automatically when all digits are entered.
+
+## Confirmation links
+
+On supported HTTPS “Check your email” or “Check your inbox” screens, a small **Mail Verify confirmation links** card appears at the bottom right. It checks every 8 seconds for up to 2 minutes while the tab is active, showing mail received since the step appeared (with a five-second allowance). It stays out of the way when a recognised code field is present. Use × or Escape to dismiss it for that page, or ↻ to check again. Resending clears older results. Common English prompts in short visible panels are supported; password-reset and newsletter screens are excluded.
+
+For manual checking or pages that are not detected, open the toolbar popup and click **Find confirmation links**. It checks the latest 30 inbox messages from the last 10 minutes across connected accounts and polls while the popup stays open, for up to 2 minutes. Review the account, sender, subject, and destination domain, then click **Open confirmation link** to open it in a new Chrome tab. Opening a link may immediately confirm the account. **Check for a code** switches back to code checking.
+
+Extraction happens locally without AI or visiting links in advance. The picker recognises explicit English “Verify email”, “Confirm account”, and “Activate account” instructions in visible HTML links or immediately before plain-text URLs. For emails with both formats, it uses the HTML link when one qualifies and otherwise checks the plain-text version. It accepts HTTPS links, excludes password-reset subjects, and omits messages with multiple distinct qualifying links. It does not authenticate senders or automatically match a link to the current site. Tracking URLs show their initial destination; redirects and any further confirmation steps are handled by the website. Unusual wording and older emails may not appear.
 
 ## Current limits
 
@@ -51,7 +59,7 @@ Chrome starts the companion on demand for automatic checks on the active tab. Ba
 
 **Remove** beside an account in the popup removes that Yahoo credential from Keychain. Removing the last account deletes the Keychain item.
 
-To uninstall the companion, run this from the Yahoo Code Fill folder:
+To uninstall the companion, run this from the project folder:
 
 ```sh
 python3 companion/install.py --uninstall
@@ -80,11 +88,11 @@ The installer test installs into a temporary directory, launches that copy to ve
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
 - `extension/code-fields.js` exports the self-contained field detector and filler injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page. `code-timing.js` shares timing limits between the popup and inline picker.
 - `companion/host.py` handles request dispatch and native-message framing; `account_sessions.py` coordinates connected accounts, while `inbox_session.py` manages IMAP connections and bounded inbox scans.
-- `companion/code_extraction.py` parses email content and extracts a single unambiguous code.
+- `companion/code_extraction.py` extracts a single unambiguous code; `link_extraction.py` extracts account confirmation links. Both use the bounded inbox scanner.
 - `companion/keychain.py` stores credentials; `errors.py` defines user-facing errors.
 - `companion/install.py` installs and removes the companion files listed in `COMPANION_FILES`. Update that list when adding runtime modules. Tests are grouped by the production module they cover.
 
-After changing companion code, rerun **Install Companion.command**; after changing extension code, reload the extension in Chrome. The Keychain service/account identifiers and extension identity are intentionally stable so updates retain access to saved credentials and Chrome registration.
+After changing companion code, rerun **Install Companion.command**; after changing extension code, reload the extension in Chrome. The existing installation directory, native-host identifier, Keychain service/account identifiers, and extension identity remain stable across the Mail Verify rename so updates retain saved credentials and Chrome registration. Yahoo references in these internal installation identifiers do not define the product name.
 
 ## References
 

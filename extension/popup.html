@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Yahoo Code Fill</title>
+    <title>Mail Verify</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <header>
-      <span class="mark">Y<span>✓</span></span>
+      <span class="mark">M<span>✓</span></span>
       <div>
-        <h1>Code Fill</h1>
-        <p>Codes from your Yahoo inbox.</p>
+        <h1>Mail Verify</h1>
+        <p>Email codes and confirmation links.</p>
       </div>
     </header>
     <main>
@@ -20,7 +20,7 @@
       </p>
       <section id="accountSetup" hidden>
         <h2>Add Yahoo account</h2>
-        <p>Use a Yahoo app password. It stays in your Mac’s Keychain.</p>
+        <p>Yahoo is currently the supported provider. Use a Yahoo app password; it stays in your Mac’s Keychain.</p>
         <form id="addAccountForm">
           <label for="email">Yahoo email address</label
           ><input
@@ -56,6 +56,8 @@
         </p>
         <div id="codes"></div>
         <button id="checkCodes">Check for a code</button>
+        <button id="checkLinks" class="quiet">Find confirmation links</button>
+        <p class="hint">Links open in a new tab and may immediately confirm your account. Check the sender and destination first.</p>
         <p class="hint">
           While waiting, checks about every 8 seconds for up to 2 minutes. Keep
           this popup open. Recent inbox messages only.
@@ -64,14 +66,13 @@
       <section id="companionSetup" hidden>
         <h2>One-time Mac setup</h2>
         <p>
-          Run <strong>Install Companion.command</strong> from the Yahoo Code
-          Fill folder. Your extension ID:
+          Run <strong>Install Companion.command</strong> from the project folder. Your extension ID:
         </p>
         <input id="extensionId" readonly aria-label="Extension ID" />
         <p>Then close and reopen this popup.</p>
       </section>
     </main>
-    <footer>Codes are extracted on your Mac.</footer>
+    <footer>Codes and links are extracted on your Mac.</footer>
     <script type="module" src="popup-entry.js"></script>
   </body>
 </html>

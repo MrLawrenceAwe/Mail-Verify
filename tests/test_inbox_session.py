@@ -14,7 +14,7 @@ class InboxSessionTests(unittest.TestCase):
     def message(self, body, subject="Sign in", subtype="plain"):
         return f"From: Example <auth@example.com>\r\nSubject: {subject}\r\nContent-Type: text/{subtype}; charset=utf-8\r\n\r\n{body}".encode()
 
-    def test_recent_codes_batches_fetches_and_keeps_newest_first(self):
+    def test_recent_items_batches_fetches_and_keeps_newest_first(self):
         class FakeConnection:
             def __init__(self):
                 self.fetches = []
@@ -76,14 +76,14 @@ class InboxSessionTests(unittest.TestCase):
             session = inbox_session.InboxSession(
                 {"email": "test@yahoo.com", "password": "unused"}
             )
-            codes = session.recent_codes()
-            self.assertEqual(session.recent_codes(), codes)
+            codes = session.recent_items()
+            self.assertEqual(session.recent_items(), codes)
             self.assertEqual(
                 conn.fetches[1][0], b"7,6,5,4,3",
                 "the next poll should inspect older mail for a distinct sender",
             )
             conn.count = 13
-            self.assertEqual(session.recent_codes()[0]["code"], "100013")
+            self.assertEqual(session.recent_items()[0]["code"], "100013")
             self.assertEqual(conn.fetches[2][0], b"13")
             self.assertEqual(conn.fetches[3][0], b"13,2,1")
             session.close()
@@ -139,15 +139,15 @@ class InboxSessionTests(unittest.TestCase):
         conn = FakeConnection()
         with patch.object(inbox_session, "connect_imap", return_value=conn):
             session = inbox_session.InboxSession({})
-            self.assertEqual([x["code"] for x in session.recent_codes()], ["100012"])
+            self.assertEqual([x["code"] for x in session.recent_items()], ["100012"])
             self.assertEqual(conn.batches, [[b"12", b"11", b"10", b"9", b"8"]])
             self.assertEqual(len(session.pending_received_at_by_uid), 7)
             conn.count = 13
-            self.assertEqual([x["code"] for x in session.recent_codes()], ["100013", "100012", "100006"])
+            self.assertEqual([x["code"] for x in session.recent_items()], ["100013", "100012", "100006"])
             self.assertEqual(conn.batches[1], [b"13", b"7", b"6", b"5", b"4"])
-            self.assertEqual([x["code"] for x in session.recent_codes()], ["100013", "100012", "100006", "100001"])
+            self.assertEqual([x["code"] for x in session.recent_items()], ["100013", "100012", "100006", "100001"])
             self.assertEqual(conn.batches[2], [b"3", b"2", b"1"])
-            session.recent_codes()
+            session.recent_items()
             self.assertEqual(len(conn.batches), 3)
             session.pending_received_at_by_uid[99] = time.time()
             session.close()
@@ -164,7 +164,7 @@ class InboxSessionTests(unittest.TestCase):
         session.conn = FakeConnection()
         session.last_seen_uid = 10
         session.pending_received_at_by_uid[9] = time.time() - 601
-        self.assertEqual(session.recent_codes(), [])
+        self.assertEqual(session.recent_items(), [])
         self.assertEqual(session.pending_received_at_by_uid, {})
 
     def test_initial_scan_is_bounded_to_newest_30_messages(self):
@@ -197,7 +197,7 @@ class InboxSessionTests(unittest.TestCase):
             session = inbox_session.InboxSession(
                 {"email": "test@yahoo.com", "password": "unused"}
             )
-            self.assertEqual(session.recent_codes(), [])
+            self.assertEqual(session.recent_items(), [])
         self.assertEqual(conn.sequence, "9971:10000")
         self.assertEqual(session.last_seen_uid, 10000)
 
@@ -236,7 +236,7 @@ class InboxSessionTests(unittest.TestCase):
         conn = FakeConnection()
         with patch.object(inbox_session, "connect_imap", return_value=conn):
             session = inbox_session.InboxSession({"email": "test@yahoo.com", "password": "unused"})
-            self.assertEqual(session.recent_codes(), [])
+            self.assertEqual(session.recent_items(), [])
         self.assertEqual([len(batch) for batch in conn.body_batches], [5, 25])
 
     def test_future_internaldate_does_not_permanently_skip_code(self):
@@ -268,10 +268,10 @@ class InboxSessionTests(unittest.TestCase):
             session = inbox_session.InboxSession(
                 {"email": "test@yahoo.com", "password": "unused"}
             )
-            first = session.recent_codes()
+            first = session.recent_items()
             self.assertEqual(first[0]["code"], "482913")
             self.assertLessEqual(first[0]["receivedAt"], int(time.time() * 1000))
-            self.assertEqual(session.recent_codes(), first)
+            self.assertEqual(session.recent_items(), first)
         self.assertEqual(conn.body_fetches, 1)
 
     def test_missing_body_is_retried_on_next_poll(self):
@@ -294,9 +294,9 @@ class InboxSessionTests(unittest.TestCase):
         session.last_seen_uid = 10
         session.pending_received_at_by_uid[9] = time.time() - 60
 
-        self.assertEqual(session.recent_codes(), [])
+        self.assertEqual(session.recent_items(), [])
         self.assertIn(9, session.pending_received_at_by_uid)
-        self.assertEqual(session.recent_codes()[0]["code"], "482913")
+        self.assertEqual(session.recent_items()[0]["code"], "482913")
         self.assertEqual(conn.body_fetches, 2)
         self.assertNotIn(9, session.pending_received_at_by_uid)
 
@@ -316,12 +316,12 @@ class InboxSessionTests(unittest.TestCase):
         session.conn = FakeConnection()
         session.last_seen_uid = 10
         session.pending_received_at_by_uid[1] = now - 10
-        session.codes_by_uid = {
+        session.items_by_uid = {
             uid: {"uid": uid, "code": str(uid), "receivedAt": int((now - 60) * 1000)}
             for uid in range(2, 7)
         }
 
-        results = session.recent_codes()
+        results = session.recent_items()
         self.assertEqual([item["uid"] for item in results], [1, 6, 5, 4, 3])
 
     def test_repeated_sender_does_not_hide_older_distinct_sender(self):
@@ -337,7 +337,7 @@ class InboxSessionTests(unittest.TestCase):
         session = inbox_session.InboxSession({})
         session.conn = FakeConnection()
         session.last_seen_uid = 10
-        session.codes_by_uid = {
+        session.items_by_uid = {
             uid: {
                 "uid": uid,
                 "code": str(100000 + uid),
@@ -348,7 +348,7 @@ class InboxSessionTests(unittest.TestCase):
         }
         session.pending_received_at_by_uid[5] = now - 7
 
-        results = session.recent_codes()
+        results = session.recent_items()
         self.assertEqual([item["uid"] for item in results], [10, 9, 8, 7, 6, 5])
         self.assertEqual(results[-1]["sender"], "other@example.com")
         self.assertEqual(session.pending_received_at_by_uid, {})

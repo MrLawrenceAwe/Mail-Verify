@@ -78,12 +78,12 @@ def handle_request(request, sessions):
             keychain("set", {"accounts": account_credentials})
         sessions.remove(address)
         return {"accountEmails": [item["email"] for item in account_credentials]}
-    if action == "codes":
+    if action in ("codes", "links"):
         account_credentials = load_account_credentials()
         if not account_credentials:
             sessions.close()
             raise UserError("Connect Yahoo Mail first.")
-        return sessions.fetch_recent_codes(account_credentials)
+        return sessions.fetch_recent_items(account_credentials, action)
     raise UserError("Unsupported request.")
 
 

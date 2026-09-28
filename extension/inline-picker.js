@@ -160,15 +160,15 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     const check = activeCheck = {};
     const requestGeneration = attemptGeneration;
     let checkFailed = false;
-    if (!view.hasCodes()) view.setStatus("Checking Yahoo Mail…");
+    if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
-      const response = await chrome.runtime.sendMessage({ type: "yahoo-inline-codes" });
+      const response = await chrome.runtime.sendMessage({ type: "mail-verify-inline-codes" });
       if (lastURL !== location.href) {
         syncPicker();
         return;
       }
       if (requestGeneration !== attemptGeneration || !view) return;
-      if (!response?.ok) throw new Error(response?.error || "Could not check Yahoo.");
+      if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
       checkFailed = !!response.warnings?.length;
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
       const codes = selectSuggestedCodes(response.codes, minReceivedAtMs, clock.now(), excludedMessageKeys);
@@ -177,7 +177,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
         ? `Could not check: ${response.warnings.join("; ")}`
         : codes.length
           ? location.hostname
-          : "Waiting for a Yahoo email code…";
+          : "Waiting for an email code…";
       view.setStatus(status);
     } catch (error) {
       checkFailed = true;
