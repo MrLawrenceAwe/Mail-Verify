@@ -68,7 +68,16 @@ class LinkExtractionTests(unittest.TestCase):
     def test_duplicate_link_and_password_subject(self):
         body = '<a href="https://example.com/a">Confirm account</a>' * 2
         self.assertIsNotNone(extract_link_details(self.message(body)))
-        self.assertIsNone(extract_link_details(self.message(body, subject="Reset your password")))
+        for subject in ("Reset your password", "Password reset request"):
+            with self.subTest(subject=subject):
+                self.assertIsNone(extract_link_details(self.message(body, subject=subject)))
+
+    def test_onboarding_subject_can_mention_setting_a_password(self):
+        body = '<a href="https://example.com/a">Verify your email</a>'
+        result = extract_link_details(
+            self.message(body, subject="Verify your email and set your password")
+        )
+        self.assertEqual(result["url"], "https://example.com/a")
 
     def test_attachment_ignored(self):
         msg = EmailMessage()
