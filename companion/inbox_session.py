@@ -40,6 +40,7 @@ class InboxSession:
         self.last_seen_uid = None
         self.message_count = 0
         self.items_by_uid = {}
+        self.pending_metadata_uids = set()
         self.pending_received_at_by_uid = {}
 
     def close(self):
@@ -47,6 +48,7 @@ class InboxSession:
         self.last_seen_uid = None
         self.message_count = 0
         self.items_by_uid.clear()
+        self.pending_metadata_uids.clear()
         self.pending_received_at_by_uid.clear()
         if conn:
             try:
@@ -82,16 +84,29 @@ class InboxSession:
             raise UserError("Yahoo could not search your inbox.")
         # UID ranges ending in * can return the previous last UID.
         all_uids = [uid for value in data[0].split() if (uid := int(value)) > self.last_seen_uid]
-        uids = all_uids[-MAX_MESSAGES:]
+        self.pending_metadata_uids.update(all_uids[-MAX_MESSAGES:])
+        # A successful UID FETCH may omit a message temporarily. Keep those
+        # UIDs queued so advancing last_seen_uid cannot make them disappear.
+        self.pending_metadata_uids = set(
+            sorted(self.pending_metadata_uids, reverse=True)[:MAX_MESSAGES]
+        )
         if all_uids:
             self.last_seen_uid = all_uids[-1]
-        if not uids:
+        if not self.pending_metadata_uids:
             return []
+        uids = sorted(self.pending_metadata_uids, reverse=True)
         status, metadata = self.conn.uid(
             "fetch", b",".join(str(uid).encode() for uid in uids), "(UID INTERNALDATE RFC822.SIZE)"
         )
         if status != "OK":
             raise UserError("Yahoo could not inspect recent messages.")
+        returned_uids = {
+            int(match.group(1))
+            for entry in metadata
+            if isinstance(entry, bytes)
+            if (match := re.search(rb"\bUID (\d+)\b", entry))
+        }
+        self.pending_metadata_uids.difference_update(returned_uids)
         return metadata
 
     def _eligible_messages(self, metadata, now):

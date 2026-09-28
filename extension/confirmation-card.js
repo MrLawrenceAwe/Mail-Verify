@@ -1,6 +1,9 @@
 import { handleCodeField } from "./code-fields.js";
 import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
 
+const confirmationPanelIds = new WeakMap();
+let nextConfirmationPanelId = 1;
+
 export function isConfirmationScreen(text) {
   const value = text.replace(/\s+/g, " ").trim();
   if (!value || value.length > 2500 || /\b(?:reset|forgot|change)\b.{0,35}\bpassword\b|\b(?:newsletter|unsubscribe)\b/i.test(value)) return false;
@@ -17,11 +20,13 @@ export function confirmationScreenKey(document) {
     panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
     isConfirmationScreen(panel.innerText || ""));
   if (!panel) return null;
-  return (panel.innerText || "")
+  if (!confirmationPanelIds.has(panel)) confirmationPanelIds.set(panel, nextConfirmationPanelId++);
+  const text = (panel.innerText || "")
     .replace(/\b\d{1,2}:\d{2}\b/g, "#")
     .replace(/\b\d+\s*(?:seconds?|minutes?|secs?|mins?)\b/gi, "# time")
     .replace(/\s+/g, " ")
     .trim();
+  return `${confirmationPanelIds.get(panel)}:${text}`;
 }
 
 export function detectConfirmationScreen(document) {
@@ -36,6 +41,16 @@ export function selectConfirmationLinks(items, since, now) {
       return url.protocol === "https:" && !!url.hostname && !url.username && !url.password && !url.port && !/[\s\\]/.test(item.url);
     } catch { return false; }
   }).sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 5);
+}
+
+export function isConfirmationRequestControl(control) {
+  const label = (control?.getAttribute?.("aria-label") ||
+    (control?.tagName === "INPUT" ? control.value : control?.textContent) || "")
+    .replace(/\s+/g, " ").trim();
+  if (/^(?:re-?send|send again)\b/i.test(label)) return true;
+  return /^(?:send|request|get|email)\b/i.test(label) &&
+    /\b(?:confirm(?:ation)?|verif(?:y|ication)|activat(?:e|ion))\b/i.test(label) &&
+    /\b(?:e-?mail|link)\b/i.test(label);
 }
 
 export function createConfirmationView(document, { onClose, onRetry, canOpen }) {
@@ -212,8 +227,7 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismiss(); });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button], input[type=submit]");
-    const label = control?.textContent || control?.value || "";
-    if (!screenActive || !/^(?:re-?send|send again)\b/i.test(label.trim())) return;
+    if (!screenActive || !isConfirmationRequestControl(control)) return;
     since = Math.floor(clock.now() / 1000) * 1000 + 1000;
     dismissed = false;
     unmount();
