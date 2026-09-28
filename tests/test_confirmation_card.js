@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isConfirmationScreen, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
+import { confirmationScreenKey, isConfirmationRequestControl, isConfirmationScreen, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -37,6 +37,23 @@ test("recognises confirmation prompts but rejects resets, newsletters and long p
     assert.equal(isConfirmationScreen(text), true, text);
   for (const text of ["Reset your password. Check your email", "Check your email for our newsletter", "Welcome to our website", "x".repeat(2501) + " Check your email"])
     assert.equal(isConfirmationScreen(text), false, text);
+});
+
+test("distinguishes replacement confirmation panels with identical text", () => {
+  const panel = () => ({ innerText: "Check your email", getClientRects: () => [{}], checkVisibility: () => true });
+  let current = panel();
+  const document = { querySelectorAll: () => [current] };
+  const first = confirmationScreenKey(document);
+  assert.equal(confirmationScreenKey(document), first);
+  current = panel();
+  assert.notEqual(confirmationScreenKey(document), first);
+});
+
+test("recognises controls that request another confirmation message", () => {
+  const control = (textContent) => ({ textContent, getAttribute: () => "" });
+  for (const label of ["Resend email", "Send again", "Send confirmation email", "Request verification link"])
+    assert.equal(isConfirmationRequestControl(control(label)), true, label);
+  assert.equal(isConfirmationRequestControl(control("Contact support")), false);
 });
 
 test("selects fresh HTTPS links and omits older or unsafe candidates", () => {
@@ -86,6 +103,14 @@ test("resend clears old links and expiry prevents opening", async () => {
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now += 700000;
   assert.equal(f.state.views.at(-1).callbacks.canOpen(item), false);
+});
+
+test("a send confirmation control clears old links on the same screen", async () => {
+  const f = setup(); await settle();
+  f.events.click({ target: { closest: () => ({ textContent: "Send confirmation email", getAttribute: () => "" }) } });
+  await settle();
+  assert.deepEqual(f.state.views.at(-1).links, []);
+  assert.equal(f.state.views[0].callbacks.canOpen(item), false);
 });
 
 test("a new confirmation step on the same URL clears links from the previous step", async () => {

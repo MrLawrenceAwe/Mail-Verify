@@ -300,6 +300,41 @@ class InboxSessionTests(unittest.TestCase):
         self.assertEqual(conn.body_fetches, 2)
         self.assertNotIn(9, session.pending_received_at_by_uid)
 
+    def test_missing_metadata_is_retried_after_last_seen_uid_advances(self):
+        now = time.time()
+
+        class FakeConnection:
+            metadata_fetches = 0
+
+            def uid(self, command, *args):
+                if command == "search":
+                    return "OK", [b"5 6" if self.metadata_fetches == 0 else b""]
+                if "INTERNALDATE" in args[1]:
+                    self.metadata_fetches += 1
+                    uids = [6] if self.metadata_fetches == 1 else [5]
+                    date = inbox_session.imaplib.Time2Internaldate(now - 30).encode()
+                    return "OK", [
+                        b"1 (UID " + str(uid).encode() + b" INTERNALDATE " + date + b" RFC822.SIZE 100)"
+                        for uid in uids
+                    ]
+                uids = args[0].split(b",")
+                return "OK", [
+                    (b"1 (UID " + uid + b" BODY[] {80}",
+                     self_message(str(100000 + int(uid))))
+                    for uid in uids
+                ]
+
+        self_message = lambda code: self.message(f"Your verification code is {code}.")
+        session = inbox_session.InboxSession({})
+        session.conn = FakeConnection()
+        session.last_seen_uid = 4
+
+        self.assertEqual([item["uid"] for item in session.recent_items()], [6])
+        self.assertEqual(session.last_seen_uid, 6)
+        self.assertEqual(session.pending_metadata_uids, {5})
+        self.assertEqual([item["uid"] for item in session.recent_items()], [6, 5])
+        self.assertEqual(session.pending_metadata_uids, set())
+
     def test_older_uid_with_newer_arrival_time_can_enter_results(self):
         now = time.time()
 
