@@ -10,6 +10,12 @@ from code_extraction import iter_non_attachment_parts
 
 CONFIRM = re.compile(r"\b(?:verify|confirm|activate)\s+(?:(?:your|my|the|this|new)\s+)?(?:e-?mail(?:\s+address)?|account|registration)\b", re.I)
 EXCLUDE = re.compile(r"\b(?:unsubscribe|password|reset|delete|cancel|payment|purchase)\b", re.I)
+SUBJECT_EXCLUDE = re.compile(
+    r"\b(?:unsubscribe|delete|cancel|payment|purchase)\b|"
+    r"\b(?:reset|forgot|change|update|recover)\b.{0,35}\bpassword\b|"
+    r"\bpassword\b.{0,35}\b(?:reset|recovery)\b",
+    re.I,
+)
 
 
 def safe_url(value):
@@ -67,7 +73,7 @@ class LinkParser(HTMLParser):
 def extract_link_details(raw):
     msg = email.message_from_bytes(raw, policy=policy.default)
     subject = str(msg.get("Subject", ""))
-    if EXCLUDE.search(subject):
+    if SUBJECT_EXCLUDE.search(subject):
         return None
     # HTML and plain text are alternative renderings of one message. Prefer
     # visible HTML links; the text version can use a different tracking URL.
