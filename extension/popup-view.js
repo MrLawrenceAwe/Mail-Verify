@@ -57,6 +57,10 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
     button.textContent = "Filled";
   }
 
+  function markLinkOpened(button) {
+    button.textContent = "Opened";
+  }
+
   function renderAccounts(accounts) {
     $("accountSetup").hidden = accounts.length > 0;
     $("companionSetup").hidden = true;
@@ -137,5 +141,5 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
   return { setStatus, showAccountSetup, showCompanionSetup, setExtensionId,
     setMode, setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
     clearAccountEmail, setRemoveAndCheckDisabled, setResultButtonsDisabled,
-    markCodeFilled, renderAccounts, clearResults, renderCodes, renderLinks };
+    markCodeFilled, markLinkOpened, renderAccounts, clearResults, renderCodes, renderLinks };
 }

@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getConfirmationStepKey, isConfirmationRequestControl, isConfirmationScreen, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
 import { inlineRuntime } from "./mock_inline_port.js";
+import { createFakeTimers } from "./fake_timers.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
 function setup(panel = null) {
-  const timers = new Map(), events = {}, windowEvents = {};
-  let id = 0;
+  const timers = createFakeTimers(), events = {}, windowEvents = {};
   const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, views: [], respond: async () => ({ ok: true, links: [item] }) };
   const document = { hidden: false, documentElement: { append() {} }, addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
@@ -16,7 +16,7 @@ function setup(panel = null) {
     browser: { document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
       chrome: { runtime: inlineRuntime(async (kind) => { assert.equal(kind, "links"); state.requests++; return state.respond(); }) },
       Date: { now: () => state.now },
-      setTimeout(fn, delay) { const key = ++id; timers.set(key, { fn, delay }); return key; }, clearTimeout(key) { timers.delete(key); },
+      setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
     }, getStepKey: () => state.detected
       ? (state.panel ? getConfirmationStepKey({ querySelectorAll: () => [state.panel] }) : state.screenKey)
@@ -28,9 +28,7 @@ function setup(panel = null) {
     },
   });
   async function run(delay) {
-    const entry = [...timers].find(([, value]) => value.delay === delay);
-    assert.ok(entry, `timer ${delay} exists`);
-    timers.delete(entry[0]); await entry[1].fn(); await settle();
+    await timers.run(delay); await settle();
   }
   return { state, document, location, events, windowEvents, run, timers };
 }

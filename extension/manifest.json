@@ -32,12 +32,14 @@
     {
       "resources": [
         "inline-picker.js",
+        "page-coordinator.js",
         "confirmation-card.js",
         "confirmation-card-view.js",
         "confirmation-url.js",
         "step-text.js",
         "inline-picker-view.js",
         "mail-timing.js",
+        "polling-lifecycle.js",
         "inline-client.js",
         "code-fields.js"
       ],
