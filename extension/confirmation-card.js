@@ -22,12 +22,9 @@ export function confirmationScreenKey(document) {
     isConfirmationScreen(panel.innerText || ""));
   if (!panel) return null;
   if (!confirmationPanelIds.has(panel)) confirmationPanelIds.set(panel, nextConfirmationPanelId++);
-  const text = (panel.innerText || "")
-    .replace(/\b\d{1,2}:\d{2}\b/g, "#")
-    .replace(/\b\d+\s*(?:seconds?|minutes?|secs?|mins?)\b/gi, "# time")
-    .replace(/\s+/g, " ")
-    .trim();
-  return `${confirmationPanelIds.get(panel)}:${text}`;
+  // A panel may update its instructions or resend status without starting a new
+  // confirmation step. Its identity changes when the page replaces the panel.
+  return confirmationPanelIds.get(panel);
 }
 
 export function detectConfirmationScreen(document) {
