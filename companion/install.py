@@ -32,6 +32,8 @@ def main():
             "Companion removed. Remove the extension in Chrome. To remove credentials, delete local.yahoo_code_fill in Keychain Access."
         )
         return
+    if sys.version_info < (3, 9):
+        raise SystemExit("Python 3.9 or newer is required to install the companion.")
     manifest = json.loads((PROJECT_ROOT / "extension/manifest.json").read_text())
     digest = hashlib.sha256(base64.b64decode(manifest["key"])).hexdigest()[:32]
     extension_id = "".join(chr(ord("a") + int(c, 16)) for c in digest)
