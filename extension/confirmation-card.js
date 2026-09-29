@@ -1,5 +1,8 @@
+import { createConfirmationView } from "./confirmation-card-view.js";
+import { isSupportedConfirmationUrl } from "./confirmation-url.js";
+import { normalizeStepText } from "./step-text.js";
 import { handleCodeField } from "./code-fields.js";
-import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
+import { MAX_MESSAGE_AGE_MS, POLL_WINDOW_MS } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 
 const confirmationPanelIds = new WeakMap();
@@ -13,7 +16,7 @@ export function isConfirmationScreen(text) {
     /\b(?:click|follow|open)\b.{0,45}\blink\b.{0,70}\b(?:confirm|verify|activate)\b.{0,30}\b(?:e-?mail|account)\b/i.test(value);
 }
 
-export function confirmationScreenKey(document) {
+export function getConfirmationStepKey(document) {
   // Inspect short visible task panels, never hidden templates or the extension card.
   const panels = [...document.querySelectorAll("main, [role=main], form, [role=dialog]")];
   if (!panels.length) panels.push(document.body);
@@ -24,25 +27,14 @@ export function confirmationScreenKey(document) {
   if (!confirmationPanelIds.has(panel)) confirmationPanelIds.set(panel, nextConfirmationPanelId++);
   // Keep countdown updates within one step, but distinguish a new signup
   // shown inside the same panel element.
-  const text = (panel.innerText || "")
-    .replace(/\b\d{1,2}:\d{2}\b/g, "#")
-    .replace(/\b(?:re-?send|send again|retry|try again|expires?|wait)\s+(?:in\s+|after\s+)?\d{1,3}(?:\s*(?:seconds?|minutes?|secs?|mins?|s|m))?\b/gi, "# timer")
-    .replace(/\b\d+\s*(?:seconds?|minutes?|secs?|mins?)\b/gi, "# time")
-    .replace(/\s+/g, " ").trim();
+  const text = normalizeStepText(panel.innerText || "");
   return `${confirmationPanelIds.get(panel)}:${text}`;
 }
 
-export function detectConfirmationScreen(document) {
-  return confirmationScreenKey(document) !== null;
-}
-
-export function selectConfirmationLinks(items, since, now) {
+export function selectConfirmationLinks(items, minReceivedAtMs, now) {
   return items.filter((item) => {
-    if (!Number.isFinite(item.receivedAt) || item.receivedAt < since || item.receivedAt > now || now - item.receivedAt > MAX_CODE_AGE_MS) return false;
-    try {
-      const url = new URL(item.url);
-      return url.protocol === "https:" && !!url.hostname && !url.username && !url.password && !url.port && !/[\s\\]/.test(item.url);
-    } catch { return false; }
+    if (!Number.isFinite(item.receivedAt) || item.receivedAt < minReceivedAtMs || item.receivedAt > now || now - item.receivedAt > MAX_MESSAGE_AGE_MS) return false;
+    return isSupportedConfirmationUrl(item.url);
   }).sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 5);
 }
 
@@ -56,73 +48,24 @@ export function isConfirmationRequestControl(control) {
     /\b(?:e-?mail|link)\b/i.test(label);
 }
 
-export function createConfirmationView(document, { onClose, onRetry, canOpen }) {
-  const host = document.createElement("div");
-  host.dataset.mailVerify = "confirmation";
-  host.style.cssText = "position:fixed;z-index:2147483647;right:16px;bottom:16px";
-  const root = host.attachShadow({ mode: "closed" });
-  root.innerHTML = `<style>
-    :host { all:initial; }
-    section { box-sizing:border-box;width:320px;max-width:calc(100vw - 32px);max-height:55vh;overflow:auto;padding:16px;border:1px solid #d3dcea;border-radius:14px;background:#fff;color:#26344d;box-shadow:0 6px 28px #162c482b;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    header { display:flex;align-items:center;gap:8px; } strong { flex:1;font-size:14px; }
-    button { border:0;background:#edf2fa;border-radius:6px;padding:4px 8px;color:#26344d;font:inherit;cursor:pointer; }
-    button:focus-visible,a:focus-visible { outline:2px solid #225bd3;outline-offset:2px; }
-    p { margin:8px 0;overflow-wrap:anywhere; } small { font-size:11px;color:#5c687c; }
-    article { border-top:1px solid #e2e8f1;padding-top:8px;margin-top:10px; }
-    a { display:block;background:#2763dc;color:white;text-decoration:none;padding:8px 10px;border-radius:7px;text-align:center; }
-  </style><section aria-label="Mail Verify confirmation links"><header><strong>Mail Verify confirmation links</strong><button id="retry" aria-label="Check mail again">↻</button><button id="close" aria-label="Dismiss confirmation links">×</button></header><p id="status" role="status" aria-live="polite"></p><div id="results"></div><small>Check the sender and destination. Opening a link may confirm your account.</small></section>`;
-  root.querySelector("#close").onclick = onClose;
-  root.querySelector("#retry").onclick = onRetry;
-  const results = root.querySelector("#results");
-  let rendered;
-  return {
-    host,
-    setStatus(text) { root.querySelector("#status").textContent = text; },
-    renderLinks(items) {
-      const key = JSON.stringify(items);
-      if (key === rendered) return;
-      rendered = key;
-      results.replaceChildren();
-      for (const item of items) {
-        const card = document.createElement("article");
-        for (const text of [item.accountEmail, item.sender, item.subject, `Destination: ${new URL(item.url).hostname}`]) {
-          const line = document.createElement("p");
-          line.textContent = text;
-          card.append(line);
-        }
-        const link = document.createElement("a");
-        link.textContent = "Open confirmation link ↗";
-        link.href = item.url;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.addEventListener("click", (event) => { if (!canOpen(item)) event.preventDefault(); });
-        link.addEventListener("auxclick", (event) => { if (!canOpen(item)) event.preventDefault(); });
-        card.append(link);
-        results.append(card);
-      }
-    },
-  };
-}
-
-export function startConfirmationCard({ browser = globalThis, detect = detectConfirmationScreen,
-  getScreenKey = detect === detectConfirmationScreen ? confirmationScreenKey : () => "",
+export function startConfirmationCard({ browser = globalThis, getStepKey = getConfirmationStepKey,
   detectCode = () => handleCodeField({ action: "detect" }).ok, createView = createConfirmationView } = {}) {
   const { document, window, location, chrome, MutationObserver, setTimeout, clearTimeout, Date: clock = Date } = browser;
-  let view, timer, scanTimer, generation = 0, activeAttempt, inFlight = false, retryAfterFlight = false;
-  let lastURL = location.href, dismissed = false, since, deadline = 0, screenActive = false, screenKey;
+  let view, pollTimer, scanTimer, generation = 0, activeAttempt, inFlight = false, retryAfterFlight = false;
+  let lastURL = location.href, dismissed = false, minReceivedAtMs, pollDeadline = 0, screenActive = false, stepKey;
   let currentItems = [];
   function unmount() {
     generation++;
     inFlight = false;
     activeAttempt = undefined;
     retryAfterFlight = false;
-    clearTimeout(timer);
+    clearTimeout(pollTimer);
     view?.host.remove();
     view = undefined;
   }
   function dismiss() { dismissed = true; unmount(); }
   function restart() {
-    deadline = clock.now() + POLL_WINDOW_MS;
+    pollDeadline = clock.now() + POLL_WINDOW_MS;
     if (inFlight) {
       // Ignore the current response and run one new check as soon as it ends.
       generation++;
@@ -132,10 +75,10 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
     check();
   }
   async function check() {
-    clearTimeout(timer);
+    clearTimeout(pollTimer);
     if (!view || document.hidden || inFlight) return;
-    if (lastURL !== location.href || !detect(document) || detectCode() || getScreenKey(document) !== screenKey) { sync(); return; }
-    if (clock.now() >= deadline) {
+    if (lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey) { sync(); return; }
+    if (clock.now() >= pollDeadline) {
       view.setStatus("Checking finished. Click ↻ to check again.");
       return;
     }
@@ -145,9 +88,9 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
     try {
       const response = await requestInlineCheck(chrome.runtime, "links");
       if (attempt !== generation || !view || document.hidden) return;
-      if (lastURL !== location.href || !detect(document) || detectCode() || getScreenKey(document) !== screenKey) { sync(); return; }
+      if (lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey) { sync(); return; }
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
-      currentItems = selectConfirmationLinks(response.links || [], since, clock.now());
+      currentItems = selectConfirmationLinks(response.links || [], minReceivedAtMs, clock.now());
       view.renderLinks(currentItems);
       view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
         currentItems.length ? "Choose the email for this signup." : "Waiting for your confirmation email…");
@@ -166,7 +109,7 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
       } else if (activeAttempt === attempt && attempt === generation) {
         inFlight = false;
         activeAttempt = undefined;
-        if (view && !document.hidden) timer = setTimeout(check, 8000);
+        if (view && !document.hidden) pollTimer = setTimeout(check, 8000);
       }
     }
   }
@@ -176,46 +119,45 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
       lastURL = location.href;
       dismissed = false;
       screenActive = false;
-      since = undefined;
+      minReceivedAtMs = undefined;
     }
     if (document.hidden) { unmount(); return; }
-    const matches = detect(document) && !detectCode();
-    const nextScreenKey = matches ? getScreenKey(document) : undefined;
+    const nextStepKey = detectCode() ? null : getStepKey(document);
+    const matches = nextStepKey !== null;
     if (!matches) {
       unmount();
       screenActive = false;
-      screenKey = undefined;
-      since = undefined;
-      deadline = 0;
+      stepKey = undefined;
+      minReceivedAtMs = undefined;
+      pollDeadline = 0;
       return;
     }
-    if (screenActive && nextScreenKey !== screenKey) {
+    if (screenActive && nextStepKey !== stepKey) {
       unmount();
       dismissed = false;
       screenActive = false;
       // A changed panel can represent a different signup. IMAP arrival times
       // have one-second precision, so start with the next second to exclude
       // links delivered just before this step appeared.
-      since = Math.max(since ?? -Infinity, Math.floor(clock.now() / 1000) * 1000 + 1000);
-      deadline = 0;
+      minReceivedAtMs = Math.max(minReceivedAtMs ?? -Infinity, Math.floor(clock.now() / 1000) * 1000 + 1000);
+      pollDeadline = 0;
     }
     if (dismissed) return;
     if (!screenActive) {
       screenActive = true;
-      screenKey = nextScreenKey;
-      since ??= clock.now() - 5000;
-      deadline = clock.now() + POLL_WINDOW_MS;
+      stepKey = nextStepKey;
+      minReceivedAtMs ??= clock.now() - 5000;
+      pollDeadline = clock.now() + POLL_WINDOW_MS;
     }
     if (view) return;
     currentItems = [];
     view = createView(document, {
       onClose: dismiss, onRetry: restart,
-      canOpen(item) {
-        if (document.hidden || lastURL !== location.href || !detect(document) || detectCode() ||
-            getScreenKey(document) !== screenKey ||
+      beforeOpen(item) {
+        if (document.hidden || lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey ||
             !currentItems.some((current) => current.accountEmail === item.accountEmail &&
               current.uid === item.uid && current.url === item.url) ||
-            !selectConfirmationLinks([item], since, clock.now()).length) {
+            !selectConfirmationLinks([item], minReceivedAtMs, clock.now()).length) {
           view?.setStatus("This link is no longer current. Request a new email or check again.");
           return false;
         }
@@ -240,10 +182,10 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button], input[type=submit]");
     if (!screenActive || !isConfirmationRequestControl(control)) return;
-    since = Math.floor(clock.now() / 1000) * 1000 + 1000;
+    minReceivedAtMs = Math.floor(clock.now() / 1000) * 1000 + 1000;
     dismissed = false;
     unmount();
-    deadline = clock.now() + POLL_WINDOW_MS;
+    pollDeadline = clock.now() + POLL_WINDOW_MS;
     sync();
   }, true);
   window.addEventListener("popstate", scheduleScan);

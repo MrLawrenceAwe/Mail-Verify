@@ -1,6 +1,7 @@
+import { normalizeStepText } from "./step-text.js";
 import { handleCodeField } from "./code-fields.js";
 import { createInlinePickerView } from "./inline-picker-view.js";
-import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
+import { MAX_MESSAGE_AGE_MS, POLL_WINDOW_MS } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 
 export function suggestionPosition(rect, width, height, viewportWidth, viewportHeight) {
@@ -15,7 +16,7 @@ export function suggestionPosition(rect, width, height, viewportWidth, viewportH
 export function selectSuggestedCodes(codes, minReceivedAtMs, now = Date.now(), excludedMessageKeys = new Set()) {
   const senders = new Set();
   return codes
-    .filter((item) => !excludedMessageKeys.has(messageKey(item)) && item.receivedAt >= minReceivedAtMs && item.receivedAt <= now && now - item.receivedAt <= MAX_CODE_AGE_MS)
+    .filter((item) => !excludedMessageKeys.has(messageKey(item)) && item.receivedAt >= minReceivedAtMs && item.receivedAt <= now && now - item.receivedAt <= MAX_MESSAGE_AGE_MS)
     .sort((a, b) => b.receivedAt - a.receivedAt)
     .filter((item) => {
       const senderKey = item.sender.trim()
@@ -38,11 +39,7 @@ function verificationStepContext(anchor) {
   let sibling = container.previousElementSibling;
   for (let count = 0; sibling && count < 2; count++, sibling = sibling.previousElementSibling)
     roots.push(sibling);
-  const key = roots.map((root) => (root.textContent || "")
-    .replace(/\b\d{1,2}:\d{2}\b/g, "#")
-    .replace(/\b(?:re-?send|send again|retry|try again|expires?|wait)\s+(?:in\s+|after\s+)?\d{1,3}(?:\s*(?:seconds?|minutes?|secs?|mins?|s|m))?\b/gi, "# timer")
-    .replace(/\b\d+\s*(?:seconds?|minutes?|secs?|mins?)\b/gi, "# time")
-    .replace(/\s+/g, " ").trim()).join("\n");
+  const key = roots.map((root) => normalizeStepText(root.textContent || "")).join("\n");
   return { roots, parent: container.parentElement, key };
 }
 
@@ -138,7 +135,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       onClose: dismissPicker,
       onRetry: restartPolling,
       onFill: (item, button) => {
-        if (clock.now() - item.receivedAt > MAX_CODE_AGE_MS) {
+        if (clock.now() - item.receivedAt > MAX_MESSAGE_AGE_MS) {
           view.setStatus("This code is too old to suggest. Request a new one.");
           view.disableCodeButton(button);
           positionPicker();

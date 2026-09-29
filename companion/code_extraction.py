@@ -3,7 +3,7 @@
 import email
 from email import policy
 from email.utils import parseaddr
-from html.parser import HTMLParser
+from email_content import VisibleEmailHTMLParser, iter_text_parts
 import re
 
 # Reject the first group of a longer, formatted number rather than showing
@@ -32,102 +32,30 @@ CODE_PATTERNS = (
 )
 
 
-class EmailHTMLTextParser(HTMLParser):
-    BLOCK_TAGS = {
-        "br",
-        "p",
-        "div",
-        "td",
-        "tr",
-        "li",
-        "table",
-        "section",
-        "article",
-        "h1",
-        "h2",
-        "h3",
-    }
-    VOID_TAGS = {
-        "area",
-        "base",
-        "br",
-        "col",
-        "embed",
-        "hr",
-        "img",
-        "input",
-        "link",
-        "meta",
-        "param",
-        "source",
-        "track",
-        "wbr",
-    }
+class EmailHTMLTextParser(VisibleEmailHTMLParser):
+    BLOCK_TAGS = {"br", "p", "div", "td", "tr", "li", "table", "section", "article", "h1", "h2", "h3"}
     INLINE_BREAK = "\x1f"
 
     def __init__(self):
         super().__init__()
         self.parts = []
-        self.stack = []
 
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        style = attrs.get("style") or ""
-        hidden = (
-            (self.stack[-1][1] if self.stack else False)
-            or tag in ("script", "style", "template")
-            or "hidden" in attrs
-            or (attrs.get("aria-hidden") or "").lower() == "true"
-            or bool(
-                re.search(
-                    r"(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\b",
-                    style,
-                    re.I,
-                )
-            )
-        )
-        if not hidden and tag in self.BLOCK_TAGS:
+    def visible_start(self, tag, attrs):
+        if tag in self.BLOCK_TAGS:
             self.parts.append(" ")
-        if tag not in self.VOID_TAGS:
-            self.stack.append((tag, hidden))
 
-    def handle_endtag(self, tag):
-        for index in range(len(self.stack) - 1, -1, -1):
-            if self.stack[index][0] == tag:
-                hidden = self.stack[index][1]
-                del self.stack[index:]
-                if not hidden:
-                    self.parts.append(
-                        " " if tag in self.BLOCK_TAGS else self.INLINE_BREAK
-                    )
-                break
+    def visible_end(self, tag):
+        self.parts.append(" " if tag in self.BLOCK_TAGS else self.INLINE_BREAK)
 
-    def handle_data(self, data):
-        if not self.stack or not self.stack[-1][1]:
-            self.parts.append(data)
-
-
-def iter_non_attachment_parts(part):
-    if part.get_content_disposition() == "attachment":
-        return
-    if part.is_multipart():
-        for child in part.iter_parts():
-            yield from iter_non_attachment_parts(child)
-    else:
-        yield part
+    def visible_data(self, data):
+        self.parts.append(data)
 
 
 def extract_code_details(raw):
     msg = email.message_from_bytes(raw, policy=policy.default)
     texts = []
-    for part in iter_non_attachment_parts(msg):
-        if part.get_content_type() not in ("text/plain", "text/html"):
-            continue
-        try:
-            value = part.get_content()
-        except (LookupError, UnicodeError):
-            continue
-        if part.get_content_type() == "text/html":
+    for content_type, value in iter_text_parts(msg):
+        if content_type == "text/html":
             parser = EmailHTMLTextParser()
             parser.feed(value)
             value = "".join(parser.parts)

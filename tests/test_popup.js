@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPopup } from "../extension/popup-controller.js";
+import { createPopupController } from "../extension/popup-controller.js";
 
 class FakeElement {
   constructor(tag = "div") {
@@ -53,7 +53,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       "checkLinks",
       "accounts",
       "addAccount",
-      "codes",
+      "results",
       "status",
       "accountSetup",
       "companionSetup",
@@ -64,6 +64,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       "email",
       "extensionId",
       "destination",
+      "codeContext",
     ].map((id) => [id, new FakeElement()]),
   );
   const scheduled = new Map();
@@ -97,7 +98,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       return { accountEmails: request.action === "removeAccount" ? remainingAccountEmails : [request.email] };
     },
   };
-  const popup = createPopup({
+  const popup = createPopupController({
     document: {
       getElementById: (id) => controls[id],
       createElement: (tag) => new FakeElement(tag),
@@ -172,7 +173,7 @@ test("retries temporary mail errors", async () => {
   await settle();
   assert.equal(scheduled.size, 1, "retry after temporary errors");
   assert.equal(controls.status.textContent, "Temporary mail error");
-  assert.equal(controls.codes.querySelectorAll("button").length, 0);
+  assert.equal(controls.results.querySelectorAll("button").length, 0);
 });
 
 test("a failed link check clears earlier confirmation links", async () => {
@@ -180,11 +181,11 @@ test("a failed link check clears earlier confirmation links", async () => {
   state.fetchLinks = async () => [link];
   controls.checkLinks.trigger();
   await settle();
-  assert.equal(controls.codes.querySelectorAll("button").length, 1);
+  assert.equal(controls.results.querySelectorAll("button").length, 1);
   state.fetchLinks = async () => { throw Error("Temporary mail error"); };
   controls.checkLinks.trigger();
   await settle();
-  assert.equal(controls.codes.querySelectorAll("button").length, 0);
+  assert.equal(controls.results.querySelectorAll("button").length, 0);
 });
 
 test("ignores stale checks during a fill", async () => {
@@ -196,14 +197,14 @@ test("ignores stale checks during a fill", async () => {
         finishCheck = resolve;
       });
     state.failFill = failFill;
-    const replacements = controls.codes.replacements;
+    const replacements = controls.results.replacements;
     controls.checkCodes.trigger();
-    const button = controls.codes.querySelectorAll("button")[0];
+    const button = controls.results.querySelectorAll("button")[0];
     await button.trigger();
     finishCheck([{ ...code, code: "654321" }]);
     await settle();
     assert.equal(
-      controls.codes.replacements,
+      controls.results.replacements,
       replacements,
       "stale checks must not replace cards",
     );
@@ -221,34 +222,34 @@ test("ignores stale checks during a fill", async () => {
 
 test("keeps unchanged code cards and updates changed ones", async () => {
   const { controls, state } = await setup();
-  const initial = controls.codes.replacements;
+  const initial = controls.results.replacements;
   state.fetchCodes = async () => [{ ...code }];
   controls.checkCodes.trigger();
   await settle();
   assert.equal(
-    controls.codes.replacements,
+    controls.results.replacements,
     initial,
     "unchanged cards retain focus",
   );
   state.fetchCodes = async () => [{ ...code, code: "654321" }];
   controls.checkCodes.trigger();
   await settle();
-  assert.equal(controls.codes.replacements, initial + 1);
+  assert.equal(controls.results.replacements, initial + 1);
 });
 
 test("lets a manual retry supersede a pending check", async () => {
   const { controls, state } = await setup();
   const pending = [];
   state.fetchCodes = () => new Promise((resolve) => pending.push(resolve));
-  const initial = controls.codes.replacements;
+  const initial = controls.results.replacements;
   controls.checkCodes.trigger();
   controls.checkCodes.trigger();
   pending[0]([{ ...code, code: "111111" }]);
   pending[1]([{ ...code, code: "222222" }]);
   await settle();
   assert.ok(state.closes >= 1, "manual retry interrupts the previous check");
-  assert.equal(controls.codes.replacements, initial + 1);
-  assert.equal(controls.codes.children[0].children[0].textContent, "222222");
+  assert.equal(controls.results.replacements, initial + 1);
+  assert.equal(controls.results.children[0].children[0].textContent, "222222");
   assert.equal(controls.checkCodes.disabled, false);
 });
 
@@ -333,7 +334,7 @@ test("shows multiple accounts and labels codes with their inbox", async () => {
     codes: [{ ...code, accountEmail: "test@yahoo.com" }],
   });
   assert.equal(controls.accounts.children.length, 1);
-  assert.equal(controls.codes.children[0].children[1].textContent, "test@yahoo.com");
+  assert.equal(controls.results.children[0].children[1].textContent, "test@yahoo.com");
   controls.addAccount.trigger();
   assert.equal(controls.accountSetup.hidden, false);
   assert.equal(controls.connectedAccountPanel.hidden, false);
@@ -346,8 +347,9 @@ test("finds links only on request and opens only the selected link", async () =>
   assert.deepEqual(state.opened, []);
   controls.checkLinks.trigger();
   await settle();
+  assert.equal(controls.codeContext.hidden, true);
   assert.deepEqual(state.opened, []);
-  const button = controls.codes.querySelectorAll("button")[0];
+  const button = controls.results.querySelectorAll("button")[0];
   assert.equal(button.textContent, "Open confirmation link ↗");
   await button.trigger();
   assert.deepEqual(state.opened, [{ url: link.url }]);
@@ -360,7 +362,7 @@ test("rejects expired and unsafe links at click time", async () => {
     state.fetchLinks = async () => [item];
     controls.checkLinks.trigger();
     await settle();
-    await controls.codes.querySelectorAll("button")[0].trigger();
+    await controls.results.querySelectorAll("button")[0].trigger();
     assert.deepEqual(state.opened, []);
     assert.match(controls.status.textContent, /too old|not supported/);
   }
@@ -376,9 +378,10 @@ test("switching modes ignores a pending code response", async () => {
   await settle();
   resolve([code]);
   await settle();
-  assert.equal(controls.codes.querySelectorAll("button")[0].textContent, "Open confirmation link ↗");
+  assert.equal(controls.results.querySelectorAll("button")[0].textContent, "Open confirmation link ↗");
   state.fetchCodes = async () => [code];
   controls.checkCodes.trigger();
   await settle();
-  assert.match(controls.codes.querySelectorAll("button")[0].textContent, /Fill on/);
+  assert.equal(controls.codeContext.hidden, false);
+  assert.match(controls.results.querySelectorAll("button")[0].textContent, /Fill on/);
 });

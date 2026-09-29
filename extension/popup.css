@@ -160,7 +160,7 @@ button:disabled {
   letter-spacing: 4px;
   font-variant-numeric: tabular-nums;
 }
-.sender {
+.result-detail {
   font-size: 12px;
   overflow-wrap: anywhere;
   margin: 8px 0 3px;

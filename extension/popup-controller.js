@@ -1,11 +1,12 @@
+import { isSupportedConfirmationUrl } from "./confirmation-url.js";
 import { handleCodeField } from "./code-fields.js";
-import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
+import { MAX_MESSAGE_AGE_MS, POLL_WINDOW_MS } from "./mail-timing.js";
 import { createPopupView } from "./popup-view.js";
 
 const POLL_INTERVAL_MS = 8_000;
 const MIN_POLL_PAUSE_MS = 2_000;
 
-export function createPopup({
+export function createPopupController({
   document,
   chrome,
   client,
@@ -18,14 +19,14 @@ export function createPopup({
   let targetTab;
   let mode = "codes";
   let checking = false,
-    filling = false,
+    usingResult = false,
     removingAccount = false,
     addingAccount = false;
   let pollTimer, pollDeadline = 0, checkGeneration = 0;
   const {
-    setStatus, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
-    markCodeFilled, renderAccounts, clearCodes, renderCodes, renderLinks,
-    showAccountSetup, showCompanionSetup, setExtensionId, setDestination,
+    setStatus, setRemoveAndCheckDisabled, setResultButtonsDisabled,
+    markCodeFilled, renderAccounts, clearResults, renderCodes, renderLinks,
+    showAccountSetup, showCompanionSetup, setExtensionId, setMode, setDestination,
     setAddAccountDisabled, readCredentialsAndClearPassword, clearAccountEmail,
   } = createPopupView(document, {
     onRemoveAccount: (email) => removeAccount(email),
@@ -35,7 +36,7 @@ export function createPopup({
   function applyConnectedAccounts(accountEmails) {
     abortCheck();
     renderAccounts(accountEmails);
-    clearCodes();
+    clearResults();
     if (!accountEmails.length) {
       pollDeadline = 0;
       setStatus("No email accounts connected.");
@@ -45,7 +46,7 @@ export function createPopup({
   }
   function startPolling() {
     pollDeadline = clock.now() + POLL_WINDOW_MS;
-    checkForCodes();
+    checkInbox();
   }
   function abortCheck() {
     clearTimeout(pollTimer);
@@ -53,14 +54,28 @@ export function createPopup({
     checking = false;
     closeSession();
   }
-  async function fillSelectedCode(item, button) {
-    if (filling) return;
-    filling = true;
+  async function useSelectedResult(action) {
+    if (usingResult || removingAccount || addingAccount) return;
+    usingResult = true;
     abortCheck();
     setRemoveAndCheckDisabled(true);
-    setCodeButtonsDisabled(true);
+    setResultButtonsDisabled(true);
     try {
-      if (clock.now() - item.receivedAt > MAX_CODE_AGE_MS)
+      await action();
+      pollDeadline = 0;
+    } catch (error) {
+      setStatus(error.message, true);
+      setResultButtonsDisabled(false);
+    } finally {
+      usingResult = false;
+      setRemoveAndCheckDisabled(addingAccount);
+      if (pollDeadline) scheduleCheck();
+      else closeSession();
+    }
+  }
+  async function fillSelectedCode(item, button) {
+    await useSelectedResult(async () => {
+      if (clock.now() - item.receivedAt > MAX_MESSAGE_AGE_MS)
         throw new Error("This code is too old. Request a new code.");
       const current = await chrome.tabs.get(targetTab.id);
       const [active] = await chrome.tabs.query({
@@ -78,44 +93,20 @@ export function createPopup({
       });
       if (!result?.ok)
         throw new Error(result?.error || "Could not fill this page.");
-      pollDeadline = 0;
       setStatus("Code filled. The website may continue automatically.");
       markCodeFilled(button);
-    } catch (error) {
-      setStatus(error.message, true);
-      setCodeButtonsDisabled(false);
-    } finally {
-      filling = false;
-      setRemoveAndCheckDisabled(addingAccount);
-      if (pollDeadline) scheduleCheck();
-      else closeSession();
-    }
+    });
   }
   async function openSelectedLink(item, button) {
-    if (filling || removingAccount || addingAccount) return;
-    filling = true;
-    abortCheck();
-    setRemoveAndCheckDisabled(true);
-    setCodeButtonsDisabled(true);
-    try {
-      if (!Number.isFinite(item.receivedAt) || clock.now() - item.receivedAt > MAX_CODE_AGE_MS || item.receivedAt > clock.now())
+    await useSelectedResult(async () => {
+      if (!Number.isFinite(item.receivedAt) || clock.now() - item.receivedAt > MAX_MESSAGE_AGE_MS || item.receivedAt > clock.now())
         throw new Error("This link is too old. Request a new confirmation email.");
-      const url = new URL(item.url);
-      if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.port || /[\s\\]/.test(item.url))
+      if (!isSupportedConfirmationUrl(item.url))
         throw new Error("This confirmation link is not supported.");
       await chrome.tabs.create({ url: item.url });
-      pollDeadline = 0;
       button.textContent = "Opened";
       setStatus("Confirmation link opened in a new tab.");
-    } catch (error) {
-      setStatus(error.message, true);
-      setCodeButtonsDisabled(false);
-    } finally {
-      filling = false;
-      setRemoveAndCheckDisabled(addingAccount);
-      if (pollDeadline) scheduleCheck();
-      else closeSession();
-    }
+    });
   }
   function scheduleCheck(delay = POLL_INTERVAL_MS) {
     if (clock.now() >= pollDeadline) {
@@ -123,17 +114,17 @@ export function createPopup({
       return;
     }
     clearTimeout(pollTimer);
-    if (!filling && !removingAccount)
-      pollTimer = setTimeout(checkForCodes, delay);
+    if (!usingResult && !removingAccount)
+      pollTimer = setTimeout(checkInbox, delay);
   }
   function finishPolling() {
     clearTimeout(pollTimer);
     closeSession();
-    if (!filling && !removingAccount)
+    if (!usingResult && !removingAccount)
       setStatus(`Automatic checking finished. Check again for newer ${mode}.`);
   }
-  async function checkForCodes() {
-    if (filling || removingAccount) return;
+  async function checkInbox() {
+    if (usingResult || removingAccount) return;
     if (clock.now() >= pollDeadline) {
       finishPolling();
       return;
@@ -147,26 +138,26 @@ export function createPopup({
     setStatus("Checking your connected inboxes…");
     try {
       const response = await sendSessionRequest(mode);
-      const codes = response[mode];
-      if (!filling && requestGeneration === checkGeneration) {
-        if (mode === "links") renderLinks(codes);
-        else renderCodes(codes, targetTab);
+      const results = response[mode];
+      if (!usingResult && requestGeneration === checkGeneration) {
+        if (mode === "links") renderLinks(results);
+        else renderCodes(results, targetTab);
         setStatus(
-          response.warnings?.length ? `Some accounts could not be checked: ${response.warnings.join("; ")}` : codes.length
+          response.warnings?.length ? `Some accounts could not be checked: ${response.warnings.join("; ")}` : results.length
             ? mode === "links" ? "Check the sender and destination, then open your confirmation link." : "Choose the code for this website. Checking for newer codes…"
             : mode === "links" ? "No recent confirmation link yet. Request one and keep this popup open." : "No recent code yet. Request one on the website; keep this popup open.",
         );
       }
     } catch (error) {
       failed = true;
-      if (!filling && requestGeneration === checkGeneration) {
-        clearCodes();
+      if (!usingResult && requestGeneration === checkGeneration) {
+        clearResults();
         setStatus(error.message, true);
       }
     } finally {
       if (requestGeneration === checkGeneration) {
         checking = false;
-        setRemoveAndCheckDisabled(filling || removingAccount || addingAccount);
+        setRemoveAndCheckDisabled(usingResult || removingAccount || addingAccount);
         scheduleCheck(
           failed
             ? POLL_INTERVAL_MS
@@ -179,10 +170,11 @@ export function createPopup({
     }
   }
   function selectMode(nextMode) {
-    if (filling || removingAccount || addingAccount) return;
+    if (usingResult || removingAccount || addingAccount) return;
     abortCheck();
-    if (mode !== nextMode) clearCodes();
+    if (mode !== nextMode) clearResults();
     mode = nextMode;
+    setMode(mode);
     startPolling();
   }
   $("checkCodes").addEventListener("click", () => selectMode("codes"));
@@ -208,7 +200,7 @@ export function createPopup({
     } finally {
       addingAccount = false;
       setAddAccountDisabled(false);
-      setRemoveAndCheckDisabled(filling || removingAccount);
+      setRemoveAndCheckDisabled(usingResult || removingAccount);
     }
   });
   $("addAccount").addEventListener("click", () => {
@@ -235,6 +227,7 @@ export function createPopup({
   }
   async function initialize() {
     setExtensionId(chrome.runtime.id);
+    setMode(mode);
     const [tab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,

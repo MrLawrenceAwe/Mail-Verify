@@ -1,6 +1,6 @@
 export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenLink }) {
   const $ = (id) => document.getElementById(id);
-  let renderedCodesKey;
+  let renderedResultsKey;
 
   function setStatus(text, error = false) {
     $("status").textContent = text;
@@ -18,6 +18,10 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
 
   function setExtensionId(id) {
     $("extensionId").value = id;
+  }
+
+  function setMode(mode) {
+    $("codeContext").hidden = mode !== "codes";
   }
 
   function setDestination(text) {
@@ -45,8 +49,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
     for (const button of $("accounts").querySelectorAll("button")) button.disabled = disabled;
   }
 
-  function setCodeButtonsDisabled(disabled) {
-    for (const button of $("codes").querySelectorAll("button")) button.disabled = disabled;
+  function setResultButtonsDisabled(disabled) {
+    for (const button of $("results").querySelectorAll("button")) button.disabled = disabled;
   }
 
   function markCodeFilled(button) {
@@ -73,23 +77,23 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
     }
   }
 
-  function clearCodes() {
-    $("codes").replaceChildren();
-    renderedCodesKey = undefined;
+  function clearResults() {
+    $("results").replaceChildren();
+    renderedResultsKey = undefined;
   }
 
   function renderCodes(codes, targetTab) {
     const key = JSON.stringify(codes);
-    if (key === renderedCodesKey) return;
-    renderedCodesKey = key;
-    $("codes").replaceChildren();
+    if (key === renderedResultsKey) return;
+    renderedResultsKey = key;
+    $("results").replaceChildren();
     for (const item of codes) {
       const card = document.createElement("article");
       card.className = "card";
       for (const [tag, className, value] of [
         ["div", "code", item.code],
         ["p", "account-email", item.accountEmail],
-        ["p", "sender", item.sender],
+        ["p", "result-detail", item.sender],
         ["p", "subject", item.subject],
       ]) {
         const element = document.createElement(tag);
@@ -104,34 +108,34 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
       button.disabled = !targetTab;
       button.addEventListener("click", () => onFillCode(item, button));
       card.append(button);
-      $("codes").append(card);
+      $("results").append(card);
     }
   }
 
   function renderLinks(links) {
     const key = "links:" + JSON.stringify(links);
-    if (key === renderedCodesKey) return;
-    renderedCodesKey = key;
-    $("codes").replaceChildren();
+    if (key === renderedResultsKey) return;
+    renderedResultsKey = key;
+    $("results").replaceChildren();
     for (const item of links) {
       const card = document.createElement("article");
       card.className = "card";
       for (const value of [item.accountEmail, item.sender, item.subject, `Destination: ${new URL(item.url).hostname}`]) {
         const line = document.createElement("p");
         line.textContent = value;
-        line.className = "sender";
+        line.className = "result-detail";
         card.append(line);
       }
       const button = document.createElement("button");
       button.textContent = "Open confirmation link ↗";
       button.addEventListener("click", () => onOpenLink(item, button));
       card.append(button);
-      $("codes").append(card);
+      $("results").append(card);
     }
   }
 
   return { setStatus, showAccountSetup, showCompanionSetup, setExtensionId,
-    setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
-    clearAccountEmail, setRemoveAndCheckDisabled, setCodeButtonsDisabled,
-    markCodeFilled, renderAccounts, clearCodes, renderCodes, renderLinks };
+    setMode, setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
+    clearAccountEmail, setRemoveAndCheckDisabled, setResultButtonsDisabled,
+    markCodeFilled, renderAccounts, clearResults, renderCodes, renderLinks };
 }

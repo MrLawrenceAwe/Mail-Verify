@@ -33,7 +33,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor }
     el.id,
     el.placeholder,
     el.getAttribute("aria-label"),
-    ...[...(el.labels || [])].map((l) => l.textContent),
+    ...[...(el.labels || [])].map((label) => label.textContent),
   ];
   const contextMatches = new Map();
   const contextRoots = new Set();

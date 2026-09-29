@@ -33,8 +33,11 @@
       "resources": [
         "inline-picker.js",
         "confirmation-card.js",
+        "confirmation-card-view.js",
+        "confirmation-url.js",
+        "step-text.js",
         "inline-picker-view.js",
-        "code-timing.js",
+        "mail-timing.js",
         "inline-client.js",
         "code-fields.js"
       ],

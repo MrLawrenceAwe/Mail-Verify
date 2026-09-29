@@ -9,11 +9,13 @@ from code_extraction import extract_code_details
 from link_extraction import extract_link_details
 from errors import UserError
 
-MAX_CODE_AGE_SECONDS = 600
+MAX_MESSAGE_AGE_SECONDS = 600
 MAX_FUTURE_SKEW_SECONDS = 120
 FIRST_BATCH_SIZE = 5
 MAX_MESSAGES = 30
-MAX_RESULTS = 5
+MAX_NEW_RESULTS_PER_SCAN = 5
+RECENT_RESULT_LIMIT = 5
+DISTINCT_SENDER_LIMIT = 5
 MAX_MESSAGE_BYTES = 1_000_000
 
 
@@ -123,7 +125,7 @@ class InboxSession:
             if not uid or not date or not size or int(size.group(1)) > MAX_MESSAGE_BYTES:
                 continue
             received = time.mktime(date)
-            if -MAX_FUTURE_SKEW_SECONDS <= now - received <= MAX_CODE_AGE_SECONDS:
+            if -MAX_FUTURE_SKEW_SECONDS <= now - received <= MAX_MESSAGE_AGE_SECONDS:
                 eligible[int(uid.group(1))] = min(received, now)
         return eligible
 
@@ -158,7 +160,7 @@ class InboxSession:
                     found["uid"] = uid
                     self.items_by_uid[uid] = found
                     new_item_count += 1
-                if new_item_count == MAX_RESULTS:
+                if new_item_count == MAX_NEW_RESULTS_PER_SCAN:
                     return
             if new_item_count:
                 return
@@ -168,7 +170,7 @@ class InboxSession:
         distinct_senders = self._newest_distinct_senders()
         cutoff = (
             (distinct_senders[-1]["receivedAt"], distinct_senders[-1]["uid"])
-            if len(distinct_senders) == MAX_RESULTS else None
+            if len(distinct_senders) == DISTINCT_SENDER_LIMIT else None
         )
         eligible = sorted(
             self.pending_received_at_by_uid.items(), key=lambda item: item[0], reverse=True
@@ -176,7 +178,7 @@ class InboxSession:
         pending = [
             (uid, received)
             for uid, received in eligible
-            if 0 <= now - received <= MAX_CODE_AGE_SECONDS
+            if 0 <= now - received <= MAX_MESSAGE_AGE_SECONDS
             and (cutoff is None or (int(received * 1000), uid) > cutoff)
         ][:MAX_MESSAGES]
         self.pending_received_at_by_uid = dict(pending)
@@ -197,7 +199,7 @@ class InboxSession:
             self.items_by_uid = {
                 uid: item
                 for uid, item in self.items_by_uid.items()
-                if 0 <= now - item["receivedAt"] / 1000 <= MAX_CODE_AGE_SECONDS
+                if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS
             }
             metadata = self._new_message_metadata()
             self.pending_received_at_by_uid.update(self._eligible_messages(metadata, now))
@@ -214,7 +216,7 @@ class InboxSession:
             key=lambda item: (item["receivedAt"], item["uid"]),
             reverse=True,
         )
-        newest_overall = newest[:MAX_RESULTS]
+        newest_overall = newest[:RECENT_RESULT_LIMIT]
         newest_by_sender = self._newest_distinct_senders(newest)
         retained_uids = {item["uid"] for item in (*newest_overall, *newest_by_sender)}
         results = [item for item in newest if item["uid"] in retained_uids]
@@ -237,6 +239,6 @@ class InboxSession:
                 continue
             senders.add(key)
             distinct.append(item)
-            if len(distinct) == MAX_RESULTS:
+            if len(distinct) == DISTINCT_SENDER_LIMIT:
                 break
         return distinct
