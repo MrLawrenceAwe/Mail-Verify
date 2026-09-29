@@ -2,15 +2,14 @@
 import email
 from email import policy
 from email.utils import parseaddr
-from html.parser import HTMLParser
 import re
 from urllib.parse import urlsplit
 
-from code_extraction import iter_non_attachment_parts
+from email_content import VisibleEmailHTMLParser, iter_text_parts
 
-CONFIRM = re.compile(r"\b(?:verify|confirm|activate)\s+(?:(?:your|my|the|this|new)\s+)?(?:e-?mail(?:\s+address)?|account|registration)\b", re.I)
-EXCLUDE = re.compile(r"\b(?:unsubscribe|password|reset|delete|cancel|payment|purchase)\b", re.I)
-SUBJECT_EXCLUDE = re.compile(
+CONFIRMATION_LABEL_PATTERN = re.compile(r"\b(?:verify|confirm|activate)\s+(?:(?:your|my|the|this|new)\s+)?(?:e-?mail(?:\s+address)?|account|registration)\b", re.I)
+EXCLUDED_LABEL_PATTERN = re.compile(r"\b(?:unsubscribe|password|reset|delete|cancel|payment|purchase)\b", re.I)
+EXCLUDED_SUBJECT_PATTERN = re.compile(
     r"\b(?:unsubscribe|delete|cancel|payment|purchase)\b|"
     r"\b(?:reset|forgot|change|update|recover)\b.{0,35}\bpassword\b|"
     r"\bpassword\b.{0,35}\b(?:reset|recovery)\b",
@@ -18,7 +17,7 @@ SUBJECT_EXCLUDE = re.compile(
 )
 
 
-def safe_url(value):
+def is_supported_confirmation_url(value):
     if len(value) > 4096 or re.search(r"[\s\x00-\x1f\x7f\\]", value):
         return False
     try:
@@ -32,64 +31,39 @@ def safe_url(value):
         return False
 
 
-class LinkParser(HTMLParser):
-    VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
-
+class EmailLinkParser(VisibleEmailHTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
         self.anchor = None
-        self.stack = []
 
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        style = attrs.get("style") or ""
-        hidden = (
-            (self.stack[-1][1] if self.stack else False)
-            or tag in ("script", "style", "template")
-            or "hidden" in attrs
-            or (attrs.get("aria-hidden") or "").lower() == "true"
-            or bool(re.search(r"(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\b", style, re.I))
-        )
-        if tag == "a" and not hidden:
+    def visible_start(self, tag, attrs):
+        if tag == "a":
             self.anchor = [attrs.get("href", ""), []]
-        if tag == "img" and self.anchor and not hidden:
+        if tag == "img" and self.anchor:
             self.anchor[1].append(attrs.get("alt", ""))
-        if tag not in self.VOID_TAGS:
-            self.stack.append((tag, hidden))
 
-    def handle_data(self, data):
-        if self.anchor and not (self.stack and self.stack[-1][1]):
+    def visible_data(self, data):
+        if self.anchor:
             self.anchor[1].append(data)
 
-    def handle_endtag(self, tag):
-        for index in range(len(self.stack) - 1, -1, -1):
-            if self.stack[index][0] == tag:
-                hidden = self.stack[index][1]
-                del self.stack[index:]
-                if tag == "a" and self.anchor and not hidden:
-                    self.links.append((self.anchor[0], " ".join(self.anchor[1])))
-                    self.anchor = None
-                break
+    def visible_end(self, tag):
+        if tag == "a" and self.anchor:
+            self.links.append((self.anchor[0], " ".join(self.anchor[1])))
+            self.anchor = None
 
 
 def extract_link_details(raw):
     msg = email.message_from_bytes(raw, policy=policy.default)
     subject = str(msg.get("Subject", ""))
-    if SUBJECT_EXCLUDE.search(subject):
+    if EXCLUDED_SUBJECT_PATTERN.search(subject):
         return None
     # HTML and plain text are alternative renderings of one message. Prefer
     # visible HTML links; the text version can use a different tracking URL.
     html_candidates, plain_candidates = set(), set()
-    for part in iter_non_attachment_parts(msg):
-        if part.get_content_type() not in ("text/html", "text/plain"):
-            continue
-        try:
-            value = part.get_content()
-        except (LookupError, UnicodeError):
-            continue
-        if part.get_content_type() == "text/html":
-            parser = LinkParser()
+    for content_type, value in iter_text_parts(msg):
+        if content_type == "text/html":
+            parser = EmailLinkParser()
             parser.feed(value)
             links = parser.links
             candidates = html_candidates
@@ -110,7 +84,7 @@ def extract_link_details(raw):
             candidates = plain_candidates
         for url, label in links:
             label = re.sub(r"\s+", " ", label)
-            if CONFIRM.search(label) and not EXCLUDE.search(label) and safe_url(url):
+            if CONFIRMATION_LABEL_PATTERN.search(label) and not EXCLUDED_LABEL_PATTERN.search(label) and is_supported_confirmation_url(url):
                 candidates.add(url)
     candidates = html_candidates if html_candidates else plain_candidates
     if len(candidates) != 1:

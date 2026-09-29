@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { confirmationScreenKey, isConfirmationRequestControl, isConfirmationScreen, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
+import { getConfirmationStepKey, isConfirmationRequestControl, isConfirmationScreen, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
@@ -18,9 +18,9 @@ function setup(panel = null) {
       Date: { now: () => state.now },
       setTimeout(fn, delay) { const key = ++id; timers.set(key, { fn, delay }); return key; }, clearTimeout(key) { timers.delete(key); },
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
-    }, detect: () => state.detected, getScreenKey: () => state.panel
-      ? confirmationScreenKey({ querySelectorAll: () => [state.panel] })
-      : state.screenKey, detectCode: () => state.code,
+    }, getStepKey: () => state.detected
+      ? (state.panel ? getConfirmationStepKey({ querySelectorAll: () => [state.panel] }) : state.screenKey)
+      : null, detectCode: () => state.code,
     createView(_document, callbacks) {
       const view = { callbacks, removed: false, links: [], host: { remove() { view.removed = true; }, contains() { return false; } },
         setStatus(text) { view.status = text; }, renderLinks(items) { view.links = items; } };
@@ -46,18 +46,18 @@ test("distinguishes replacement confirmation panels with identical text", () => 
   const panel = () => ({ innerText: "Check your email", getClientRects: () => [{}], checkVisibility: () => true });
   let current = panel();
   const document = { querySelectorAll: () => [current] };
-  const first = confirmationScreenKey(document);
-  assert.equal(confirmationScreenKey(document), first);
+  const first = getConfirmationStepKey(document);
+  assert.equal(getConfirmationStepKey(document), first);
   current = panel();
-  assert.notEqual(confirmationScreenKey(document), first);
+  assert.notEqual(getConfirmationStepKey(document), first);
 });
 
 test("countdown changes keep the same confirmation step", () => {
   const panel = { innerText: "Check your email. Resend in 30 seconds", getClientRects: () => [{}], checkVisibility: () => true };
   const document = { querySelectorAll: () => [panel] };
-  const first = confirmationScreenKey(document);
+  const first = getConfirmationStepKey(document);
   panel.innerText = "Check your email. Resend in 29 seconds";
-  assert.equal(confirmationScreenKey(document), first);
+  assert.equal(getConfirmationStepKey(document), first);
 });
 
 test("recognises controls that request another confirmation message", () => {
@@ -75,7 +75,7 @@ test("renders matching mail, validates open and remains dismissed", async () => 
   const f = setup(); await settle();
   const view = f.state.views[0];
   assert.deepEqual(view.links, [item]);
-  assert.equal(view.callbacks.canOpen(item), true);
+  assert.equal(view.callbacks.beforeOpen(item), true);
   assert.equal(view.removed, true);
   f.state.mutate([{ target: {} }]); await f.run(250);
   assert.equal(f.state.views.length, 1);
@@ -90,7 +90,7 @@ test("a failed inbox check removes previously offered links", async () => {
   await f.run(8000);
   assert.deepEqual(view.links, []);
   assert.match(view.status, /Connect Yahoo Mail first/);
-  assert.equal(view.callbacks.canOpen(item), false);
+  assert.equal(view.callbacks.beforeOpen(item), false);
 });
 
 test("hides when tab is hidden and does not reset the polling deadline", async () => {
@@ -125,7 +125,7 @@ test("resend clears old links and expiry prevents opening", async () => {
   await settle();
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now += 700000;
-  assert.equal(f.state.views.at(-1).callbacks.canOpen(item), false);
+  assert.equal(f.state.views.at(-1).callbacks.beforeOpen(item), false);
 });
 
 test("a text update after resend cannot restore an earlier link", async () => {
@@ -137,7 +137,7 @@ test("a text update after resend cannot restore an earlier link", async () => {
   f.state.screenKey = "Confirmation email sent again";
   f.state.mutate([{ target: {} }]); await f.run(250);
   assert.deepEqual(f.state.views.at(-1).links, []);
-  assert.equal(f.state.views.at(-1).callbacks.canOpen(item), false);
+  assert.equal(f.state.views.at(-1).callbacks.beforeOpen(item), false);
 });
 
 test("a send confirmation control clears old links on the same screen", async () => {
@@ -145,7 +145,7 @@ test("a send confirmation control clears old links on the same screen", async ()
   f.events.click({ target: { closest: () => ({ textContent: "Send confirmation email", getAttribute: () => "" }) } });
   await settle();
   assert.deepEqual(f.state.views.at(-1).links, []);
-  assert.equal(f.state.views[0].callbacks.canOpen(item), false);
+  assert.equal(f.state.views[0].callbacks.beforeOpen(item), false);
 });
 
 test("a new confirmation step on the same URL clears links from the previous step", async () => {
@@ -156,7 +156,7 @@ test("a new confirmation step on the same URL clears links from the previous ste
   f.state.screenKey = "second signup";
   f.state.mutate([{ target: {} }]); await f.run(250);
   assert.equal(oldView.removed, true);
-  assert.equal(oldView.callbacks.canOpen(item), false);
+  assert.equal(oldView.callbacks.beforeOpen(item), false);
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now = 21_000;
   f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
@@ -173,7 +173,7 @@ test("a confirmation step change excludes a link received moments before it", as
   f.state.mutate([{ target: {} }]); await f.run(250);
   assert.equal(oldView.removed, true);
   assert.deepEqual(f.state.views.at(-1).links, []);
-  assert.equal(f.state.views.at(-1).callbacks.canOpen(item), false);
+  assert.equal(f.state.views.at(-1).callbacks.beforeOpen(item), false);
 });
 
 test("a reused confirmation panel resets links when its signup changes", async () => {
@@ -185,7 +185,7 @@ test("a reused confirmation panel resets links when its signup changes", async (
   panel.innerText = "Check your email for bob@example.test";
   f.state.mutate([{ target: {} }]); await f.run(250);
   assert.equal(oldView.removed, true);
-  assert.equal(oldView.callbacks.canOpen(item), false);
+  assert.equal(oldView.callbacks.beforeOpen(item), false);
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now = 21_000;
   f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
