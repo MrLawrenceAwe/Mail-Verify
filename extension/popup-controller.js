@@ -1,7 +1,8 @@
 import { isSupportedConfirmationUrl } from "./confirmation-url.js";
 import { handleCodeField } from "./code-fields.js";
-import { MAX_MESSAGE_AGE_MS, POLL_WINDOW_MS } from "./mail-timing.js";
+import { MAX_MESSAGE_AGE_MS } from "./mail-timing.js";
 import { createPopupView } from "./popup-view.js";
+import { createPollingLifecycle } from "./polling-lifecycle.js";
 
 const POLL_INTERVAL_MS = 8_000;
 const MIN_POLL_PAUSE_MS = 2_000;
@@ -16,13 +17,13 @@ export function createPopupController({
 }) {
   const $ = (id) => document.getElementById(id);
   const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
+  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: POLL_INTERVAL_MS });
   let targetTab;
   let mode = "codes";
   let checking = false,
     usingResult = false,
     removingAccount = false,
     addingAccount = false;
-  let pollTimer, pollDeadline = 0, checkGeneration = 0;
   const {
     setStatus, setRemoveAndCheckDisabled, setResultButtonsDisabled,
     markCodeFilled, markLinkOpened, renderAccounts, clearResults, renderCodes, renderLinks,
@@ -38,19 +39,19 @@ export function createPopupController({
     renderAccounts(accountEmails);
     clearResults();
     if (!accountEmails.length) {
-      pollDeadline = 0;
+      polling.reset();
       setStatus("No email accounts connected.");
       return;
     }
     startPolling();
   }
   function startPolling() {
-    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    polling.restart();
     checkInbox();
   }
   function abortCheck() {
-    clearTimeout(pollTimer);
-    checkGeneration++;
+    polling.clear();
+    polling.invalidate();
     checking = false;
     closeSession();
   }
@@ -62,14 +63,14 @@ export function createPopupController({
     setResultButtonsDisabled(true);
     try {
       await action();
-      pollDeadline = 0;
+      polling.reset();
     } catch (error) {
       setStatus(error.message, true);
       setResultButtonsDisabled(false);
     } finally {
       usingResult = false;
       setRemoveAndCheckDisabled(addingAccount);
-      if (pollDeadline) scheduleCheck();
+      if (polling.deadline) scheduleCheck();
       else closeSession();
     }
   }
@@ -109,37 +110,37 @@ export function createPopupController({
     });
   }
   function scheduleCheck(delay = POLL_INTERVAL_MS) {
-    if (clock.now() >= pollDeadline) {
+    if (polling.expired()) {
       finishPolling();
       return;
     }
-    clearTimeout(pollTimer);
     if (!usingResult && !removingAccount)
-      pollTimer = setTimeout(checkInbox, delay);
+      polling.schedule(checkInbox, delay);
+    else polling.clear();
   }
   function finishPolling() {
-    clearTimeout(pollTimer);
+    polling.clear();
     closeSession();
     if (!usingResult && !removingAccount)
       setStatus(`Automatic checking finished. Check again for newer ${mode}.`);
   }
   async function checkInbox() {
     if (usingResult || removingAccount) return;
-    if (clock.now() >= pollDeadline) {
+    if (polling.expired()) {
       finishPolling();
       return;
     }
     if (checking) abortCheck();
-    clearTimeout(pollTimer);
+    polling.clear();
     checking = true;
-    const requestGeneration = ++checkGeneration;
+    const requestGeneration = polling.generation;
     const startedAt = clock.now();
     let failed = false;
     setStatus("Checking your connected inboxes…");
     try {
       const response = await sendSessionRequest(mode);
       const results = response[mode];
-      if (!usingResult && requestGeneration === checkGeneration) {
+      if (!usingResult && polling.isCurrent(requestGeneration)) {
         if (mode === "links") renderLinks(results);
         else renderCodes(results, targetTab);
         setStatus(
@@ -150,12 +151,12 @@ export function createPopupController({
       }
     } catch (error) {
       failed = true;
-      if (!usingResult && requestGeneration === checkGeneration) {
+      if (!usingResult && polling.isCurrent(requestGeneration)) {
         clearResults();
         setStatus(error.message, true);
       }
     } finally {
-      if (requestGeneration === checkGeneration) {
+      if (polling.isCurrent(requestGeneration)) {
         checking = false;
         setRemoveAndCheckDisabled(usingResult || removingAccount || addingAccount);
         scheduleCheck(
@@ -208,7 +209,7 @@ export function createPopupController({
   });
   async function removeAccount(email) {
     if (addingAccount || removingAccount) return;
-    pollDeadline = 0;
+    polling.reset();
     removingAccount = true;
     abortCheck();
     setRemoveAndCheckDisabled(true);
@@ -218,11 +219,11 @@ export function createPopupController({
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
       setStatus(error.message, true);
-      pollDeadline = clock.now() + POLL_WINDOW_MS;
+      polling.restart();
     } finally {
       removingAccount = false;
       setRemoveAndCheckDisabled(false);
-      if (pollDeadline && !checking) scheduleCheck();
+      if (polling.deadline && !checking) scheduleCheck();
     }
   }
   async function initialize() {

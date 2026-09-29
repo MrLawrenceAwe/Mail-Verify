@@ -1,0 +1,15 @@
+[
+  {"url": "https://example.com/confirm?token=abc", "supported": true},
+  {"url": "https://example.com:443/confirm", "supported": true},
+  {"url": "https://example.com/a%20b", "supported": true},
+  {"url": "http://example.com/confirm", "supported": false},
+  {"url": "https://user@example.com/confirm", "supported": false},
+  {"url": "https://example.com:444/confirm", "supported": false},
+  {"url": "https://%65xample.com/confirm", "supported": false},
+  {"url": "https://example.com/path\u0000suffix", "supported": false},
+  {"url": "https://example.com/path\u007fsuffix", "supported": false},
+  {"url": "https://example.com/path\\suffix", "supported": false},
+  {"url": "https:example.com/confirm", "supported": false},
+  {"url": "https:/example.com/confirm", "supported": false},
+  {"url": "https:////example.com/confirm", "supported": false}
+]
