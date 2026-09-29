@@ -97,6 +97,64 @@ test("picker passes its mounted field to the fill action", async () => {
   assert.equal(fills[0].expectedAnchor, anchor);
 });
 
+test("a successful fill allows a new code field on the same URL", async () => {
+  let observer, now = 10_000, anchor = {};
+  let mounts = 0;
+  const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
+  const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20_000 };
+  let codes = [oldCode];
+  const { timers, results } = pickerBrowser({
+    handleField: (request) => request.action === "fill"
+      ? { ok: true }
+      : { ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } },
+    now: () => now,
+    check: async () => ({ ok: true, codes }),
+    onMount: () => { mounts++; },
+    onObserve: callback => { observer = callback; },
+  });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  await flush();
+  results.children[0].onclick();
+  now = 21_000;
+  anchor = {};
+  codes = [oldCode, newCode];
+  observer([{ type: "attributes", target: { matches: () => true } }]);
+  timers.pop()();
+  await flush();
+  assert.equal(mounts, 2);
+  assert.equal(results.children[0].strong.textContent, "Fill code 222222");
+});
+
+test("a successful fill keeps the same field closed until a resend", async () => {
+  let observer, now = 10_000;
+  const anchor = {};
+  const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
+  const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 22_000 };
+  let codes = [oldCode], mounts = 0;
+  const { events, timers, results } = pickerBrowser({
+    handleField: (request) => request.action === "fill"
+      ? { ok: true }
+      : { ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } },
+    now: () => now,
+    check: async () => ({ ok: true, codes }),
+    onMount: () => { mounts++; },
+    onObserve: callback => { observer = callback; },
+  });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  await flush();
+  results.children[0].onclick();
+  observer([{ type: "attributes", target: { matches: () => true } }]);
+  timers.pop()();
+  assert.equal(mounts, 1);
+  now = 21_000;
+  codes = [oldCode, newCode];
+  events.get("click")({ target: { closest: () => ({ textContent: "Resend code" }) } });
+  now = 23_000;
+  await flush();
+  assert.equal(mounts, 2);
+  assert.equal(results.children[0].strong.textContent, "Fill code 222222");
+});
+
 test("a failed inbox check removes previously offered codes", async () => {
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9_000 };
   let connected = true;

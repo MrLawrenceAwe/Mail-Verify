@@ -6,10 +6,10 @@ import { inlineRuntime } from "./mock_inline_port.js";
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-function setup() {
+function setup(panel = null) {
   const timers = new Map(), events = {}, windowEvents = {};
   let id = 0;
-  const state = { now: 10000, detected: true, screenKey: "first signup", code: false, requests: 0, views: [], respond: async () => ({ ok: true, links: [item] }) };
+  const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, views: [], respond: async () => ({ ok: true, links: [item] }) };
   const document = { hidden: false, documentElement: { append() {} }, addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
   startConfirmationCard({
@@ -18,7 +18,9 @@ function setup() {
       Date: { now: () => state.now },
       setTimeout(fn, delay) { const key = ++id; timers.set(key, { fn, delay }); return key; }, clearTimeout(key) { timers.delete(key); },
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
-    }, detect: () => state.detected, getScreenKey: () => state.screenKey, detectCode: () => state.code,
+    }, detect: () => state.detected, getScreenKey: () => state.panel
+      ? confirmationScreenKey({ querySelectorAll: () => [state.panel] })
+      : state.screenKey, detectCode: () => state.code,
     createView(_document, callbacks) {
       const view = { callbacks, removed: false, links: [], host: { remove() { view.removed = true; }, contains() { return false; } },
         setStatus(text) { view.status = text; }, renderLinks(items) { view.links = items; } };
@@ -48,6 +50,14 @@ test("distinguishes replacement confirmation panels with identical text", () => 
   assert.equal(confirmationScreenKey(document), first);
   current = panel();
   assert.notEqual(confirmationScreenKey(document), first);
+});
+
+test("countdown changes keep the same confirmation step", () => {
+  const panel = { innerText: "Check your email. Resend in 30 seconds", getClientRects: () => [{}], checkVisibility: () => true };
+  const document = { querySelectorAll: () => [panel] };
+  const first = confirmationScreenKey(document);
+  panel.innerText = "Check your email. Resend in 29 seconds";
+  assert.equal(confirmationScreenKey(document), first);
 });
 
 test("recognises controls that request another confirmation message", () => {
@@ -132,6 +142,20 @@ test("a new confirmation step on the same URL clears links from the previous ste
   assert.deepEqual(oldView.links, [item]);
   f.state.now = 20_000;
   f.state.screenKey = "second signup";
+  f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 20_000 }] });
+  f.state.mutate([{ target: {} }]); await f.run(250);
+  assert.equal(oldView.removed, true);
+  assert.equal(oldView.callbacks.canOpen(item), false);
+  assert.deepEqual(f.state.views.at(-1).links.map(link => link.uid), [2]);
+});
+
+test("a reused confirmation panel resets links when its signup changes", async () => {
+  const panel = { innerText: "Check your email for alice@example.test", getClientRects: () => [{}], checkVisibility: () => true };
+  const f = setup(panel); await settle();
+  const oldView = f.state.views[0];
+  assert.deepEqual(oldView.links, [item]);
+  f.state.now = 20_000;
+  panel.innerText = "Check your email for bob@example.test";
   f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 20_000 }] });
   f.state.mutate([{ target: {} }]); await f.run(250);
   assert.equal(oldView.removed, true);

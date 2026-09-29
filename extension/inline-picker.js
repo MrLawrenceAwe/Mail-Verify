@@ -85,7 +85,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   const { document, window, location, chrome, MutationObserver, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
   let view, pollTimer, pollDeadline = 0, activeCheck;
-  let dismissed = false, attemptGeneration = 0, lastURL = location.href;
+  let dismissed = false, filledStep = false, attemptGeneration = 0, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   let candidateCache;
@@ -140,7 +140,8 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
         }
         const result = handleField({ action: "fill", code: item.code, expectedAnchor: mountedAnchor });
         if (result.ok) {
-          dismissPicker();
+          filledStep = true;
+          unmountPicker({ preserveStep: true });
         } else {
           view.setStatus("Select the code field and try again.");
           positionPicker();
@@ -200,6 +201,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   function resetAttempt({ newPage = false, preserveCutoff = false } = {}) {
     excludeSeenMessages();
     unmountPicker();
+    filledStep = false;
     minReceivedAtMs = preserveCutoff
       ? Math.max(minReceivedAtMs ?? -Infinity, clock.now() - 5_000)
       : undefined;
@@ -242,6 +244,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     if (anchor && anchor !== field.anchor) resetAttempt();
     else if (stepContext && context.key !== stepContext.key)
       resetAttempt({ preserveCutoff: true });
+    else if (filledStep) return;
     if (!view && !dismissed) mountPicker(field, context);
     else positionPicker(field);
   }
@@ -274,6 +277,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     minReceivedAtMs = Math.floor(clock.now() / 1000) * 1000 + 1000;
     excludeSeenMessages();
     dismissed = false;
+    filledStep = false;
     attemptGeneration++;
     view?.clearCodes();
     if (view) {
