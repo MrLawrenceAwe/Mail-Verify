@@ -22,9 +22,14 @@ export function confirmationScreenKey(document) {
     isConfirmationScreen(panel.innerText || ""));
   if (!panel) return null;
   if (!confirmationPanelIds.has(panel)) confirmationPanelIds.set(panel, nextConfirmationPanelId++);
-  // A panel may update its instructions or resend status without starting a new
-  // confirmation step. Its identity changes when the page replaces the panel.
-  return confirmationPanelIds.get(panel);
+  // Keep countdown updates within one step, but distinguish a new signup
+  // shown inside the same panel element.
+  const text = (panel.innerText || "")
+    .replace(/\b\d{1,2}:\d{2}\b/g, "#")
+    .replace(/\b(?:re-?send|send again|retry|try again|expires?|wait)\s+(?:in\s+|after\s+)?\d{1,3}(?:\s*(?:seconds?|minutes?|secs?|mins?|s|m))?\b/gi, "# timer")
+    .replace(/\b\d+\s*(?:seconds?|minutes?|secs?|mins?)\b/gi, "# time")
+    .replace(/\s+/g, " ").trim();
+  return `${confirmationPanelIds.get(panel)}:${text}`;
 }
 
 export function detectConfirmationScreen(document) {
