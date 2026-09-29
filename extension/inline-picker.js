@@ -182,7 +182,10 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       view.setStatus(status);
     } catch (error) {
       checkFailed = true;
-      if (requestGeneration === attemptGeneration && view) view.setStatus(error.message);
+      if (requestGeneration === attemptGeneration && view) {
+        view.clearCodes();
+        view.setStatus(error.message);
+      }
     } finally {
       if (activeCheck !== check) return;
       activeCheck = undefined;

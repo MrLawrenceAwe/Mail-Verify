@@ -147,7 +147,11 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
       view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
         currentItems.length ? "Choose the email for this signup." : "Waiting for your confirmation email…");
     } catch (error) {
-      if (attempt === generation && view) view.setStatus(error.message);
+      if (attempt === generation && view) {
+        currentItems = [];
+        view.renderLinks(currentItems);
+        view.setStatus(error.message);
+      }
     } finally {
       if (activeAttempt === attempt && retryAfterFlight && view && !document.hidden) {
         retryAfterFlight = false;
@@ -201,6 +205,8 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
       canOpen(item) {
         if (document.hidden || lastURL !== location.href || !detect(document) || detectCode() ||
             getScreenKey(document) !== screenKey ||
+            !currentItems.some((current) => current.accountEmail === item.accountEmail &&
+              current.uid === item.uid && current.url === item.url) ||
             !selectConfirmationLinks([item], since, clock.now()).length) {
           view?.setStatus("This link is no longer current. Request a new email or check again.");
           return false;

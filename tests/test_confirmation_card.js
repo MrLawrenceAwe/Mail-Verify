@@ -71,6 +71,18 @@ test("renders matching mail, validates open and remains dismissed", async () => 
   assert.equal(f.state.views.length, 1);
 });
 
+test("a failed inbox check removes previously offered links", async () => {
+  const f = setup(); await settle();
+  const view = f.state.views[0];
+  assert.deepEqual(view.links, [item]);
+
+  f.state.respond = async () => ({ ok: false, error: "Connect Yahoo Mail first." });
+  await f.run(8000);
+  assert.deepEqual(view.links, []);
+  assert.match(view.status, /Connect Yahoo Mail first/);
+  assert.equal(view.callbacks.canOpen(item), false);
+});
+
 test("hides when tab is hidden and does not reset the polling deadline", async () => {
   const f = setup(); await settle();
   f.document.hidden = true; f.events.visibilitychange(); await f.run(250);
