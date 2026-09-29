@@ -159,8 +159,10 @@ export function createPopup({
       }
     } catch (error) {
       failed = true;
-      if (!filling && requestGeneration === checkGeneration)
+      if (!filling && requestGeneration === checkGeneration) {
+        clearCodes();
         setStatus(error.message, true);
+      }
     } finally {
       if (requestGeneration === checkGeneration) {
         checking = false;

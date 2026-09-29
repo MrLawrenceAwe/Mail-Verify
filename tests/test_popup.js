@@ -172,6 +172,19 @@ test("retries temporary mail errors", async () => {
   await settle();
   assert.equal(scheduled.size, 1, "retry after temporary errors");
   assert.equal(controls.status.textContent, "Temporary mail error");
+  assert.equal(controls.codes.querySelectorAll("button").length, 0);
+});
+
+test("a failed link check clears earlier confirmation links", async () => {
+  const { controls, state } = await setup();
+  state.fetchLinks = async () => [link];
+  controls.checkLinks.trigger();
+  await settle();
+  assert.equal(controls.codes.querySelectorAll("button").length, 1);
+  state.fetchLinks = async () => { throw Error("Temporary mail error"); };
+  controls.checkLinks.trigger();
+  await settle();
+  assert.equal(controls.codes.querySelectorAll("button").length, 0);
 });
 
 test("ignores stale checks during a fill", async () => {
