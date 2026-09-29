@@ -193,14 +193,16 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
       unmount();
       dismissed = false;
       screenActive = false;
-      since = undefined;
+      // A resend may update the panel text. Keep its stricter cutoff so an
+      // earlier message cannot become eligible again on the replacement view.
+      since = Math.max(since ?? -Infinity, clock.now() - 5000);
       deadline = 0;
     }
     if (dismissed) return;
     if (!screenActive) {
       screenActive = true;
       screenKey = nextScreenKey;
-      since = clock.now() - 5000;
+      since ??= clock.now() - 5000;
       deadline = clock.now() + POLL_WINDOW_MS;
     }
     if (view) return;

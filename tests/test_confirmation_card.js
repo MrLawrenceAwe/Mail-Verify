@@ -128,6 +128,18 @@ test("resend clears old links and expiry prevents opening", async () => {
   assert.equal(f.state.views.at(-1).callbacks.canOpen(item), false);
 });
 
+test("a text update after resend cannot restore an earlier link", async () => {
+  const f = setup(); await settle();
+  f.state.now = 10050;
+  f.events.click({ target: { closest: () => ({ textContent: "Resend email" }) } });
+  await settle();
+  assert.deepEqual(f.state.views.at(-1).links, []);
+  f.state.screenKey = "Confirmation email sent again";
+  f.state.mutate([{ target: {} }]); await f.run(250);
+  assert.deepEqual(f.state.views.at(-1).links, []);
+  assert.equal(f.state.views.at(-1).callbacks.canOpen(item), false);
+});
+
 test("a send confirmation control clears old links on the same screen", async () => {
   const f = setup(); await settle();
   f.events.click({ target: { closest: () => ({ textContent: "Send confirmation email", getAttribute: () => "" }) } });
