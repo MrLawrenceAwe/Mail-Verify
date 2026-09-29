@@ -1,12 +1,20 @@
 """Confirmation link extraction and URL rejection cases."""
 from email.message import EmailMessage
 from pathlib import Path
+import json
 import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
-from link_extraction import extract_link_details
+from link_extraction import extract_link_details, is_supported_confirmation_url
 
 class LinkExtractionTests(unittest.TestCase):
+    def test_confirmation_url_policy_matches_extension_cases(self):
+        cases = json.loads((Path(__file__).parent / "fixtures/confirmation-urls.json").read_text())
+        for case in cases:
+            with self.subTest(url=case["url"]):
+                self.assertEqual(is_supported_confirmation_url(case["url"]), case["supported"])
+        self.assertFalse(is_supported_confirmation_url("https://example.com/" + "a" * 4096))
+
     def message(self, body, subtype="html", subject="Confirm your account"):
         msg = EmailMessage()
         msg["From"] = "Service <hello@example.com>"
