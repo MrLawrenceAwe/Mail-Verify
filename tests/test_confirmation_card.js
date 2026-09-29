@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { confirmationScreenKey, isConfirmationRequestControl, isConfirmationScreen, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
+import { inlineRuntime } from "./mock_inline_port.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -13,7 +14,7 @@ function setup() {
   const location = { href: "https://example.com/verify" };
   startConfirmationCard({
     browser: { document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
-      chrome: { runtime: { async sendMessage(message) { assert.equal(message.type, "mail-verify-inline-links"); state.requests++; return state.respond(); } } },
+      chrome: { runtime: inlineRuntime(async (kind) => { assert.equal(kind, "links"); state.requests++; return state.respond(); }) },
       Date: { now: () => state.now },
       setTimeout(fn, delay) { const key = ++id; timers.set(key, { fn, delay }); return key; }, clearTimeout(key) { timers.delete(key); },
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
