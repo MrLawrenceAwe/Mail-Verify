@@ -23,7 +23,10 @@ def safe_url(value):
         return False
     try:
         parsed = urlsplit(value)
+        # Browsers reject percent-encoded or malformed hostnames that urlsplit
+        # accepts, so do not pass those URLs through to the popup renderer.
         return (parsed.scheme == "https" and bool(parsed.hostname) and
+                "%" not in parsed.hostname and
                 not parsed.username and not parsed.password and parsed.port in (None, 443))
     except ValueError:
         return False
