@@ -97,6 +97,26 @@ test("picker passes its mounted field to the fill action", async () => {
   assert.equal(fills[0].expectedAnchor, anchor);
 });
 
+test("a failed inbox check removes previously offered codes", async () => {
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9_000 };
+  let connected = true;
+  const { timers, results, elements } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => 10_000,
+    check: async () => connected
+      ? { ok: true, codes: [code] }
+      : { ok: false, error: "Connect Yahoo Mail first." },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(results.childElementCount, 1);
+
+  connected = false;
+  timers.pop()();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(results.childElementCount, 0);
+  assert.match(elements["#status"].textContent, /Connect Yahoo Mail first/);
+});
+
 test("old codes are withheld while waiting for this verification attempt", () => {
   const older = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 1000 };
   const newest = { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
