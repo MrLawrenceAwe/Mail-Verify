@@ -1,5 +1,6 @@
 import { handleCodeField } from "./code-fields.js";
 import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
+import { requestInlineCheck } from "./inline-client.js";
 
 const confirmationPanelIds = new WeakMap();
 let nextConfirmationPanelId = 1;
@@ -140,7 +141,7 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
     inFlight = true;
     activeAttempt = attempt;
     try {
-      const response = await chrome.runtime.sendMessage({ type: "mail-verify-inline-links" });
+      const response = await requestInlineCheck(chrome.runtime, "links");
       if (attempt !== generation || !view || document.hidden) return;
       if (lastURL !== location.href || !detect(document) || detectCode() || getScreenKey(document) !== screenKey) { sync(); return; }
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");

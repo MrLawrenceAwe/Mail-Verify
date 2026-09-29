@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { suggestionPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl, startInlinePicker } from "../extension/inline-picker.js";
+import { inlineRuntime } from "./mock_inline_port.js";
 
-function pickerBrowser({ handleField, now = Date.now, sendMessage, onMount = () => {},
+function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
   onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn() }) {
   const events = new Map(), timers = [];
   const results = {
@@ -42,7 +43,7 @@ function pickerBrowser({ handleField, now = Date.now, sendMessage, onMount = () 
     requestAnimationFrame: onFrame,
     setTimeout: fn => { timers.push(fn); return timers.length; },
     clearTimeout: () => {},
-    chrome: { runtime: { sendMessage } },
+    chrome: { runtime: inlineRuntime(check) },
   };
   startInlinePicker({ browser, handleField });
   return { browser, events, timers, results, elements };
@@ -64,7 +65,7 @@ test("picker repositions using the current viewport after resize", () => {
     }),
     onMount: node => { mounted = node; },
     onFrame: fn => { frames.push(fn); return frames.length; },
-    sendMessage: () => new Promise(() => {}),
+    check: () => new Promise(() => {}),
   });
   assert.equal(mounted.style.left, "900px");
   browser.innerWidth = 1000;
@@ -88,7 +89,7 @@ test("picker passes its mounted field to the fill action", async () => {
       return { ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } };
     },
     now: () => 10_000,
-    sendMessage: async () => ({ ok: true, codes: [code] }),
+    check: async () => ({ ok: true, codes: [code] }),
   });
   await new Promise(resolve => setImmediate(resolve));
   results.children[0].onclick();
@@ -154,7 +155,7 @@ test("resend input clears the old suggestion and waits for newer mail", async ()
   const { events, timers, results } = pickerBrowser({
     handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
-    sendMessage: async () => ({ ok: true, codes }),
+    check: async () => ({ ok: true, codes }),
   });
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
@@ -181,7 +182,7 @@ test("resend before the first check returns does not revive an unseen old code",
   const { events, timers, results } = pickerBrowser({
     handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
-    sendMessage: () => new Promise(resolve => requests.push(resolve)),
+    check: () => new Promise(resolve => requests.push(resolve)),
   });
   const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
@@ -210,7 +211,7 @@ test("new route clears suggestions even when the code field is reused", async ()
   const { browser, events, timers, results } = pickerBrowser({
     handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
-    sendMessage: async () => ({ ok: true, codes: responses }),
+    check: async () => ({ ok: true, codes: responses }),
   });
   const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
   await flush();
@@ -242,7 +243,7 @@ test("scrolling away and back keeps a code from the same verification step", asy
   const { events, results } = pickerBrowser({
     handleField: () => ({ ok: visible, anchor, candidateCache: { inputs: [anchor], contextRoots: [] }, rect: anchor.getBoundingClientRect() }),
     now: () => now,
-    sendMessage: async () => ({ ok: true, codes: [code] }),
+    check: async () => ({ ok: true, codes: [code] }),
   });
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
@@ -263,7 +264,7 @@ test("returning to a hidden tab starts a check while the old one is pending", as
   const { browser, events, timers, results } = pickerBrowser({
     handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { left: 20, top: 100, bottom: 130 } }),
     now: () => 10_000,
-    sendMessage: () => new Promise(resolve => requests.push(resolve)),
+    check: () => new Promise(resolve => requests.push(resolve)),
   });
   assert.equal(requests.length, 1);
   browser.document.hidden = true;
@@ -292,7 +293,7 @@ test("changed verification instructions reset codes on the same field and URL", 
   const { timers, results } = pickerBrowser({
     handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
-    sendMessage: async () => ({ ok: true, codes: responses }),
+    check: async () => ({ ok: true, codes: responses }),
     onObserve: callback => { observer = callback; },
     onMount: () => { mounts++; },
   });
@@ -335,7 +336,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   const { events, timers, results, elements } = pickerBrowser({
     handleField: () => ({ ok: visible, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
-    sendMessage: async () => ({ ok: true, codes: responses, warnings }),
+    check: async () => ({ ok: true, codes: responses, warnings }),
     onObserve: callback => { observer = callback; },
   });
   const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
@@ -421,7 +422,7 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
     onRemove: () => { mounted = undefined; },
     onObserve: callback => { observer = callback; },
     onFrame: fn => { frames.push(fn); return frames.length; },
-    sendMessage: () => new Promise(() => {}),
+    check: () => new Promise(() => {}),
   });
   assert.equal(discoveries, 1);
   for (let i = 0; i < 20; i++) events.get("scroll")();

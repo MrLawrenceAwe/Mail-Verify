@@ -45,7 +45,7 @@ Extraction happens locally without AI or visiting links in advance. The picker r
 - Supports ordinary input fields and common split-digit forms on HTTPS pages when the fields have a verification-related label or attribute. A generic “code” label also requires email/sign-in verification text in its form or nearby preceding instructions; coupon and promo fields are excluded. Unlabelled fields, embedded cross-origin forms, and unusual custom widgets may not work.
 - Sender and subject are provided for your review. The prototype does not authenticate a sender or automatically establish which website owns a code. It never selects a code for you.
 - Yahoo may restrict app-password generation for some accounts. If Yahoo does not offer one, this connection method cannot be completed for that account.
-- Tested with synthetic email and form cases plus the installed native bridge. A live Yahoo login and a real Chrome extension fill still need account setup and manual validation.
+- Tested with synthetic email and form cases, a live check through the installed native bridge, and an inline inbox check on an HTTPS demo form. An end-to-end fill with a newly received code still needs validation.
 
 ## Privacy and permissions
 
@@ -83,7 +83,7 @@ The installer test installs into a temporary directory, launches that copy to ve
 
 ## Code organisation
 
-- `extension/content-entry.js` loads `inline-picker.js` for automatic field detection and picker lifecycle; `inline-picker-view.js` renders the on-page picker. `background.js` brokers active-tab native checks.
+- `extension/content-entry.js` loads `inline-picker.js` for automatic field detection and picker lifecycle; `inline-picker-view.js` renders the on-page picker. `inline-client.js` holds a request port open while `background.js` checks the active tab through the native companion.
 - `extension/popup-entry.js` starts the popup; `popup-controller.js` manages account actions and polling, while `popup-view.js` renders its controls and code cards.
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
 - `extension/code-fields.js` exports the self-contained field detector and filler injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page. `code-timing.js` shares timing limits between the popup and inline picker.

@@ -1,6 +1,7 @@
 import { handleCodeField } from "./code-fields.js";
 import { createInlinePickerView } from "./inline-picker-view.js";
 import { MAX_CODE_AGE_MS, POLL_WINDOW_MS } from "./code-timing.js";
+import { requestInlineCheck } from "./inline-client.js";
 
 export function suggestionPosition(rect, width, height, viewportWidth, viewportHeight) {
   const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
@@ -162,7 +163,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
-      const response = await chrome.runtime.sendMessage({ type: "mail-verify-inline-codes" });
+      const response = await requestInlineCheck(chrome.runtime, "codes");
       if (lastURL !== location.href) {
         syncPicker();
         return;
