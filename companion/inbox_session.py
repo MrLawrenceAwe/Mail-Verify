@@ -68,13 +68,16 @@ class InboxSession:
             )
             if status != "OK":
                 raise UserError("Yahoo could not inspect recent messages.")
-            uids = [
+            uids = {
                 int(match.group(1))
                 for entry in metadata
                 if isinstance(entry, bytes)
                 if (match := re.search(rb"\bUID (\d+)\b", entry))
-            ]
-            self.last_seen_uid = max(uids, default=0)
+            }
+            # A successful FETCH can still omit a message. Repeat the bounded
+            # first scan on the next poll before advancing past its UID.
+            if len(uids) == self.message_count - first + 1:
+                self.last_seen_uid = max(uids)
             return metadata
 
         status, data = self.conn.uid(
@@ -183,6 +186,9 @@ class InboxSession:
         try:
             if self.conn is None:
                 self.conn = connect_imap(self.credentials)
+            if self.last_seen_uid is None:
+                # Refresh the count on retries: a message may have been deleted
+                # between SELECT and the previous sequence-number FETCH.
                 status, count = self.conn.select("INBOX", readonly=True)
                 if status != "OK":
                     raise UserError("Yahoo could not open your inbox.")
