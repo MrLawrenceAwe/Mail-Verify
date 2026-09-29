@@ -175,6 +175,26 @@ test("a failed inbox check removes previously offered codes", async () => {
   assert.match(elements["#status"].textContent, /Connect Yahoo Mail first/);
 });
 
+test("retry during an active check ignores its response and checks again immediately", async () => {
+  let resolveFirst;
+  let checks = 0;
+  const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
+  const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 10_000 };
+  const { results, elements } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => 10_000,
+    check: () => ++checks === 1
+      ? new Promise(resolve => { resolveFirst = resolve; })
+      : Promise.resolve({ ok: true, codes: [newCode] }),
+  });
+  elements["#retry"].onclick();
+  assert.equal(checks, 1);
+  resolveFirst({ ok: true, codes: [oldCode] });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(checks, 2);
+  assert.equal(results.children[0].strong.textContent, "Fill code 222222");
+});
+
 test("old codes are withheld while waiting for this verification attempt", () => {
   const older = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 1000 };
   const newest = { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
@@ -268,7 +288,6 @@ test("resend before the first check returns does not revive an unseen old code",
   events.get("click")({ target: { closest: () => ({ textContent: "Send another verification code" }) } });
   requests.shift()({ ok: true, codes: [oldCode] });
   await flush();
-  timers.pop()();
   assert.equal(requests.length, 1);
   requests.shift()({ ok: true, codes: [oldCode] });
   await flush();

@@ -66,6 +66,8 @@ class LinkExtractionTests(unittest.TestCase):
             '<a href="http://example.com">Verify email</a>',
             '<a href="https://user@example.com">Verify email</a>',
             '<a href="https://example.com:444">Verify email</a>',
+            '<a href="https://%zz/verify">Verify email</a>',
+            '<a href="https://example.com%2F.evil.com/verify">Verify email</a>',
             '<a href="https://example.com">Reset password</a>',
             '<a href="https://example.com">Visit website</a>',
         ]:

@@ -84,7 +84,7 @@ export function isCodeRequestControl(control) {
 export function startInlinePicker({ browser = globalThis, handleField = handleCodeField } = {}) {
   const { document, window, location, chrome, MutationObserver, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
-  let view, pollTimer, pollDeadline = 0, activeCheck;
+  let view, pollTimer, pollDeadline = 0, activeCheck, retryAfterCheck = false;
   let dismissed = false, filledStep = false, attemptGeneration = 0, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
@@ -97,6 +97,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   function unmountPicker({ preserveStep = false } = {}) {
     attemptGeneration++;
     activeCheck = undefined;
+    retryAfterCheck = false;
     clearTimeout(pollTimer);
     view?.host.remove();
     view = undefined;
@@ -114,6 +115,11 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   }
   function restartPolling() {
     pollDeadline = clock.now() + POLL_WINDOW_MS;
+    if (activeCheck) {
+      attemptGeneration++;
+      retryAfterCheck = true;
+      return;
+    }
     checkForCodes();
   }
   function positionPicker(field = detectCodeField()) {
@@ -190,6 +196,11 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     } finally {
       if (activeCheck !== check) return;
       activeCheck = undefined;
+      if (retryAfterCheck) {
+        retryAfterCheck = false;
+        if (view && !document.hidden) checkForCodes();
+        return;
+      }
       if (view) positionPicker();
       if (view && clock.now() < pollDeadline) {
         pollTimer = setTimeout(checkForCodes, requestGeneration === attemptGeneration ? 2000 : 0);
