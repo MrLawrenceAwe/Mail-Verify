@@ -83,7 +83,7 @@ The installer test installs into a temporary directory, launches that copy to ve
 
 ## Code organisation
 
-- `extension/content-entry.js` loads `inline-picker.js` and `confirmation-card.js` for on-page checks. Their matching view modules render the UI. `inline-client.js` holds a request port open while `background.js` checks the active tab through the native companion.
+- `extension/content-entry.js` starts the on-page code picker and confirmation card. `page-coordinator.js` shares field detection and page-change observation; `polling-lifecycle.js` shares their timer and stale-response state. Their matching view modules render the UI. `inline-client.js` holds a request port open while `background.js` checks the active tab through the native companion.
 - `extension/popup-entry.js` starts the popup; `popup-controller.js` manages account actions and polling, while `popup-view.js` renders its controls and results.
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
 - `extension/code-fields.js` exports the self-contained field detector and filler injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page. `mail-timing.js`, `step-text.js`, and `confirmation-url.js` share rules across the on-page and popup flows.

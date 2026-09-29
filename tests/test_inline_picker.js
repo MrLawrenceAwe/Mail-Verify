@@ -2,10 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { suggestionPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl, startInlinePicker } from "../extension/inline-picker.js";
 import { inlineRuntime } from "./mock_inline_port.js";
+import { createFakeTimers } from "./fake_timers.js";
 
 function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
   onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn() }) {
-  const events = new Map(), timers = [];
+  const events = new Map(), timers = createFakeTimers();
   const results = {
     dataset: {}, children: [],
     get childElementCount() { return this.children.length; },
@@ -41,8 +42,8 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
     },
     MutationObserver: class { constructor(callback) { onObserve(callback); } observe() {} },
     requestAnimationFrame: onFrame,
-    setTimeout: fn => { timers.push(fn); return timers.length; },
-    clearTimeout: () => {},
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout,
     chrome: { runtime: inlineRuntime(check) },
   };
   startInlinePicker({ browser, handleField });
@@ -263,7 +264,6 @@ test("resend input clears the old suggestion and waits for newer mail", async ()
     closest: selector => selector.includes("input[type=submit]") ? resend : null,
   } });
   assert.equal(results.childElementCount, 0);
-  timers.pop()();
   await flush();
   assert.equal(results.childElementCount, 0);
   now = 11_000;

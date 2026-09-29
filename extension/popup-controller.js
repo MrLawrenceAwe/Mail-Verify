@@ -25,7 +25,7 @@ export function createPopupController({
   let pollTimer, pollDeadline = 0, checkGeneration = 0;
   const {
     setStatus, setRemoveAndCheckDisabled, setResultButtonsDisabled,
-    markCodeFilled, renderAccounts, clearResults, renderCodes, renderLinks,
+    markCodeFilled, markLinkOpened, renderAccounts, clearResults, renderCodes, renderLinks,
     showAccountSetup, showCompanionSetup, setExtensionId, setMode, setDestination,
     setAddAccountDisabled, readCredentialsAndClearPassword, clearAccountEmail,
   } = createPopupView(document, {
@@ -104,7 +104,7 @@ export function createPopupController({
       if (!isSupportedConfirmationUrl(item.url))
         throw new Error("This confirmation link is not supported.");
       await chrome.tabs.create({ url: item.url });
-      button.textContent = "Opened";
+      markLinkOpened(button);
       setStatus("Confirmation link opened in a new tab.");
     });
   }

@@ -1,9 +1,10 @@
 import { createConfirmationView } from "./confirmation-card-view.js";
 import { isSupportedConfirmationUrl } from "./confirmation-url.js";
 import { normalizeStepText } from "./step-text.js";
-import { handleCodeField } from "./code-fields.js";
-import { MAX_MESSAGE_AGE_MS, POLL_WINDOW_MS } from "./mail-timing.js";
+import { MAX_MESSAGE_AGE_MS } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
+import { getPageCoordinator } from "./page-coordinator.js";
+import { createPollingLifecycle } from "./polling-lifecycle.js";
 
 const confirmationPanelIds = new WeakMap();
 let nextConfirmationPanelId = 1;
@@ -49,45 +50,46 @@ export function isConfirmationRequestControl(control) {
 }
 
 export function startConfirmationCard({ browser = globalThis, getStepKey = getConfirmationStepKey,
-  detectCode = () => handleCodeField({ action: "detect" }).ok, createView = createConfirmationView } = {}) {
-  const { document, window, location, chrome, MutationObserver, setTimeout, clearTimeout, Date: clock = Date } = browser;
-  let view, pollTimer, scanTimer, generation = 0, activeAttempt, inFlight = false, retryAfterFlight = false;
-  let lastURL = location.href, dismissed = false, minReceivedAtMs, pollDeadline = 0, screenActive = false, stepKey;
+  page = getPageCoordinator(browser), detectCode = () => page.detectCodeField().ok, createView = createConfirmationView } = {}) {
+  const { document, location, chrome, setTimeout, clearTimeout, Date: clock = Date } = browser;
+  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 8000 });
+  let view, scanTimer, activeAttempt, inFlight = false, retryAfterFlight = false;
+  let lastURL = location.href, dismissed = false, minReceivedAtMs, screenActive = false, stepKey;
   let currentItems = [];
   function unmount() {
-    generation++;
+    polling.invalidate();
     inFlight = false;
     activeAttempt = undefined;
     retryAfterFlight = false;
-    clearTimeout(pollTimer);
+    polling.clear();
     view?.host.remove();
     view = undefined;
   }
   function dismiss() { dismissed = true; unmount(); }
   function restart() {
-    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    polling.restart();
     if (inFlight) {
       // Ignore the current response and run one new check as soon as it ends.
-      generation++;
+      polling.invalidate();
       retryAfterFlight = true;
       return;
     }
     check();
   }
   async function check() {
-    clearTimeout(pollTimer);
+    polling.clear();
     if (!view || document.hidden || inFlight) return;
     if (lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey) { sync(); return; }
-    if (clock.now() >= pollDeadline) {
+    if (polling.expired()) {
       view.setStatus("Checking finished. Click ↻ to check again.");
       return;
     }
-    const attempt = generation;
+    const attempt = polling.generation;
     inFlight = true;
     activeAttempt = attempt;
     try {
       const response = await requestInlineCheck(chrome.runtime, "links");
-      if (attempt !== generation || !view || document.hidden) return;
+      if (!polling.isCurrent(attempt) || !view || document.hidden) return;
       if (lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey) { sync(); return; }
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
       currentItems = selectConfirmationLinks(response.links || [], minReceivedAtMs, clock.now());
@@ -95,7 +97,7 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
       view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
         currentItems.length ? "Choose the email for this signup." : "Waiting for your confirmation email…");
     } catch (error) {
-      if (attempt === generation && view) {
+      if (polling.isCurrent(attempt) && view) {
         currentItems = [];
         view.renderLinks(currentItems);
         view.setStatus(error.message);
@@ -106,10 +108,10 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
         inFlight = false;
         activeAttempt = undefined;
         check();
-      } else if (activeAttempt === attempt && attempt === generation) {
+      } else if (activeAttempt === attempt && polling.isCurrent(attempt)) {
         inFlight = false;
         activeAttempt = undefined;
-        if (view && !document.hidden) pollTimer = setTimeout(check, 8000);
+        if (view && !document.hidden) polling.schedule(check);
       }
     }
   }
@@ -129,7 +131,7 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
       screenActive = false;
       stepKey = undefined;
       minReceivedAtMs = undefined;
-      pollDeadline = 0;
+      polling.reset();
       return;
     }
     if (screenActive && nextStepKey !== stepKey) {
@@ -140,14 +142,14 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
       // have one-second precision, so start with the next second to exclude
       // links delivered just before this step appeared.
       minReceivedAtMs = Math.max(minReceivedAtMs ?? -Infinity, Math.floor(clock.now() / 1000) * 1000 + 1000);
-      pollDeadline = 0;
+      polling.reset();
     }
     if (dismissed) return;
     if (!screenActive) {
       screenActive = true;
       stepKey = nextStepKey;
       minReceivedAtMs ??= clock.now() - 5000;
-      pollDeadline = clock.now() + POLL_WINDOW_MS;
+      polling.restart();
     }
     if (view) return;
     currentItems = [];
@@ -173,11 +175,9 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
     if (scanTimer) return;
     scanTimer = setTimeout(() => { scanTimer = undefined; sync(); }, 250);
   }
-  new MutationObserver((records) => {
+  page.onMutation((records) => {
     if (records.some((record) => record.target !== view?.host && !view?.host.contains(record.target))) scheduleScan();
-  }).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true,
-    attributeFilter: ["hidden", "class", "style"] });
-  document.addEventListener("visibilitychange", scheduleScan);
+  });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismiss(); });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button], input[type=submit]");
@@ -185,11 +185,9 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
     minReceivedAtMs = Math.floor(clock.now() / 1000) * 1000 + 1000;
     dismissed = false;
     unmount();
-    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    polling.restart();
     sync();
   }, true);
-  window.addEventListener("popstate", scheduleScan);
-  window.addEventListener("hashchange", scheduleScan);
-  window.navigation?.addEventListener("currententrychange", scheduleScan);
+  page.onPageChange(scheduleScan);
   sync();
 }

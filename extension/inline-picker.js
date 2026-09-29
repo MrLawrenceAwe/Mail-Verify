@@ -1,8 +1,10 @@
 import { normalizeStepText } from "./step-text.js";
 import { handleCodeField } from "./code-fields.js";
 import { createInlinePickerView } from "./inline-picker-view.js";
-import { MAX_MESSAGE_AGE_MS, POLL_WINDOW_MS } from "./mail-timing.js";
+import { MAX_MESSAGE_AGE_MS } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
+import { getPageCoordinator } from "./page-coordinator.js";
+import { createPollingLifecycle } from "./polling-lifecycle.js";
 
 export function suggestionPosition(rect, width, height, viewportWidth, viewportHeight) {
   const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
@@ -78,24 +80,20 @@ export function isCodeRequestControl(control) {
     (/\b(?:code|otp|passcode)\b/i.test(label) || /^re-?send(?: again)?$/i.test(label));
 }
 
-export function startInlinePicker({ browser = globalThis, handleField = handleCodeField } = {}) {
-  const { document, window, location, chrome, MutationObserver, requestAnimationFrame,
+export function startInlinePicker({ browser = globalThis, handleField = handleCodeField, page = getPageCoordinator(browser, handleField) } = {}) {
+  const { document, window, location, chrome, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
-  let view, pollTimer, pollDeadline = 0, activeCheck, retryAfterCheck = false;
-  let dismissed = false, filledStep = false, attemptGeneration = 0, lastURL = location.href;
+  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 2000 });
+  let view, activeCheck, retryAfterCheck = false;
+  let dismissed = false, filledStep = false, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
-  let candidateCache;
-  const detectCodeField = () => {
-    const field = handleField({ action: "detect", candidateCache });
-    candidateCache = field.candidateCache;
-    return field;
-  };
+  const detectCodeField = (options) => page.detectCodeField(options);
   function unmountPicker({ preserveStep = false } = {}) {
-    attemptGeneration++;
+    polling.invalidate();
     activeCheck = undefined;
     retryAfterCheck = false;
-    clearTimeout(pollTimer);
+    polling.clear();
     view?.host.remove();
     view = undefined;
     if (!preserveStep) {
@@ -111,9 +109,9 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     for (const key of seenMessageKeys) excludedMessageKeys.add(key);
   }
   function restartPolling() {
-    pollDeadline = clock.now() + POLL_WINDOW_MS;
+    polling.restart();
     if (activeCheck) {
-      attemptGeneration++;
+      polling.invalidate();
       retryAfterCheck = true;
       return;
     }
@@ -156,14 +154,14 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     positionPicker(field);
   }
   async function checkForCodes() {
-    clearTimeout(pollTimer);
+    polling.clear();
     if (lastURL !== location.href) {
       syncPicker();
       return;
     }
     if (activeCheck || !view || document.hidden || !detectCodeField().ok) return;
     const check = activeCheck = {};
-    const requestGeneration = attemptGeneration;
+    const requestGeneration = polling.generation;
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
@@ -172,7 +170,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
         syncPicker();
         return;
       }
-      if (requestGeneration !== attemptGeneration || !view) return;
+      if (!polling.isCurrent(requestGeneration) || !view) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
       checkFailed = !!response.warnings?.length;
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
@@ -186,7 +184,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       view.setStatus(status);
     } catch (error) {
       checkFailed = true;
-      if (requestGeneration === attemptGeneration && view) {
+      if (polling.isCurrent(requestGeneration) && view) {
         view.clearCodes();
         view.setStatus(error.message);
       }
@@ -199,8 +197,8 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
         return;
       }
       if (view) positionPicker();
-      if (view && clock.now() < pollDeadline) {
-        pollTimer = setTimeout(checkForCodes, requestGeneration === attemptGeneration ? 2000 : 0);
+      if (view && !polling.expired()) {
+        polling.schedule(checkForCodes, polling.isCurrent(requestGeneration) ? 2000 : 0);
       } else if (view && !view.hasCodes() && !checkFailed) {
         view.setStatus("No code found. Click ↻ to check again.");
       }
@@ -216,7 +214,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     if (newPage) {
       dismissed = false;
       seenMessageKeys = new Set();
-      candidateCache = undefined;
+      page.invalidateCandidates();
     }
   }
   function anchorIsOffscreen(field) {
@@ -238,8 +236,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       return;
     }
     if (dismissed) return;
-    if (refreshCandidates) candidateCache = undefined;
-    const field = detectCodeField();
+    const field = detectCodeField({ refresh: refreshCandidates });
     if (!field.ok) {
       if (anchorIsOffscreen(field)) {
         if (view) unmountPicker({ preserveStep: true });
@@ -270,11 +267,8 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       syncPicker({ refreshCandidates: false });
     });
   };
-  new MutationObserver((records) => {
-    if (mutationAffectsPicker(records, view?.host, candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent)) scheduleScan();
-  }).observe(document.documentElement, {
-    childList: true, subtree: true, characterData: true, characterDataOldValue: true, attributes: true,
-    attributeFilter: ["type", "name", "id", "placeholder", "autocomplete", "aria-label", "hidden", "style", "class", "disabled", "readonly", "maxlength", "for"],
+  page.onMutation((records) => {
+    if (mutationAffectsPicker(records, view?.host, page.candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent)) scheduleScan();
   });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button], input[type=button], input[type=submit]");
@@ -286,7 +280,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     excludeSeenMessages();
     dismissed = false;
     filledStep = false;
-    attemptGeneration++;
+    polling.invalidate();
     view?.clearCodes();
     if (view) {
       view.setStatus("Waiting for your new code…");
@@ -296,7 +290,6 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     }
   }, true);
   document.addEventListener("focusin", scheduleScan);
-  document.addEventListener("visibilitychange", scheduleScan);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && view) {
       dismissPicker();
@@ -304,8 +297,6 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   });
   window.addEventListener("scroll", schedulePosition, true);
   window.addEventListener("resize", schedulePosition);
-  window.addEventListener("popstate", scheduleScan);
-  window.addEventListener("hashchange", scheduleScan);
-  window.navigation?.addEventListener("currententrychange", syncPicker);
+  page.onPageChange(() => lastURL !== location.href ? syncPicker() : scheduleScan());
   syncPicker();
 }
