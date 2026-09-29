@@ -17,6 +17,22 @@ import install
 
 class InstallerTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "darwin", "macOS companion")
+    def test_unsupported_python_does_not_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "Application Support" / "Yahoo Code Fill"
+            manifest_path = root / "NativeMessagingHosts" / "local.yahoo_code_fill.json"
+            with patch.object(install, "INSTALL_DIR", destination), patch.object(
+                install, "HOST_MANIFEST_PATH", manifest_path
+            ), patch.object(sys, "argv", ["install.py"]), patch.object(
+                sys, "version_info", (3, 8, 20)
+            ):
+                with self.assertRaisesRegex(SystemExit, "Python 3.9 or newer"):
+                    install.main()
+            self.assertFalse(destination.exists())
+            self.assertFalse(manifest_path.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS companion")
     def test_install_launch_and_uninstall(self):
         with tempfile.TemporaryDirectory(prefix="yahoo companion ") as temporary:
             root = Path(temporary)
