@@ -154,11 +154,26 @@ test("a new confirmation step on the same URL clears links from the previous ste
   assert.deepEqual(oldView.links, [item]);
   f.state.now = 20_000;
   f.state.screenKey = "second signup";
-  f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 20_000 }] });
   f.state.mutate([{ target: {} }]); await f.run(250);
   assert.equal(oldView.removed, true);
   assert.equal(oldView.callbacks.canOpen(item), false);
+  assert.deepEqual(f.state.views.at(-1).links, []);
+  f.state.now = 21_000;
+  f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
+  await f.run(8000);
   assert.deepEqual(f.state.views.at(-1).links.map(link => link.uid), [2]);
+});
+
+test("a confirmation step change excludes a link received moments before it", async () => {
+  const f = setup(); await settle();
+  const oldView = f.state.views[0];
+  assert.deepEqual(oldView.links, [item]);
+  f.state.now = 11_000;
+  f.state.screenKey = "second signup";
+  f.state.mutate([{ target: {} }]); await f.run(250);
+  assert.equal(oldView.removed, true);
+  assert.deepEqual(f.state.views.at(-1).links, []);
+  assert.equal(f.state.views.at(-1).callbacks.canOpen(item), false);
 });
 
 test("a reused confirmation panel resets links when its signup changes", async () => {
@@ -168,10 +183,13 @@ test("a reused confirmation panel resets links when its signup changes", async (
   assert.deepEqual(oldView.links, [item]);
   f.state.now = 20_000;
   panel.innerText = "Check your email for bob@example.test";
-  f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 20_000 }] });
   f.state.mutate([{ target: {} }]); await f.run(250);
   assert.equal(oldView.removed, true);
   assert.equal(oldView.callbacks.canOpen(item), false);
+  assert.deepEqual(f.state.views.at(-1).links, []);
+  f.state.now = 21_000;
+  f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
+  await f.run(8000);
   assert.deepEqual(f.state.views.at(-1).links.map(link => link.uid), [2]);
 });
 

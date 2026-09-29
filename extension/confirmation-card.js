@@ -193,9 +193,10 @@ export function startConfirmationCard({ browser = globalThis, detect = detectCon
       unmount();
       dismissed = false;
       screenActive = false;
-      // A resend may update the panel text. Keep its stricter cutoff so an
-      // earlier message cannot become eligible again on the replacement view.
-      since = Math.max(since ?? -Infinity, clock.now() - 5000);
+      // A changed panel can represent a different signup. IMAP arrival times
+      // have one-second precision, so start with the next second to exclude
+      // links delivered just before this step appeared.
+      since = Math.max(since ?? -Infinity, Math.floor(clock.now() / 1000) * 1000 + 1000);
       deadline = 0;
     }
     if (dismissed) return;
