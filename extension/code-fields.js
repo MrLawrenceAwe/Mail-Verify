@@ -25,8 +25,6 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     ) ? "visible" : "offscreen";
   };
   const isUsableInput = (el) => inputVisibility(el) === "visible";
-  const getVisibleInputs = () =>
-    [...document.querySelectorAll("input")].filter(isUsableInput);
 
   const getInputHints = (el) => [
     el.autocomplete,
@@ -73,6 +71,33 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   // maxlength is ignored by number inputs, including one-digit OTP widgets.
   const isDigitInput = (el) => hasSupportedType(el) &&
     (el.maxLength === 1 || el.type === "number");
+  const focused = document.activeElement;
+  // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
+  // Filling always rediscovers the page so cached hints cannot authorize a fill.
+  const candidates = detectOnly && candidateCache ? candidateCache : {
+    inputs: [...document.querySelectorAll("input")].filter(
+      (el) => hasSupportedType(el) && hasCodeHint(el),
+    ),
+    contextRoots: [...contextRoots],
+  };
+  const visibleCodeInputs = candidates.inputs.filter(isUsableInput);
+  if (!detectOnly && expectedAnchor && !visibleCodeInputs.includes(expectedAnchor))
+    return { ok: false, error: "The verification-code field changed. Select it and try again." };
+  const focusedCodeInput = visibleCodeInputs.includes(focused) ? focused : null;
+  // Focus alone does not identify a code field; it may be a search or account input.
+  // An inline suggestion is bound to the field beside which it was mounted.
+  const targetInput =
+    (!detectOnly && expectedAnchor) || focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
+  if (detectOnly) {
+    const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every(isDigitInput) ? visibleCodeInputs[0] : null);
+    if (!anchor) return { ok: false, candidateCache: candidates,
+      trackedAnchorOffscreen: !!trackedAnchor && candidates.inputs.includes(trackedAnchor) &&
+        inputVisibility(trackedAnchor) === "offscreen" };
+    const { top, bottom, left, right } = anchor.getBoundingClientRect();
+    return { ok: true, anchor, rect: { top, bottom, left, right }, candidateCache: candidates };
+  }
+  const getVisibleInputs = () =>
+    [...document.querySelectorAll("input")].filter(isUsableInput);
   const getDigitInputs = (inputs = getVisibleInputs()) =>
     inputs.filter(isDigitInput);
   const isInside = (el, ancestor) => {
@@ -105,31 +130,6 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     }
     return groups.length === 1 ? groups[0] : null;
   };
-  const focused = document.activeElement;
-  // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
-  // Filling always rediscovers the page so cached hints cannot authorize a fill.
-  const candidates = detectOnly && candidateCache ? candidateCache : {
-    inputs: [...document.querySelectorAll("input")].filter(
-      (el) => hasSupportedType(el) && hasCodeHint(el),
-    ),
-    contextRoots: [...contextRoots],
-  };
-  const visibleCodeInputs = candidates.inputs.filter(isUsableInput);
-  if (!detectOnly && expectedAnchor && !visibleCodeInputs.includes(expectedAnchor))
-    return { ok: false, error: "The verification-code field changed. Select it and try again." };
-  const focusedCodeInput = visibleCodeInputs.includes(focused) ? focused : null;
-  // Focus alone does not identify a code field; it may be a search or account input.
-  // An inline suggestion is bound to the field beside which it was mounted.
-  const targetInput =
-    (!detectOnly && expectedAnchor) || focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
-  if (detectOnly) {
-    const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every(isDigitInput) ? visibleCodeInputs[0] : null);
-    if (!anchor) return { ok: false, candidateCache: candidates,
-      trackedAnchorOffscreen: !!trackedAnchor && candidates.inputs.includes(trackedAnchor) &&
-        inputVisibility(trackedAnchor) === "offscreen" };
-    const { top, bottom, left, right } = anchor.getBoundingClientRect();
-    return { ok: true, anchor, rect: { top, bottom, left, right }, candidateCache: candidates };
-  }
   const inputs = getVisibleInputs();
   const digitInputs = getDigitInputs(inputs);
   let fields;

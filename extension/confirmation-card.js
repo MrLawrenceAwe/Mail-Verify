@@ -1,7 +1,7 @@
 import { createConfirmationView } from "./confirmation-card-view.js";
 import { isSupportedConfirmationUrl } from "./confirmation-url.js";
 import { normalizeStepText } from "./step-text.js";
-import { isFreshMessage } from "./mail-timing.js";
+import { initialStepCutoff, isFreshMessage, resendCutoff } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createPollingLifecycle, createRetryGate } from "./polling-lifecycle.js";
@@ -154,14 +154,14 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
       // A changed panel can represent a different signup. IMAP arrival times
       // have one-second precision, so start with the next second to exclude
       // links delivered just before this step appeared.
-      minReceivedAtMs = Math.max(minReceivedAtMs ?? -Infinity, Math.floor(clock.now() / 1000) * 1000 + 1000);
+      minReceivedAtMs = Math.max(minReceivedAtMs ?? -Infinity, resendCutoff(clock.now()));
       polling.reset();
     }
     if (dismissed) return;
     if (!screenActive) {
       screenActive = true;
       stepKey = nextStepKey;
-      minReceivedAtMs ??= clock.now() - 5000;
+      minReceivedAtMs ??= initialStepCutoff(clock.now());
       polling.restart();
     }
     if (view) return;
@@ -195,7 +195,7 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button], input[type=submit]");
     if (!screenActive || !isConfirmationRequestControl(control)) return;
-    minReceivedAtMs = Math.floor(clock.now() / 1000) * 1000 + 1000;
+    minReceivedAtMs = resendCutoff(clock.now());
     dismissed = false;
     unmount();
     polling.restart();

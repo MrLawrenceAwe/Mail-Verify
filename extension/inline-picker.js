@@ -1,7 +1,7 @@
 import { normalizeStepText } from "./step-text.js";
 import { handleCodeField } from "./code-fields.js";
 import { createInlinePickerView } from "./inline-picker-view.js";
-import { isFreshMessage } from "./mail-timing.js";
+import { initialStepCutoff, isFreshMessage, resendCutoff } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createPollingLifecycle, createRetryGate } from "./polling-lifecycle.js";
@@ -125,7 +125,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   }
   function mountPicker(field, context = verificationStepContext(field.anchor)) {
     const mountedAnchor = field.anchor;
-    minReceivedAtMs ??= clock.now() - 5_000;
+    minReceivedAtMs ??= initialStepCutoff(clock.now());
     anchor = field.anchor;
     stepContext = context;
     view = createInlinePickerView(document, {
@@ -207,7 +207,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     unmountPicker();
     filledStep = false;
     minReceivedAtMs = preserveCutoff
-      ? Math.max(minReceivedAtMs ?? -Infinity, clock.now() - 5_000)
+      ? Math.max(minReceivedAtMs ?? -Infinity, initialStepCutoff(clock.now()))
       : undefined;
     if (newPage) {
       dismissed = false;
@@ -265,7 +265,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     // IMAP dates have one-second precision. Codes from the resend's current
     // second cannot be distinguished from an unseen code sent just before it.
     // Start with the next second so a pending check cannot revive the old code.
-    minReceivedAtMs = Math.floor(clock.now() / 1000) * 1000 + 1000;
+    minReceivedAtMs = resendCutoff(clock.now());
     excludeSeenMessages();
     dismissed = false;
     filledStep = false;

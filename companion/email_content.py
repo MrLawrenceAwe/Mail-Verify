@@ -2,8 +2,17 @@
 
 import re
 from html.parser import HTMLParser
+from email.utils import parseaddr
 
 VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+
+def message_headers(message):
+    subject = str(message.get("Subject", ""))
+    return subject, {
+        "sender": parseaddr(str(message.get("From", "")))[1][:200],
+        "subject": subject[:160],
+    }
 
 
 def iter_text_parts(message):
