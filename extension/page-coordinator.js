@@ -11,9 +11,9 @@ export function getPageCoordinator(browser, handleField = handleCodeField) {
   let candidateCache;
   const coordinator = {
     get candidateCache() { return candidateCache; },
-    detectCodeField({ refresh = false } = {}) {
+    detectCodeField({ refresh = false, trackedAnchor } = {}) {
       if (refresh) candidateCache = undefined;
-      const field = handleField({ action: "detect", candidateCache });
+      const field = handleField({ action: "detect", candidateCache, trackedAnchor });
       candidateCache = field.candidateCache;
       return field;
     },

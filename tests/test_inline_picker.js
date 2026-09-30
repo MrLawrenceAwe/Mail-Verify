@@ -338,7 +338,8 @@ test("scrolling away and back keeps a code from the same verification step", asy
   };
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
   const { events, results } = pickerBrowser({
-    handleField: () => ({ ok: visible, anchor, candidateCache: { inputs: [anchor], contextRoots: [] }, rect: anchor.getBoundingClientRect() }),
+    handleField: () => ({ ok: visible, anchor, trackedAnchorOffscreen: !visible,
+      candidateCache: { inputs: [anchor], contextRoots: [] }, rect: anchor.getBoundingClientRect() }),
     now: () => now,
     check: async () => ({ ok: true, codes: [code] }),
   });
@@ -513,7 +514,8 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
     handleField: ({ candidateCache: candidates }) => {
       detections++;
       if (!candidates) discoveries++;
-      return { ok: visible, anchor, candidateCache: cached, rect: { top: 100, bottom: 130, left: 20 } };
+      return { ok: visible, anchor, trackedAnchorOffscreen: !visible && !!candidates,
+        candidateCache: cached, rect: { top: 100, bottom: 130, left: 20 } };
     },
     onMount: node => { mounted = node; },
     onRemove: () => { mounted = undefined; },

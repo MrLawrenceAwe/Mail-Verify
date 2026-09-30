@@ -1,16 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getConfirmationStepKey, isConfirmationRequestControl, isConfirmationScreen, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
+import { getConfirmationStepKey, isConfirmationRequestControl, isConfirmationScreen, mutationAffectsConfirmation, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createFakeTimers } from "./fake_timers.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
+const stepMutation = () => [{ type: "characterData", target: { nodeType: 3, textContent: "Check your email" } }];
 
 function setup(panel = null) {
   const timers = createFakeTimers(), events = {}, windowEvents = {};
-  const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, views: [], respond: async () => ({ ok: true, links: [item] }) };
-  const document = { hidden: false, documentElement: { append() {} }, addEventListener(name, fn) { events[name] = fn; } };
+  const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, stepReads: 0, views: [], respond: async () => ({ ok: true, links: [item] }) };
+  const document = { hidden: false, documentElement: { append() {} }, querySelector: () => ({}), addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
   startConfirmationCard({
     browser: { document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
@@ -18,9 +19,9 @@ function setup(panel = null) {
       Date: { now: () => state.now },
       setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
-    }, getStepKey: () => state.detected
+    }, getStepKey: () => { state.stepReads++; return state.detected
       ? (state.panel ? getConfirmationStepKey({ querySelectorAll: () => [state.panel] }) : state.screenKey)
-      : null, detectCode: () => state.code,
+      : null; }, detectCode: () => state.code,
     createView(_document, callbacks) {
       const view = { callbacks, removed: false, links: [], host: { remove() { view.removed = true; }, contains() { return false; } },
         setStatus(text) { view.status = text; }, renderLinks(items) { view.links = items; } };
@@ -65,6 +66,32 @@ test("recognises controls that request another confirmation message", () => {
   assert.equal(isConfirmationRequestControl(control("Contact support")), false);
 });
 
+test("ignores unrelated page mutations but scans prompt and code-field changes", () => {
+  const document = { querySelector: () => ({}) };
+  const outside = { nodeType: 1, textContent: "Stock price", closest: () => null,
+    matches: () => false, querySelector: () => null };
+  const input = { nodeType: 1, matches: (selector) => selector.includes("input") };
+  const panel = { nodeType: 1, closest: () => ({}), matches: () => false };
+  const mutation = (type, target, addedNodes = []) => ({ type, target, addedNodes, removedNodes: [] });
+  assert.equal(mutationAffectsConfirmation([mutation("attributes", outside)], null, document, true), false);
+  assert.equal(mutationAffectsConfirmation([mutation("childList", outside, [{ nodeType: 3, textContent: "Price changed" }])], null, document, true), false);
+  assert.equal(mutationAffectsConfirmation(stepMutation(), null, document, false), true);
+  assert.equal(mutationAffectsConfirmation([mutation("childList", outside, [input])], null, document, false), true);
+  assert.equal(mutationAffectsConfirmation([mutation("characterData", { nodeType: 3, textContent: "bob@example.com", parentElement: panel })], null, document, true), true);
+});
+
+test("unrelated mutations do not schedule a confirmation scan", async () => {
+  const f = setup(); await settle();
+  const before = f.state.stepReads;
+  f.state.mutate([{ type: "childList", target: { nodeType: 1, closest: () => null },
+    addedNodes: [{ nodeType: 3, textContent: "Stock price changed" }], removedNodes: [] }]);
+  assert.equal([...f.timers.values()].some((timer) => timer.delay === 250), false);
+  assert.equal(f.state.stepReads, before);
+  f.state.mutate(stepMutation());
+  await f.run(250);
+  assert.ok(f.state.stepReads > before);
+});
+
 test("selects fresh HTTPS links and omits older or unsafe candidates", () => {
   assert.deepEqual(selectConfirmationLinks([item, { ...item, receivedAt: 1 }, { ...item, url: "javascript:alert(1)" }, { ...item, receivedAt: 20000 }], 5000, 10000), [item]);
 });
@@ -75,7 +102,7 @@ test("renders matching mail, validates open and remains dismissed", async () => 
   assert.deepEqual(view.links, [item]);
   assert.equal(view.callbacks.beforeOpen(item), true);
   assert.equal(view.removed, true);
-  f.state.mutate([{ target: {} }]); await f.run(250);
+  f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(f.state.views.length, 1);
 });
 
@@ -113,7 +140,7 @@ test("navigation discards a late response and code forms suppress the card", asy
   assert.equal(f.state.views[0].removed, true);
   assert.equal(f.state.views[0].links[0].uid, 1);
   f.state.detected = true; f.state.code = true;
-  f.state.mutate([{ target: {} }]); await f.run(250);
+  f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(f.state.views.length, 1);
 });
 
@@ -133,7 +160,7 @@ test("a text update after resend cannot restore an earlier link", async () => {
   await settle();
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.screenKey = "Confirmation email sent again";
-  f.state.mutate([{ target: {} }]); await f.run(250);
+  f.state.mutate(stepMutation()); await f.run(250);
   assert.deepEqual(f.state.views.at(-1).links, []);
   assert.equal(f.state.views.at(-1).callbacks.beforeOpen(item), false);
 });
@@ -152,7 +179,7 @@ test("a new confirmation step on the same URL clears links from the previous ste
   assert.deepEqual(oldView.links, [item]);
   f.state.now = 20_000;
   f.state.screenKey = "second signup";
-  f.state.mutate([{ target: {} }]); await f.run(250);
+  f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(oldView.removed, true);
   assert.equal(oldView.callbacks.beforeOpen(item), false);
   assert.deepEqual(f.state.views.at(-1).links, []);
@@ -168,7 +195,7 @@ test("a confirmation step change excludes a link received moments before it", as
   assert.deepEqual(oldView.links, [item]);
   f.state.now = 11_000;
   f.state.screenKey = "second signup";
-  f.state.mutate([{ target: {} }]); await f.run(250);
+  f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(oldView.removed, true);
   assert.deepEqual(f.state.views.at(-1).links, []);
   assert.equal(f.state.views.at(-1).callbacks.beforeOpen(item), false);
@@ -181,7 +208,7 @@ test("a reused confirmation panel resets links when its signup changes", async (
   assert.deepEqual(oldView.links, [item]);
   f.state.now = 20_000;
   panel.innerText = "Check your email for bob@example.test";
-  f.state.mutate([{ target: {} }]); await f.run(250);
+  f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(oldView.removed, true);
   assert.equal(oldView.callbacks.beforeOpen(item), false);
   assert.deepEqual(f.state.views.at(-1).links, []);

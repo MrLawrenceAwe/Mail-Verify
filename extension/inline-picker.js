@@ -215,15 +215,6 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       page.invalidateCandidates();
     }
   }
-  function anchorIsOffscreen(field) {
-    if (!anchor || !field.candidateCache?.inputs?.includes(anchor) ||
-        anchor.isConnected === false || anchor.disabled || anchor.readOnly ||
-        anchor.type === "hidden" || !anchor.getClientRects?.().length ||
-        !anchor.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true })) return false;
-    const rect = anchor.getBoundingClientRect();
-    return rect.bottom <= 0 || rect.right <= 0 ||
-      rect.top >= browser.innerHeight || rect.left >= browser.innerWidth;
-  }
   function syncPicker({ refreshCandidates = true } = {}) {
     if (lastURL !== location.href) {
       resetAttempt({ newPage: true });
@@ -234,9 +225,9 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       return;
     }
     if (dismissed) return;
-    const field = detectCodeField({ refresh: refreshCandidates });
+    const field = detectCodeField({ refresh: refreshCandidates, trackedAnchor: anchor });
     if (!field.ok) {
-      if (anchorIsOffscreen(field)) {
+      if (field.trackedAnchorOffscreen) {
         if (view) unmountPicker({ preserveStep: true });
       } else if (anchor) resetAttempt();
       return;

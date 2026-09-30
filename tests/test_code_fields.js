@@ -418,18 +418,21 @@ test("cached detection tracks offscreen candidates without rescanning unrelated 
   const unrelated = new FakeInput({ name: "search" });
   unrelated.getClientRects = () => { throw new Error("Unrelated fields need no layout reads"); };
   const context = vm.createContext({
+    input,
     document: { querySelectorAll: () => { queries++; return [input, unrelated]; }, activeElement: null },
     innerHeight: 800, innerWidth: 1200,
   });
-  vm.runInContext(`var detect = (${handleCodeField.toString()}); var field = detect({ action: "detect" });`, context);
+  vm.runInContext(`var detect = (${handleCodeField.toString()}); var field = detect({ action: "detect", trackedAnchor: input });`, context);
   assert.equal(context.field.ok, false);
+  assert.equal(context.field.trackedAnchorOffscreen, true);
   input.rect = { top: 100, bottom: 130, left: 0, right: 100 };
-  vm.runInContext('field = detect({ action: "detect", candidateCache: field.candidateCache });', context);
+  vm.runInContext('field = detect({ action: "detect", candidateCache: field.candidateCache, trackedAnchor: input });', context);
   assert.equal(context.field.ok, true);
   assert.equal(queries, 1);
   input.isConnected = false;
-  vm.runInContext('field = detect({ action: "detect", candidateCache: field.candidateCache });', context);
+  vm.runInContext('field = detect({ action: "detect", candidateCache: field.candidateCache, trackedAnchor: input });', context);
   assert.equal(context.field.ok, false);
+  assert.equal(context.field.trackedAnchorOffscreen, false);
   input.isConnected = true;
   input.autocomplete = "";
   vm.runInContext('field = detect({ action: "detect" });', context);
