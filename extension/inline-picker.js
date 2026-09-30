@@ -1,10 +1,10 @@
 import { normalizeStepText } from "./step-text.js";
 import { handleCodeField } from "./code-fields.js";
 import { createInlinePickerView } from "./inline-picker-view.js";
-import { MAX_MESSAGE_AGE_MS } from "./mail-timing.js";
+import { isFreshMessage } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
-import { createPollingLifecycle } from "./polling-lifecycle.js";
+import { createPollingLifecycle, createRetryGate } from "./polling-lifecycle.js";
 
 export function suggestionPosition(rect, width, height, viewportWidth, viewportHeight) {
   const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
@@ -18,7 +18,7 @@ export function suggestionPosition(rect, width, height, viewportWidth, viewportH
 export function selectSuggestedCodes(codes, minReceivedAtMs, now = Date.now(), excludedMessageKeys = new Set()) {
   const senders = new Set();
   return codes
-    .filter((item) => !excludedMessageKeys.has(messageKey(item)) && item.receivedAt >= minReceivedAtMs && item.receivedAt <= now && now - item.receivedAt <= MAX_MESSAGE_AGE_MS)
+    .filter((item) => !excludedMessageKeys.has(messageKey(item)) && isFreshMessage(item.receivedAt, now, minReceivedAtMs))
     .sort((a, b) => b.receivedAt - a.receivedAt)
     .filter((item) => {
       const senderKey = item.sender.trim()
@@ -84,15 +84,15 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   const { document, window, location, chrome, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 2000 });
-  let view, activeCheck, retryAfterCheck = false;
+  const checks = createRetryGate();
+  let view;
   let dismissed = false, filledStep = false, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);
   function unmountPicker({ preserveStep = false } = {}) {
     polling.invalidate();
-    activeCheck = undefined;
-    retryAfterCheck = false;
+    checks.invalidate();
     polling.clear();
     view?.host.remove();
     view = undefined;
@@ -110,9 +110,8 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
   }
   function restartPolling() {
     polling.restart();
-    if (activeCheck) {
+    if (checks.requestRetry()) {
       polling.invalidate();
-      retryAfterCheck = true;
       return;
     }
     checkForCodes();
@@ -133,7 +132,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       onClose: dismissPicker,
       onRetry: restartPolling,
       onFill: (item, button) => {
-        if (clock.now() - item.receivedAt > MAX_MESSAGE_AGE_MS) {
+        if (!isFreshMessage(item.receivedAt, clock.now(), minReceivedAtMs)) {
           view.setStatus("This code is too old to suggest. Request a new one.");
           view.disableCodeButton(button);
           positionPicker();
@@ -159,8 +158,8 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
       syncPicker();
       return;
     }
-    if (activeCheck || !view || document.hidden || !detectCodeField().ok) return;
-    const check = activeCheck = {};
+    if (checks.busy || !view || document.hidden || !detectCodeField().ok) return;
+    const check = checks.start();
     const requestGeneration = polling.generation;
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
@@ -189,10 +188,9 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
         view.setStatus(error.message);
       }
     } finally {
-      if (activeCheck !== check) return;
-      activeCheck = undefined;
-      if (retryAfterCheck) {
-        retryAfterCheck = false;
+      const retry = checks.finish(check);
+      if (retry === null) return;
+      if (retry) {
         if (view && !document.hidden) checkForCodes();
         return;
       }

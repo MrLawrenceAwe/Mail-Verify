@@ -356,6 +356,15 @@ test("finds links only on request and opens only the selected link", async () =>
   assert.equal(scheduled.size, 0);
 });
 
+test("rejects codes with future or invalid arrival times before filling", async () => {
+  for (const receivedAt of [1001, NaN, Infinity]) {
+    const { controls, state } = await setup({ codes: [{ ...code, receivedAt }] });
+    await controls.results.querySelectorAll("button")[0].trigger();
+    assert.equal(state.scriptArgs, null);
+    assert.match(controls.status.textContent, /too old/);
+  }
+});
+
 test("rejects expired and unsafe links at click time", async () => {
   for (const item of [{ ...link, receivedAt: -700000 }, { ...link, url: "http://example.com/confirm" }]) {
     const { controls, state } = await setup();

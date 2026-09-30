@@ -1,6 +1,6 @@
 import { isSupportedConfirmationUrl } from "./confirmation-url.js";
 import { handleCodeField } from "./code-fields.js";
-import { MAX_MESSAGE_AGE_MS } from "./mail-timing.js";
+import { isFreshMessage } from "./mail-timing.js";
 import { createPopupView } from "./popup-view.js";
 import { createPollingLifecycle } from "./polling-lifecycle.js";
 
@@ -76,7 +76,7 @@ export function createPopupController({
   }
   async function fillSelectedCode(item, button) {
     await useSelectedResult(async () => {
-      if (clock.now() - item.receivedAt > MAX_MESSAGE_AGE_MS)
+      if (!isFreshMessage(item.receivedAt, clock.now()))
         throw new Error("This code is too old. Request a new code.");
       const current = await chrome.tabs.get(targetTab.id);
       const [active] = await chrome.tabs.query({
@@ -100,7 +100,7 @@ export function createPopupController({
   }
   async function openSelectedLink(item, button) {
     await useSelectedResult(async () => {
-      if (!Number.isFinite(item.receivedAt) || clock.now() - item.receivedAt > MAX_MESSAGE_AGE_MS || item.receivedAt > clock.now())
+      if (!isFreshMessage(item.receivedAt, clock.now()))
         throw new Error("This link is too old. Request a new confirmation email.");
       if (!isSupportedConfirmationUrl(item.url))
         throw new Error("This confirmation link is not supported.");
