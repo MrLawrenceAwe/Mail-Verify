@@ -16,6 +16,15 @@ import install
 
 
 class InstallerTests(unittest.TestCase):
+    def test_runtime_module_discovery_includes_new_modules(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            companion = Path(temporary) / "companion"
+            companion.mkdir()
+            for name in ("host.py", "new_runtime.py", "install.py"):
+                (companion / name).write_text("")
+            with patch.object(install, "PROJECT_ROOT", Path(temporary)):
+                self.assertEqual(install.companion_files(), ("host.py", "new_runtime.py"))
+
     @unittest.skipUnless(sys.platform == "darwin", "macOS companion")
     def test_unsupported_python_does_not_install(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -75,6 +84,6 @@ class InstallerTests(unittest.TestCase):
                     install.main()
                 self.assertFalse(manifest_path.exists())
                 self.assertFalse((destination / "launch-host").exists())
-                for filename in install.COMPANION_FILES:
+                for filename in install.companion_files():
                     self.assertFalse((destination / filename).exists())
                 self.assertEqual(unrelated.read_text(), "Keep this file.")

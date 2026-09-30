@@ -17,3 +17,28 @@ export function createPollingLifecycle({ clock, setTimeout, clearTimeout, interv
     },
   };
 }
+
+export function createRetryGate() {
+  let active, retry = false;
+  return {
+    get busy() { return !!active; },
+    start() {
+      if (active) return null;
+      active = {};
+      return active;
+    },
+    requestRetry() {
+      if (!active) return false;
+      retry = true;
+      return true;
+    },
+    invalidate() { active = undefined; retry = false; },
+    finish(token) {
+      if (active !== token) return null;
+      active = undefined;
+      const requested = retry;
+      retry = false;
+      return requested;
+    },
+  };
+}

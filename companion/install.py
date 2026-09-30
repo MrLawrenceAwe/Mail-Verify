@@ -16,17 +16,26 @@ HOST_MANIFEST_PATH = (
     / "Library/Application Support/Google/Chrome/NativeMessagingHosts/local.yahoo_code_fill.json"
 )
 
-COMPANION_FILES = ("host.py", "account_sessions.py", "inbox_session.py", "code_extraction.py", "link_extraction.py", "email_content.py", "keychain.py", "errors.py")
 OBSOLETE_COMPANION_FILES = ("mail_session.py",)
+
+
+def companion_files():
+    return tuple(
+        sorted(
+            path.name for path in (PROJECT_ROOT / "companion").glob("*.py")
+            if path.name != "install.py"
+        )
+    )
 
 
 def main():
     if sys.platform != "darwin":
         raise SystemExit("This companion installer is for macOS.")
+    files = companion_files()
     if "--uninstall" in sys.argv:
         HOST_MANIFEST_PATH.unlink(missing_ok=True)
         # Only remove files owned by this installer. Use Remove account in the popup first.
-        for name in (*COMPANION_FILES, *OBSOLETE_COMPANION_FILES, "launch-host", "accounts.lock"):
+        for name in (*files, *OBSOLETE_COMPANION_FILES, "launch-host", "accounts.lock"):
             (INSTALL_DIR / name).unlink(missing_ok=True)
         print(
             "Companion removed. Remove the extension in Chrome. To remove credentials, delete local.yahoo_code_fill in Keychain Access."
@@ -38,7 +47,7 @@ def main():
     digest = hashlib.sha256(base64.b64decode(manifest["key"])).hexdigest()[:32]
     extension_id = "".join(chr(ord("a") + int(c, 16)) for c in digest)
     INSTALL_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-    for name in COMPANION_FILES:
+    for name in files:
         shutil.copy2(PROJECT_ROOT / "companion" / name, INSTALL_DIR / name)
     for name in OBSOLETE_COMPANION_FILES:
         (INSTALL_DIR / name).unlink(missing_ok=True)

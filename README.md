@@ -90,7 +90,7 @@ The installer test installs into a temporary directory, launches that copy to ve
 - `companion/host.py` handles request dispatch and native-message framing; `account_sessions.py` coordinates connected accounts, while `inbox_session.py` manages IMAP connections and bounded inbox scans.
 - `companion/code_extraction.py` extracts a single unambiguous code; `link_extraction.py` extracts account confirmation links. `email_content.py` shares MIME traversal and visible HTML parsing; both extractors use the bounded inbox scanner.
 - `companion/keychain.py` stores credentials; `errors.py` defines user-facing errors.
-- `companion/install.py` installs and removes the companion files listed in `COMPANION_FILES`. Update that list when adding runtime modules. Tests are grouped by the production module they cover.
+- `companion/install.py` installs and removes the companion's Python runtime modules. Tests are grouped by the production module they cover.
 
 After changing companion code, rerun **Install Companion.command**; after changing extension code, reload the extension in Chrome. The existing installation directory, native-host identifier, Keychain service/account identifiers, and extension identity remain stable across the Mail Verify rename so updates retain saved credentials and Chrome registration. Yahoo references in these internal installation identifiers do not define the product name.
 

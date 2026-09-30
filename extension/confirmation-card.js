@@ -1,10 +1,10 @@
 import { createConfirmationView } from "./confirmation-card-view.js";
 import { isSupportedConfirmationUrl } from "./confirmation-url.js";
 import { normalizeStepText } from "./step-text.js";
-import { MAX_MESSAGE_AGE_MS } from "./mail-timing.js";
+import { isFreshMessage } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
-import { createPollingLifecycle } from "./polling-lifecycle.js";
+import { createPollingLifecycle, createRetryGate } from "./polling-lifecycle.js";
 
 const confirmationPanelIds = new WeakMap();
 let nextConfirmationPanelId = 1;
@@ -34,7 +34,7 @@ export function getConfirmationStepKey(document) {
 
 export function selectConfirmationLinks(items, minReceivedAtMs, now) {
   return items.filter((item) => {
-    if (!Number.isFinite(item.receivedAt) || item.receivedAt < minReceivedAtMs || item.receivedAt > now || now - item.receivedAt > MAX_MESSAGE_AGE_MS) return false;
+    if (!isFreshMessage(item.receivedAt, now, minReceivedAtMs)) return false;
     return isSupportedConfirmationUrl(item.url);
   }).sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 5);
 }
@@ -53,14 +53,13 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
   page = getPageCoordinator(browser), detectCode = () => page.detectCodeField().ok, createView = createConfirmationView } = {}) {
   const { document, location, chrome, setTimeout, clearTimeout, Date: clock = Date } = browser;
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 8000 });
-  let view, scanTimer, activeAttempt, inFlight = false, retryAfterFlight = false;
+  const checks = createRetryGate();
+  let view, scanTimer;
   let lastURL = location.href, dismissed = false, minReceivedAtMs, screenActive = false, stepKey;
   let currentItems = [];
   function unmount() {
     polling.invalidate();
-    inFlight = false;
-    activeAttempt = undefined;
-    retryAfterFlight = false;
+    checks.invalidate();
     polling.clear();
     view?.host.remove();
     view = undefined;
@@ -68,25 +67,23 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
   function dismiss() { dismissed = true; unmount(); }
   function restart() {
     polling.restart();
-    if (inFlight) {
+    if (checks.requestRetry()) {
       // Ignore the current response and run one new check as soon as it ends.
       polling.invalidate();
-      retryAfterFlight = true;
       return;
     }
     check();
   }
   async function check() {
     polling.clear();
-    if (!view || document.hidden || inFlight) return;
+    if (!view || document.hidden || checks.busy) return;
     if (lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey) { sync(); return; }
     if (polling.expired()) {
       view.setStatus("Checking finished. Click ↻ to check again.");
       return;
     }
     const attempt = polling.generation;
-    inFlight = true;
-    activeAttempt = attempt;
+    const checkToken = checks.start();
     try {
       const response = await requestInlineCheck(chrome.runtime, "links");
       if (!polling.isCurrent(attempt) || !view || document.hidden) return;
@@ -103,16 +100,10 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
         view.setStatus(error.message);
       }
     } finally {
-      if (activeAttempt === attempt && retryAfterFlight && view && !document.hidden) {
-        retryAfterFlight = false;
-        inFlight = false;
-        activeAttempt = undefined;
-        check();
-      } else if (activeAttempt === attempt && polling.isCurrent(attempt)) {
-        inFlight = false;
-        activeAttempt = undefined;
-        if (view && !document.hidden) polling.schedule(check);
-      }
+      const retry = checks.finish(checkToken);
+      if (retry === null) return;
+      if (retry && view && !document.hidden) check();
+      else if (polling.isCurrent(attempt) && view && !document.hidden) polling.schedule(check);
     }
   }
   function sync() {
