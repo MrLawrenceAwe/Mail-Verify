@@ -1,11 +1,10 @@
 """Extract an unambiguous account confirmation link without visiting it."""
 import email
 from email import policy
-from email.utils import parseaddr
 import re
 from urllib.parse import urlsplit
 
-from email_content import VisibleEmailHTMLParser, iter_text_parts
+from email_content import VisibleEmailHTMLParser, iter_text_parts, message_headers
 
 CONFIRMATION_LABEL_PATTERN = re.compile(r"\b(?:verify|confirm|activate)\s+(?:(?:your|my|the|this|new)\s+)?(?:e-?mail(?:\s+address)?|account|registration)\b", re.I)
 EXCLUDED_LABEL_PATTERN = re.compile(r"\b(?:unsubscribe|password|reset|delete|cancel|payment|purchase)\b", re.I)
@@ -55,7 +54,7 @@ class EmailLinkParser(VisibleEmailHTMLParser):
 
 def extract_link_details(raw):
     msg = email.message_from_bytes(raw, policy=policy.default)
-    subject = str(msg.get("Subject", ""))
+    subject, headers = message_headers(msg)
     if EXCLUDED_SUBJECT_PATTERN.search(subject):
         return None
     # HTML and plain text are alternative renderings of one message. Prefer
@@ -89,5 +88,4 @@ def extract_link_details(raw):
     candidates = html_candidates if html_candidates else plain_candidates
     if len(candidates) != 1:
         return None
-    return {"url": candidates.pop(), "sender": parseaddr(str(msg.get("From", "")))[1][:200],
-            "subject": subject[:160]}
+    return {"url": candidates.pop(), **headers}
