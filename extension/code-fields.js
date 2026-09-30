@@ -1,11 +1,11 @@
-export function handleCodeField({ action, code, candidateCache, expectedAnchor } = {}) {
+export function handleCodeField({ action, code, candidateCache, expectedAnchor, trackedAnchor } = {}) {
   if (action !== "detect" && action !== "fill")
     return { ok: false, error: "Unsupported code field action." };
   const detectOnly = action === "detect";
   if (!detectOnly && typeof code !== "string")
     return { ok: false, error: "Missing verification code." };
   // Detection is read-only; filling happens only after the user selects a code.
-  const isUsableInput = (el) => {
+  const inputVisibility = (el) => {
     if (
       el.isConnected === false ||
       el.disabled ||
@@ -13,17 +13,18 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor }
       el.type === "hidden" ||
       !el.getClientRects().length
     )
-      return false;
+      return "unavailable";
     if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
-      return false;
+      return "unavailable";
     const rect = el.getBoundingClientRect();
     return (
       rect.bottom > 0 &&
       rect.right > 0 &&
       rect.top < innerHeight &&
       rect.left < innerWidth
-    );
+    ) ? "visible" : "offscreen";
   };
+  const isUsableInput = (el) => inputVisibility(el) === "visible";
   const getVisibleInputs = () =>
     [...document.querySelectorAll("input")].filter(isUsableInput);
 
@@ -123,7 +124,9 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor }
     (!detectOnly && expectedAnchor) || focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
   if (detectOnly) {
     const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every(isDigitInput) ? visibleCodeInputs[0] : null);
-    if (!anchor) return { ok: false, candidateCache: candidates };
+    if (!anchor) return { ok: false, candidateCache: candidates,
+      trackedAnchorOffscreen: !!trackedAnchor && candidates.inputs.includes(trackedAnchor) &&
+        inputVisibility(trackedAnchor) === "offscreen" };
     const { top, bottom, left, right } = anchor.getBoundingClientRect();
     return { ok: true, anchor, rect: { top, bottom, left, right }, candidateCache: candidates };
   }

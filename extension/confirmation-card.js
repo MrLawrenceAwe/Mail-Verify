@@ -49,6 +49,28 @@ export function isConfirmationRequestControl(control) {
     /\b(?:e-?mail|link)\b/i.test(label);
 }
 
+export function mutationAffectsConfirmation(records, host, document, screenActive) {
+  const panels = "main, [role=main], form, [role=dialog]";
+  const relevantElements = `${panels}, input`;
+  const relevantText = (value) => /check|inbox|e-?mail|confirm|verif|activat|\blink\b/i.test(value || "");
+  return records.some((record) => {
+    const target = record.target;
+    if (target === host || host?.contains(target)) return false;
+    const element = target.nodeType === 1 ? target : target.parentElement;
+    const inActivePanel = screenActive &&
+      (element?.closest?.(panels) || !document.querySelector?.(panels));
+    if (record.type === "attributes")
+      return !!(target.matches?.(relevantElements) || target.querySelector?.(relevantElements));
+    if (record.type === "characterData")
+      return !!inActivePanel || relevantText(target.textContent) || relevantText(record.oldValue);
+    if (record.type === "childList")
+      return !!inActivePanel || [...record.addedNodes, ...record.removedNodes].some((node) =>
+        relevantText(node.textContent) || (node.nodeType === 1 &&
+          (node.matches?.(relevantElements) || node.querySelector?.(relevantElements))));
+    return false;
+  });
+}
+
 export function startConfirmationCard({ browser = globalThis, getStepKey = getConfirmationStepKey,
   page = getPageCoordinator(browser), detectCode = () => page.detectCodeField().ok, createView = createConfirmationView } = {}) {
   const { document, location, chrome, setTimeout, clearTimeout, Date: clock = Date } = browser;
@@ -167,7 +189,7 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
     scanTimer = setTimeout(() => { scanTimer = undefined; sync(); }, 250);
   }
   page.onMutation((records) => {
-    if (records.some((record) => record.target !== view?.host && !view?.host.contains(record.target))) scheduleScan();
+    if (mutationAffectsConfirmation(records, view?.host, document, screenActive)) scheduleScan();
   });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismiss(); });
   document.addEventListener("click", (event) => {
