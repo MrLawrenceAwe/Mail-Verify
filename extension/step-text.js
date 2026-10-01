@@ -1,3 +1,11 @@
+export const REQUEST_CONTROL_SELECTOR = "button, a, [role=button], input[type=button], input[type=submit]";
+
+export function getRequestControlLabel(control) {
+  return (control?.getAttribute?.("aria-label") ||
+    (control?.tagName === "INPUT" ? control.value : control?.textContent) || "")
+    .replace(/\s+/g, " ").trim();
+}
+
 export function normalizeStepText(text) {
   return text
     // A resend button becoming available does not start a new mail attempt.

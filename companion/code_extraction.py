@@ -50,10 +50,10 @@ class EmailHTMLTextParser(VisibleEmailHTMLParser):
         self.parts.append(data)
 
 
-def extract_code_details(raw):
-    msg = email.message_from_bytes(raw, policy=policy.default)
+def extract_code_details(raw_message):
+    message = email.message_from_bytes(raw_message, policy=policy.default)
     texts = []
-    for content_type, value in iter_text_parts(msg):
+    for content_type, value in iter_text_parts(message):
         if content_type == "text/html":
             parser = EmailHTMLTextParser()
             parser.feed(value)
@@ -62,7 +62,7 @@ def extract_code_details(raw):
                 EmailHTMLTextParser.INLINE_BREAK, " "
             )
         texts.append(value)
-    subject, headers = message_headers(msg)
+    subject, headers = message_headers(message)
     codes = set()
     # Keep subject and body separate: a subject such as "Sign in" must not
     # turn an unrelated order number in the body into a verification code.

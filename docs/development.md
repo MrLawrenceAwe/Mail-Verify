@@ -16,7 +16,7 @@ The installer test installs into a temporary directory, launches that copy to ve
 
 To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/code-picker-preview.html`. The fixture does not access Yahoo.
 
-Validation has included synthetic email and form tests, a live check through the installed native bridge, and an inline inbox check on an HTTPS demo form. An end-to-end fill with a newly received code still needs validation.
+The suites use synthetic mail and fake Chrome/IMAP connections. Previous manual checks covered the installed native bridge and inline inbox access; filling a newly received code still needs end-to-end validation. For a complete manual check, request a new email on an HTTPS page and select its result to fill a code, open a confirmation link, or copy a reset link.
 
 ## Extension modules
 
@@ -31,10 +31,10 @@ Validation has included synthetic email and form tests, a live check through the
 | `inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight scans per mail type. |
 | `companion-client.js` | Handle one-off native requests and reusable native-messaging sessions. |
 | `polling-lifecycle.js` | Manage polling deadlines, stale-response generations, and retries. |
-| `mail-timing.js`, `step-text.js`, `email-link-url.js` | Share freshness, countdown-normalisation, and link-URL rules. |
+| `mail-timing.js`, `step-text.js`, `email-link-url.js` | Share freshness, step-text and request-control parsing, and link-URL rules. |
 | `code-fields.js` | Detect and fill verification inputs; helpers stay inside the injected function because Chrome serializes it. |
 
-The mail modes and native request/result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. There are no aliases for older request names; update the companion and reload the extension together.
+Mail modes and native request/result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Update the companion and extension together when changing this contract.
 
 Scroll and resize updates reuse cached field candidates and position the picker on the next animation frame. Relevant DOM changes refresh discovery. Filling always rediscovers fields and verifies the target rather than trusting cached hints.
 
@@ -57,7 +57,7 @@ A scan returns results from the newest five eligible messages immediately when i
 
 ## Installation identity and updates
 
-After companion changes, rerun **Install Companion.command**. After extension changes, click **Reload** on Chrome’s Extensions page and refresh affected web pages. The installer records the Python executable’s path; reinstall after restoring Python if it moves or is removed.
+Follow the [installation and update instructions](../README.md#setup), then refresh affected web pages.
 
 Expected extension ID: `ggmcbkkmgcdiimnpkekakaegmclkgkjj`.
 

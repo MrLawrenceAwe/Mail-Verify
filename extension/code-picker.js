@@ -1,4 +1,4 @@
-import { normalizeStepText } from "./step-text.js";
+import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "./step-text.js";
 import { handleCodeField } from "./code-fields.js";
 import { createCodePickerView } from "./code-picker-view.js";
 import { initialStepCutoff, isFreshMessage, resendCutoff } from "./mail-timing.js";
@@ -72,9 +72,7 @@ export function mutationAffectsPicker(records, host, contextRoots = [], stepRoot
 }
 
 export function isCodeRequestControl(control) {
-  const label = (control.getAttribute?.("aria-label") ||
-    (control.tagName === "INPUT" ? control.value : control.textContent) || "")
-    .trim().replace(/\s+/g, " ");
+  const label = getRequestControlLabel(control);
   if (/\b(?:coupon|promo|discount|referral)\b/i.test(label)) return false;
   return /^(?:re-?send|send|request|get|email)\b/i.test(label) &&
     (/\b(?:code|otp|passcode)\b/i.test(label) || /^re-?send(?: again)?$/i.test(label));
@@ -260,7 +258,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     if (mutationAffectsPicker(records, view?.host, page.candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent)) scheduleScan();
   });
   document.addEventListener("click", (event) => {
-    const control = event.target.closest?.("button, a, [role=button], input[type=button], input[type=submit]");
+    const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
     if (!control || !isCodeRequestControl(control) || !detectCodeField().ok) return;
     // IMAP dates have one-second precision. Codes from the resend's current
     // second cannot be distinguished from an unseen code sent just before it.

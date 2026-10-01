@@ -2,57 +2,60 @@ import { MAIL_MODES } from "./mail-modes.js";
 import { appendEmailLinkDetails } from "./email-link-details.js";
 
 export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink, onSelectMode, onAddAccount }) {
-  const $ = (id) => document.getElementById(id);
+  const getElement = (id) => document.getElementById(id);
+  const checkButtonModes = [
+    ["checkCodes", "codes"],
+    ["checkConfirmationLinks", "confirmationLinks"],
+    ["checkPasswordResetLinks", "passwordResetLinks"],
+  ];
   let renderedResultsKey;
 
   function setStatus(text, error = false) {
-    $("status").textContent = text;
-    $("status").classList.toggle("error", error);
+    getElement("status").textContent = text;
+    getElement("status").classList.toggle("error", error);
   }
 
   function showAccountSetup() {
-    $("accountSetup").hidden = false;
-    $("email").focus();
+    getElement("accountSetup").hidden = false;
+    getElement("email").focus();
   }
 
   function showCompanionSetup() {
-    $("companionSetup").hidden = false;
+    getElement("companionSetup").hidden = false;
   }
 
   function setMode(mode) {
-    $("codeContext").hidden = mode !== "codes";
-    $("linkGuidance").hidden = mode === "codes";
-    $("linkGuidance").textContent = MAIL_MODES[mode].guidance || "";
+    getElement("codeContext").hidden = mode !== "codes";
+    getElement("linkGuidance").hidden = mode === "codes";
+    getElement("linkGuidance").textContent = MAIL_MODES[mode].guidance || "";
   }
 
   function setDestination(text) {
-    $("destination").textContent = text;
+    getElement("destination").textContent = text;
   }
 
   function setAddAccountDisabled(disabled) {
-    $("addAccountSubmit").disabled = disabled;
+    getElement("addAccountSubmit").disabled = disabled;
   }
 
   function readCredentialsAndClearPassword() {
-    const email = $("email").value;
-    const password = $("password").value;
-    $("password").value = "";
+    const email = getElement("email").value;
+    const password = getElement("password").value;
+    getElement("password").value = "";
     return { email, password };
   }
 
   function clearAccountEmail() {
-    $("email").value = "";
+    getElement("email").value = "";
   }
 
   function setRemoveAndCheckDisabled(disabled) {
-    $("checkCodes").disabled = disabled;
-    $("checkConfirmationLinks").disabled = disabled;
-    $("checkPasswordResetLinks").disabled = disabled;
-    for (const button of $("accounts").querySelectorAll("button")) button.disabled = disabled;
+    for (const [id] of checkButtonModes) getElement(id).disabled = disabled;
+    for (const button of getElement("accounts").querySelectorAll("button")) button.disabled = disabled;
   }
 
   function setResultButtonsDisabled(disabled) {
-    for (const button of $("results").querySelectorAll("button")) button.disabled = disabled;
+    for (const button of getElement("results").querySelectorAll("button")) button.disabled = disabled;
   }
 
   function markCodeFilled(button) {
@@ -68,10 +71,10 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
   }
 
   function renderAccounts(accounts) {
-    $("accountSetup").hidden = accounts.length > 0;
-    $("companionSetup").hidden = true;
-    $("connectedAccountPanel").hidden = accounts.length === 0;
-    $("accounts").replaceChildren();
+    getElement("accountSetup").hidden = accounts.length > 0;
+    getElement("companionSetup").hidden = true;
+    getElement("connectedAccountPanel").hidden = accounts.length === 0;
+    getElement("accounts").replaceChildren();
     for (const email of accounts) {
       const row = document.createElement("div");
       row.className = "account";
@@ -83,12 +86,12 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
       remove.setAttribute("aria-label", `Remove ${email}`);
       remove.addEventListener("click", () => onRemoveAccount(email));
       row.append(label, remove);
-      $("accounts").append(row);
+      getElement("accounts").append(row);
     }
   }
 
   function clearResults() {
-    $("results").replaceChildren();
+    getElement("results").replaceChildren();
     renderedResultsKey = undefined;
   }
 
@@ -96,7 +99,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     const key = JSON.stringify(codes);
     if (key === renderedResultsKey) return;
     renderedResultsKey = key;
-    $("results").replaceChildren();
+    getElement("results").replaceChildren();
     for (const item of codes) {
       const card = document.createElement("article");
       card.className = "card";
@@ -118,7 +121,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
       button.disabled = !targetTab;
       button.addEventListener("click", () => onFillCode(item, button));
       card.append(button);
-      $("results").append(card);
+      getElement("results").append(card);
     }
   }
 
@@ -126,7 +129,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     const key = mode + ":" + JSON.stringify(links);
     if (key === renderedResultsKey) return;
     renderedResultsKey = key;
-    $("results").replaceChildren();
+    getElement("results").replaceChildren();
     for (const item of links) {
       const card = document.createElement("article");
       card.className = "card";
@@ -135,20 +138,16 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
       button.textContent = MAIL_MODES[mode].actionLabel;
       button.addEventListener("click", () => onUseLink(item, button));
       card.append(button);
-      $("results").append(card);
+      getElement("results").append(card);
     }
   }
 
-  for (const [id, mode] of [
-    ["checkCodes", "codes"],
-    ["checkConfirmationLinks", "confirmationLinks"],
-    ["checkPasswordResetLinks", "passwordResetLinks"],
-  ]) $(id).addEventListener("click", () => onSelectMode(mode));
-  $("addAccountForm").addEventListener("submit", (event) => {
+  for (const [id, mode] of checkButtonModes) getElement(id).addEventListener("click", () => onSelectMode(mode));
+  getElement("addAccountForm").addEventListener("submit", (event) => {
     event.preventDefault();
     return onAddAccount();
   });
-  $("addAccount").addEventListener("click", showAccountSetup);
+  getElement("addAccount").addEventListener("click", showAccountSetup);
 
   return { setStatus, showAccountSetup, showCompanionSetup,
     setMode, setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,

@@ -5,18 +5,18 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   if (!detectOnly && typeof code !== "string")
     return { ok: false, error: "Missing verification code." };
   // Detection is read-only; filling happens only after the user selects a code.
-  const inputVisibility = (el) => {
+  const inputVisibility = (input) => {
     if (
-      el.isConnected === false ||
-      el.disabled ||
-      el.readOnly ||
-      el.type === "hidden" ||
-      !el.getClientRects().length
+      input.isConnected === false ||
+      input.disabled ||
+      input.readOnly ||
+      input.type === "hidden" ||
+      !input.getClientRects().length
     )
       return "unavailable";
-    if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+    if (!input.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
       return "unavailable";
-    const rect = el.getBoundingClientRect();
+    const rect = input.getBoundingClientRect();
     return (
       rect.bottom > 0 &&
       rect.right > 0 &&
@@ -24,23 +24,23 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
       rect.left < innerWidth
     ) ? "visible" : "offscreen";
   };
-  const isUsableInput = (el) => inputVisibility(el) === "visible";
+  const isUsableInput = (input) => inputVisibility(input) === "visible";
 
-  const getInputHints = (el) => [
-    el.autocomplete,
-    el.name,
-    el.id,
-    el.placeholder,
-    el.getAttribute("aria-label"),
-    ...[...(el.labels || [])].map((label) => label.textContent),
+  const getInputHints = (input) => [
+    input.autocomplete,
+    input.name,
+    input.id,
+    input.placeholder,
+    input.getAttribute("aria-label"),
+    ...[...(input.labels || [])].map((label) => label.textContent),
   ];
   const contextMatches = new Map();
   const contextRoots = new Set();
   // A bare "code" may mean a coupon, referral, or product code.
-  const hasContextualCodeHint = (el, hints) => {
+  const hasContextualCodeHint = (input, hints) => {
     const hintText = hints.filter(Boolean).join(" ");
     if (!/\bcode\b/i.test(hintText) || /coupon|promo|postal|zip|referral|product/i.test(hintText)) return false;
-    const container = el.form || el.parentElement;
+    const container = input.form || input.parentElement;
     const roots = [container];
     // Instructions are often just before the form, but text elsewhere in
     // <main> can describe a different code field on the page.
@@ -58,25 +58,25 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     }
     return false;
   };
-  const hasCodeHint = (el) => {
-    const hints = getInputHints(el);
+  const hasCodeHint = (input) => {
+    const hints = getInputHints(input);
     return hints.some((value) =>
       /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|sign[-_ ]?in[-_ ]?code|login[-_ ]?code)(?:$|[^\w])/i.test(
         value || "",
       ),
-    ) || hasContextualCodeHint(el, hints);
+    ) || hasContextualCodeHint(input, hints);
   };
-  const hasSupportedType = (el) =>
-    ["text", "tel", "number", "password", ""].includes(el.type);
+  const hasSupportedType = (input) =>
+    ["text", "tel", "number", "password", ""].includes(input.type);
   // maxlength is ignored by number inputs, including one-digit OTP widgets.
-  const isPotentialDigitInput = (el) => hasSupportedType(el) &&
-    (el.maxLength === 1 || el.type === "number");
+  const isPotentialDigitInput = (input) => hasSupportedType(input) &&
+    (input.maxLength === 1 || input.type === "number");
   const focused = document.activeElement;
   // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
   // Filling always rediscovers the page so cached hints cannot authorize a fill.
   const candidates = detectOnly && candidateCache ? candidateCache : {
     inputs: [...document.querySelectorAll("input")].filter(
-      (el) => hasSupportedType(el) && hasCodeHint(el),
+      (input) => hasSupportedType(input) && hasCodeHint(input),
     ),
     contextRoots: [...contextRoots],
   };
@@ -98,24 +98,23 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   }
   const getVisibleInputs = () =>
     [...document.querySelectorAll("input")].filter(isUsableInput);
-  const getDigitInputs = (inputs = getVisibleInputs()) =>
-    inputs.filter(isPotentialDigitInput);
-  const isInside = (el, ancestor) => {
-    for (let parent = el.parentElement; parent; parent = parent.parentElement)
+  const getDigitInputs = () => getVisibleInputs().filter(isPotentialDigitInput);
+  const isInside = (input, ancestor) => {
+    for (let parent = input.parentElement; parent; parent = parent.parentElement)
       if (parent === ancestor) return true;
     return false;
   };
-  const isCodeDigit = (el) => hasCodeHint(el) || getInputHints(el).every((hint) =>
+  const isCodeDigit = (input) => hasCodeHint(input) || getInputHints(input).every((hint) =>
     !hint || /^(?:(?:enter )?(?:digit|character|box|cell|otp|pin|code)[\s_-]*\d*|\d)$/i.test(hint.trim()));
   const findDigitGroup = (anchor, digitInputs, length) => {
     for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
-      const group = digitInputs.filter((el) =>
-        el.form === anchor.form && isInside(el, parent));
+      const group = digitInputs.filter((input) =>
+        input.form === anchor.form && isInside(input, parent));
       if (group.length === length && group.some(hasCodeHint) && group.every(isCodeDigit)) return group;
     }
     // A form can own inputs placed outside its DOM subtree via the form attribute.
     if (anchor.form) {
-      const group = digitInputs.filter((el) => el.form === anchor.form);
+      const group = digitInputs.filter((input) => input.form === anchor.form);
       if (group.length === length && group.some(hasCodeHint) && group.every(isCodeDigit)) return group;
     }
     return null;
@@ -125,13 +124,12 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     for (const anchor of digitInputs.filter(hasCodeHint)) {
       const group = findDigitGroup(anchor, digitInputs, length);
       if (group && !groups.some((other) =>
-        other.length === group.length && other.every((el, index) => el === group[index])))
+        other.length === group.length && other.every((input, index) => input === group[index])))
         groups.push(group);
     }
     return groups.length === 1 ? groups[0] : null;
   };
-  const inputs = getVisibleInputs();
-  const digitInputs = getDigitInputs(inputs);
+  const digitInputs = getDigitInputs();
   let fields;
   if (targetInput && isPotentialDigitInput(targetInput)) {
     fields = findDigitGroup(targetInput, digitInputs, code.length);
@@ -141,9 +139,9 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   if (!fields && (
     !targetInput ||
     targetInput.maxLength === 1 ||
-    (targetInput.type === "number" && digitInputs.filter((el) =>
-      el.form === targetInput.form &&
-      (el === targetInput || hasCodeHint(el) || !getInputHints(el).some(Boolean))
+    (targetInput.type === "number" && digitInputs.filter((input) =>
+      input.form === targetInput.form &&
+      (input === targetInput || hasCodeHint(input) || !getInputHints(input).some(Boolean))
     ).length > 1) ||
     (targetInput.maxLength > 0 && targetInput.maxLength < code.length)
   )) {
@@ -178,8 +176,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
             "The code fields changed. Select the code field and try again.",
         };
       }
-      const el = group[index];
-      setInputValue(el, code[index]);
+      setInputValue(group[index], code[index]);
     }
     const currentDigitInputs = getDigitInputs();
     const currentGroup = currentDigitInputs.includes(group[0])

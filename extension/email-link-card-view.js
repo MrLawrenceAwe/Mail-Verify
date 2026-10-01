@@ -2,7 +2,7 @@ import { MAIL_MODES } from "./mail-modes.js";
 import { appendEmailLinkDetails } from "./email-link-details.js";
 
 export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse, copyLink, mode }) {
-  const reset = mode === "passwordResetLinks";
+  const isPasswordReset = mode === "passwordResetLinks";
   const { resultLabel, actionLabel, guidance, copiedLabel, copySuccessStatus } = MAIL_MODES[mode];
   const title = `Mail Verify ${resultLabel}`;
   const host = document.createElement("div");
@@ -22,21 +22,21 @@ export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse,
   root.querySelector("#close").onclick = onClose;
   root.querySelector("#retry").onclick = onRetry;
   const results = root.querySelector("#results");
-  let rendered;
+  let renderedLinksKey;
   return {
     host,
     setStatus(text) { root.querySelector("#status").textContent = text; },
     renderLinks(items) {
       const key = JSON.stringify(items);
-      if (key === rendered) return;
-      rendered = key;
+      if (key === renderedLinksKey) return;
+      renderedLinksKey = key;
       results.replaceChildren();
       for (const item of items) {
         const card = document.createElement("article");
         appendEmailLinkDetails(document, card, item);
-        const link = document.createElement(reset ? "button" : "a");
+        const link = document.createElement(isPasswordReset ? "button" : "a");
         link.textContent = actionLabel;
-        if (reset) {
+        if (isPasswordReset) {
           link.addEventListener("click", async () => {
             if (link.disabled || !beforeUse(item)) return;
             link.disabled = true;

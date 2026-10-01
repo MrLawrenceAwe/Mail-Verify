@@ -63,12 +63,12 @@ RESET_UNRELATED_LABEL_PATTERN = re.compile(
 RESET_EXCLUDED_PATTERN = re.compile(r"\b(?:unsubscribe|delete|cancel|payment|purchase)\b", re.I)
 
 
-def extract_confirmation_link_details(raw):
-    return extract_labelled_link(raw, CONFIRMATION_LABEL_PATTERN.search, EXCLUDED_LABEL_PATTERN, EXCLUDED_SUBJECT_PATTERN)
+def extract_confirmation_link_details(raw_message):
+    return extract_labelled_link(raw_message, CONFIRMATION_LABEL_PATTERN.search, EXCLUDED_LABEL_PATTERN, EXCLUDED_SUBJECT_PATTERN)
 
 
-def extract_password_reset_link_details(raw):
-    return extract_labelled_link(raw, is_password_reset_label, RESET_EXCLUDED_PATTERN, RESET_EXCLUDED_PATTERN)
+def extract_password_reset_link_details(raw_message):
+    return extract_labelled_link(raw_message, is_password_reset_label, RESET_EXCLUDED_PATTERN, RESET_EXCLUDED_PATTERN)
 
 
 def is_password_reset_label(label):
@@ -77,15 +77,15 @@ def is_password_reset_label(label):
     return bool(RESET_LABEL_PATTERN.search(label) or RESET_LINK_LABEL_PATTERN.fullmatch(label.strip()))
 
 
-def extract_labelled_link(raw, label_matches, excluded_label_pattern, excluded_subject_pattern):
-    msg = email.message_from_bytes(raw, policy=policy.default)
-    subject, headers = message_headers(msg)
+def extract_labelled_link(raw_message, label_matches, excluded_label_pattern, excluded_subject_pattern):
+    message = email.message_from_bytes(raw_message, policy=policy.default)
+    subject, headers = message_headers(message)
     if excluded_subject_pattern.search(subject):
         return None
     # HTML and plain text are alternative renderings of one message. Prefer
     # visible HTML links; the text version can use a different tracking URL.
     html_candidates, plain_candidates = set(), set()
-    for content_type, value in iter_text_parts(msg):
+    for content_type, value in iter_text_parts(message):
         if content_type == "text/html":
             parser = EmailLinkParser()
             parser.feed(value)
