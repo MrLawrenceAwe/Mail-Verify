@@ -69,7 +69,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   const hasSupportedType = (el) =>
     ["text", "tel", "number", "password", ""].includes(el.type);
   // maxlength is ignored by number inputs, including one-digit OTP widgets.
-  const isDigitInput = (el) => hasSupportedType(el) &&
+  const isPotentialDigitInput = (el) => hasSupportedType(el) &&
     (el.maxLength === 1 || el.type === "number");
   const focused = document.activeElement;
   // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
@@ -89,7 +89,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   const targetInput =
     (!detectOnly && expectedAnchor) || focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
   if (detectOnly) {
-    const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every(isDigitInput) ? visibleCodeInputs[0] : null);
+    const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every(isPotentialDigitInput) ? visibleCodeInputs[0] : null);
     if (!anchor) return { ok: false, candidateCache: candidates,
       trackedAnchorOffscreen: !!trackedAnchor && candidates.inputs.includes(trackedAnchor) &&
         inputVisibility(trackedAnchor) === "offscreen" };
@@ -99,7 +99,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   const getVisibleInputs = () =>
     [...document.querySelectorAll("input")].filter(isUsableInput);
   const getDigitInputs = (inputs = getVisibleInputs()) =>
-    inputs.filter(isDigitInput);
+    inputs.filter(isPotentialDigitInput);
   const isInside = (el, ancestor) => {
     for (let parent = el.parentElement; parent; parent = parent.parentElement)
       if (parent === ancestor) return true;
@@ -107,7 +107,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   };
   const isCodeDigit = (el) => hasCodeHint(el) || getInputHints(el).every((hint) =>
     !hint || /^(?:(?:enter )?(?:digit|character|box|cell|otp|pin|code)[\s_-]*\d*|\d)$/i.test(hint.trim()));
-  const digitGroup = (anchor, digitInputs, length) => {
+  const findDigitGroup = (anchor, digitInputs, length) => {
     for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
       const group = digitInputs.filter((el) =>
         el.form === anchor.form && isInside(el, parent));
@@ -120,10 +120,10 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     }
     return null;
   };
-  const uniqueDigitGroup = (digitInputs, length) => {
+  const findUniqueDigitGroup = (digitInputs, length) => {
     const groups = [];
     for (const anchor of digitInputs.filter(hasCodeHint)) {
-      const group = digitGroup(anchor, digitInputs, length);
+      const group = findDigitGroup(anchor, digitInputs, length);
       if (group && !groups.some((other) =>
         other.length === group.length && other.every((el, index) => el === group[index])))
         groups.push(group);
@@ -133,10 +133,10 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   const inputs = getVisibleInputs();
   const digitInputs = getDigitInputs(inputs);
   let fields;
-  if (targetInput && isDigitInput(targetInput)) {
-    fields = digitGroup(targetInput, digitInputs, code.length);
+  if (targetInput && isPotentialDigitInput(targetInput)) {
+    fields = findDigitGroup(targetInput, digitInputs, code.length);
   } else if (!targetInput) {
-    fields = uniqueDigitGroup(digitInputs, code.length);
+    fields = findUniqueDigitGroup(digitInputs, code.length);
   }
   if (!fields && (
     !targetInput ||
@@ -169,8 +169,8 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
       // verification group again before writing the next one.
       const currentDigitInputs = getDigitInputs();
       group = currentDigitInputs.includes(group[index])
-        ? digitGroup(group[index], currentDigitInputs, code.length)
-        : uniqueDigitGroup(currentDigitInputs, code.length);
+        ? findDigitGroup(group[index], currentDigitInputs, code.length)
+        : findUniqueDigitGroup(currentDigitInputs, code.length);
       if (!group) {
         return {
           ok: false,
@@ -183,8 +183,8 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     }
     const currentDigitInputs = getDigitInputs();
     const currentGroup = currentDigitInputs.includes(group[0])
-      ? digitGroup(group[0], currentDigitInputs, code.length)
-      : uniqueDigitGroup(currentDigitInputs, code.length);
+      ? findDigitGroup(group[0], currentDigitInputs, code.length)
+      : findUniqueDigitGroup(currentDigitInputs, code.length);
     if (!currentGroup || currentGroup.some((input, index) => input.value !== code[index]))
       return { ok: false, error: "The verification-code fields changed while filling them. Try again." };
     currentGroup[code.length - 1].focus();

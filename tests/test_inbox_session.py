@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 import inbox_session
+from imap_responses import body_response, metadata_response
 
 
 class InboxSessionTests(unittest.TestCase):
@@ -29,15 +30,7 @@ class InboxSessionTests(unittest.TestCase):
             def fetch(self, sequence, _parts):
                 self.sequence_fetches.append(sequence)
                 first, last = map(int, sequence.split(":"))
-                date = inbox_session.imaplib.Time2Internaldate(time.time() - 60).encode()
-                return "OK", [
-                    b"1 (UID "
-                    + str(uid).encode()
-                    + b" INTERNALDATE "
-                    + date
-                    + b" RFC822.SIZE 100)"
-                    for uid in range(first, last + 1)
-                ]
+                return metadata_response(range(first, last + 1))
 
             def uid(self, command, *args):
                 if command == "search":
@@ -49,19 +42,8 @@ class InboxSessionTests(unittest.TestCase):
                 self.fetches.append(args)
                 uids = args[0].split(b",")
                 if "INTERNALDATE" in args[1]:
-                    date = inbox_session.imaplib.Time2Internaldate(time.time() - 60).encode()
-                    return "OK", [
-                        b"1 (UID "
-                        + uid
-                        + b" INTERNALDATE "
-                        + date
-                        + b" RFC822.SIZE 100)"
-                        for uid in uids
-                    ]
-                return "OK", [
-                    (b"1 (UID " + uid + b" BODY[] {80}", self_message(uid))
-                    for uid in uids
-                ]
+                    return metadata_response(uids)
+                return body_response((uid, self_message(uid)) for uid in uids)
 
             def shutdown(self):
                 self.closed = True
@@ -108,15 +90,8 @@ class InboxSessionTests(unittest.TestCase):
             def select(self, *_args, **_kwargs):
                 return "OK", [b"12"]
 
-            def metadata(self, uids):
-                date = inbox_session.imaplib.Time2Internaldate(time.time() - 60).encode()
-                return "OK", [
-                    b"1 (UID " + uid + b" INTERNALDATE " + date + b" RFC822.SIZE 100)"
-                    for uid in uids
-                ]
-
             def fetch(self, *_args):
-                return self.metadata([str(i).encode() for i in range(1, 13)])
+                return metadata_response(range(1, 13))
 
             def uid(self, command, *args):
                 if command == "search":
@@ -124,14 +99,14 @@ class InboxSessionTests(unittest.TestCase):
                     return "OK", [b" ".join(str(i).encode() for i in range(first, self.count + 1))]
                 uids = args[0].split(b",")
                 if "INTERNALDATE" in args[1]:
-                    return self.metadata(uids)
+                    return metadata_response(uids)
                 self.batches.append(uids)
-                return "OK", [
-                    (b"1 (UID " + uid + b" BODY[] {100}",
-                     b"From: auth@example.com\r\n\r\nYour code is " + str(100000 + int(uid)).encode()
+                return body_response(
+                    (uid, b"From: auth@example.com\r\n\r\nYour code is "
+                     + str(100000 + int(uid)).encode()
                      if uid in (b"12", b"13", b"6", b"1") else b"No code here.")
                     for uid in uids
-                ]
+                )
 
             def shutdown(self):
                 pass
@@ -174,15 +149,7 @@ class InboxSessionTests(unittest.TestCase):
 
             def fetch(self, sequence, _parts):
                 self.sequence = sequence
-                date = inbox_session.imaplib.Time2Internaldate(time.time() - 3600).encode()
-                return "OK", [
-                    b"1 (UID "
-                    + str(uid).encode()
-                    + b" INTERNALDATE "
-                    + date
-                    + b" RFC822.SIZE 100)"
-                    for uid in range(9971, 10001)
-                ]
+                return metadata_response(range(9971, 10001), received_at=time.time() - 3600)
 
             def uid(self, *_args):
                 raise AssertionError(
@@ -210,21 +177,16 @@ class InboxSessionTests(unittest.TestCase):
                 return "OK", [b"30"]
 
             def fetch(self, *_args):
-                date = inbox_session.imaplib.Time2Internaldate(time.time() - 60).encode()
-                return "OK", [
-                    b"1 (UID " + str(uid).encode() + b" INTERNALDATE " + date + b" RFC822.SIZE 100)"
-                    for uid in range(1, 31)
-                ]
+                return metadata_response(range(1, 31))
 
             def uid(self, command, *args):
                 self.assert_uid_command(command)
                 uids = args[0].split(b",")
                 self.body_batches.append(uids)
-                return "OK", [
-                    (b"1 (UID " + uid + b" BODY[] {100}",
-                     b"From: auth@example.com\r\nSubject: Account\r\n\r\nNo code here.")
+                return body_response(
+                    (uid, b"From: auth@example.com\r\nSubject: Account\r\n\r\nNo code here.")
                     for uid in uids
-                ]
+                )
 
             def assert_uid_command(self, command):
                 if command != "fetch":
@@ -248,16 +210,13 @@ class InboxSessionTests(unittest.TestCase):
                 return "OK", [b"1"]
 
             def fetch(self, *_args):
-                future = inbox_session.imaplib.Time2Internaldate(time.time() + 60).encode()
-                return "OK", [
-                    b"1 (UID 10 INTERNALDATE " + future + b" RFC822.SIZE 100)"
-                ]
+                return metadata_response([10], received_at=time.time() + 60)
 
             def uid(self, command, *_args):
                 if command == "search":
                     return "OK", [b""]
                 self.body_fetches += 1
-                return "OK", [(b"1 (UID 10 BODY[] {100}", self_message)]
+                return body_response([(10, self_message)])
 
             def shutdown(self):
                 pass
@@ -284,9 +243,7 @@ class InboxSessionTests(unittest.TestCase):
                 self.body_fetches += 1
                 if self.body_fetches == 1:
                     return "OK", [None]
-                return "OK", [
-                    (b"1 (UID 9 BODY[] {80}", self_message)
-                ]
+                return body_response([(9, self_message)])
 
         self_message = self.message("Your verification code is 482913.")
         session = inbox_session.InboxSession({})
@@ -312,17 +269,11 @@ class InboxSessionTests(unittest.TestCase):
                 if "INTERNALDATE" in args[1]:
                     self.metadata_fetches += 1
                     uids = [6] if self.metadata_fetches == 1 else [5]
-                    date = inbox_session.imaplib.Time2Internaldate(now - 30).encode()
-                    return "OK", [
-                        b"1 (UID " + str(uid).encode() + b" INTERNALDATE " + date + b" RFC822.SIZE 100)"
-                        for uid in uids
-                    ]
+                    return metadata_response(uids, received_at=now - 30)
                 uids = args[0].split(b",")
-                return "OK", [
-                    (b"1 (UID " + uid + b" BODY[] {80}",
-                     self_message(str(100000 + int(uid))))
-                    for uid in uids
-                ]
+                return body_response(
+                    (uid, self_message(str(100000 + int(uid)))) for uid in uids
+                )
 
         self_message = lambda code: self.message(f"Your verification code is {code}.")
         session = inbox_session.InboxSession({})
@@ -342,9 +293,7 @@ class InboxSessionTests(unittest.TestCase):
             def uid(self, command, *_args):
                 if command == "search":
                     return "OK", [b""]
-                return "OK", [
-                    (b"1 (UID 1 BODY[] {80}", self_message)
-                ]
+                return body_response([(1, self_message)])
 
         self_message = self.message("Your verification code is 482913.")
         session = inbox_session.InboxSession({})
@@ -367,7 +316,7 @@ class InboxSessionTests(unittest.TestCase):
             def uid(self, command, *_args):
                 if command == "search":
                     return "OK", [b""]
-                return "OK", [(b"1 (UID 5 BODY[] {80}", message)]
+                return body_response([(5, message)])
 
         session = inbox_session.InboxSession({})
         session.conn = FakeConnection()
@@ -387,7 +336,6 @@ class InboxSessionTests(unittest.TestCase):
         self.assertEqual([item["uid"] for item in results], [10, 9, 8, 7, 6, 5])
         self.assertEqual(results[-1]["sender"], "other@example.com")
         self.assertEqual(session.pending_received_at_by_uid, {})
-
 
 
 if __name__ == "__main__":

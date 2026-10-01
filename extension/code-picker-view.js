@@ -1,4 +1,4 @@
-export function createInlinePickerView(document, { onClose, onRetry, onFill }) {
+export function createCodePickerView(document, { onClose, onRetry, onFill }) {
   const host = document.createElement("div");
   host.dataset.mailVerify = "suggestion";
   host.style.cssText = "position:fixed;z-index:2147483647;left:0;top:0";

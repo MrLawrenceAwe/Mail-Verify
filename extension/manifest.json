@@ -32,15 +32,16 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "inline-picker.js",
+        "code-picker.js",
         "page-coordinator.js",
         "email-link-card.js",
         "email-link-card-view.js",
         "email-link-url.js",
+        "reset-link-copy.js",
         "email-link-details.js",
         "mail-modes.js",
         "step-text.js",
-        "inline-picker-view.js",
+        "code-picker-view.js",
         "mail-timing.js",
         "polling-lifecycle.js",
         "inline-client.js",

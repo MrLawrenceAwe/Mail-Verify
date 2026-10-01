@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { suggestionPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl, startInlinePicker } from "../extension/inline-picker.js";
+import { suggestionPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl, startCodePicker } from "../extension/code-picker.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createFakeTimers } from "./fake_timers.js";
 
@@ -46,7 +46,7 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
     clearTimeout: timers.clearTimeout,
     chrome: { runtime: inlineRuntime(check) },
   };
-  startInlinePicker({ browser, handleField });
+  startCodePicker({ browser, handleField });
   return { browser, events, timers, results, elements };
 }
 

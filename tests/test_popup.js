@@ -47,7 +47,7 @@ const code = {
   receivedAt: 1000,
 };
 
-async function setup({ codes = [code], account = "test@yahoo.com", remainingAccountEmails = [], tabUrl = "https://example.com/login" } = {}) {
+async function setup({ codes = [code], account = "test@yahoo.com", remainingAccountEmails = [], tabUrl = "https://example.com/login", clipboardAvailable = true } = {}) {
   const controls = Object.fromEntries(
     [
       "checkCodes",
@@ -64,7 +64,6 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       "addAccountSubmit",
       "password",
       "email",
-      "extensionId",
       "destination",
       "codeContext",
       "linkGuidance",
@@ -105,7 +104,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     },
   };
   const popup = createPopupController({
-    clipboard: { async writeText(value) { if (state.failCopy) throw Error("Clipboard denied"); if (state.copyWait) await state.copyWait; state.copied.push(value); } },
+    clipboard: clipboardAvailable ? { async writeText(value) { if (state.failCopy) throw Error("Clipboard denied"); if (state.copyWait) await state.copyWait; state.copied.push(value); } } : null,
     document: {
       getElementById: (id) => controls[id],
       createElement: (tag) => new FakeElement(tag),
@@ -528,4 +527,19 @@ test("finished link checks name the selected email purpose", async () => {
     await timers.shift()();
     assert.equal(controls.status.textContent, `Automatic checking finished. Check again for newer ${label}.`);
   }
+});
+
+
+test("unavailable popup clipboard gives recovery guidance and keeps links selectable", async () => {
+  const { controls, state } = await setup({ clipboardAvailable: false });
+  state.fetchPasswordResetLinks = async () => [link];
+  controls.checkPasswordResetLinks.trigger();
+  await settle();
+  const button = controls.results.querySelectorAll("button")[0];
+  await button.trigger();
+  assert.deepEqual(state.copied, []);
+  assert.deepEqual(state.opened, []);
+  assert.equal(button.disabled, false);
+  assert.match(controls.status.textContent, /Clipboard unavailable.*Close and reopen this popup/);
+  assert.doesNotMatch(controls.status.textContent, /Try copying again from the popup/);
 });

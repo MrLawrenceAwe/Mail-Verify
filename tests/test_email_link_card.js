@@ -1,10 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectEmailLinkStep, isEmailLinkRequestControl, isConfirmationScreen, isPasswordResetScreen, mutationAffectsEmailLinkCard, selectEmailLinks, startEmailLinkCard } from "../extension/email-link-card.js";
+import { detectEmailLinkStep, isEmailLinkRequestControl, isPasswordResetScreen, mutationAffectsEmailLinkCard, selectEmailLinks, startEmailLinkCard } from "../extension/email-link-card.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createFakeTimers } from "./fake_timers.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
+function detectedMode(text) {
+  const panel = { innerText: text, getClientRects: () => [{}], checkVisibility: () => true };
+  return detectEmailLinkStep({ querySelectorAll: () => [panel] })?.mode;
+}
+
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const stepMutation = () => [{ type: "characterData", target: { nodeType: 3, textContent: "Check your email" } }];
 
@@ -37,9 +42,9 @@ function setup(panel = null, kind = "confirmationLinks") {
 
 test("recognises confirmation prompts but rejects resets, newsletters and long pages", () => {
   for (const text of ["Check your inbox", "We've sent a verification email", "Follow the link in your email to confirm your account"])
-    assert.equal(isConfirmationScreen(text), true, text);
+    assert.equal(detectedMode(text), "confirmationLinks", text);
   for (const text of ["Reset your password. Check your email", "Check your email for our newsletter", "Welcome to our website", "x".repeat(2501) + " Check your email"])
-    assert.equal(isConfirmationScreen(text), false, text);
+    assert.notEqual(detectedMode(text), "confirmationLinks", text);
 });
 
 test("distinguishes replacement confirmation panels with identical text", () => {
@@ -390,7 +395,7 @@ test("reset instructions spanning continuation lines use reset mode", async () =
     "Check your email\nWe sent you a link\nto reset your password",
   ]) {
     assert.equal(isPasswordResetScreen(innerText), true, innerText);
-    assert.equal(isConfirmationScreen(innerText), false, innerText);
+    assert.equal(detectedMode(innerText), "passwordResetLinks", innerText);
     const panel = { innerText, getClientRects: () => [{}], checkVisibility: () => true };
     const f = setup(panel, "passwordResetLinks"); await settle();
     assert.equal(f.state.views[0].callbacks.mode, "passwordResetLinks");
@@ -405,7 +410,7 @@ test("line-separated navigation still cannot select reset mode", () => {
     "Check your email to confirm your account\nForgot password?",
   ]) {
     assert.equal(isPasswordResetScreen(text), false, text);
-    assert.equal(isConfirmationScreen(text), true, text);
+    assert.equal(detectedMode(text), "confirmationLinks", text);
   }
 });
 

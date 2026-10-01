@@ -3,6 +3,7 @@ import { isSupportedEmailLinkUrl } from "./email-link-url.js";
 import { handleCodeField } from "./code-fields.js";
 import { isFreshMessage } from "./mail-timing.js";
 import { createPopupView } from "./popup-view.js";
+import { copyPasswordResetLink } from "./reset-link-copy.js";
 import { createPollingLifecycle } from "./polling-lifecycle.js";
 
 const POLL_INTERVAL_MS = 8_000;
@@ -17,7 +18,6 @@ export function createPopupController({
   clearTimeout = globalThis.clearTimeout,
   clipboard = globalThis.navigator?.clipboard,
 }) {
-  const $ = (id) => document.getElementById(id);
   const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: POLL_INTERVAL_MS });
   let targetTab;
@@ -26,23 +26,20 @@ export function createPopupController({
     usingResult = false,
     removingAccount = false,
     addingAccount = false;
-  const {
-    setStatus, setRemoveAndCheckDisabled, setResultButtonsDisabled,
-    markCodeFilled, markLinkOpened, renderAccounts, clearResults, renderCodes, renderLinks,
-    showAccountSetup, showCompanionSetup, setExtensionId, setMode, setDestination,
-    setAddAccountDisabled, readCredentialsAndClearPassword, clearAccountEmail,
-  } = createPopupView(document, {
-    onRemoveAccount: (email) => removeAccount(email),
-    onFillCode: (item, button) => fillSelectedCode(item, button),
-    onUseLink: (item, button) => useSelectedLink(item, button),
+  const view = createPopupView(document, {
+    onRemoveAccount: removeAccount,
+    onFillCode: fillSelectedCode,
+    onUseLink: useSelectedLink,
+    onSelectMode: selectMode,
+    onAddAccount: addAccount,
   });
   function applyConnectedAccounts(accountEmails) {
     abortCheck();
-    renderAccounts(accountEmails);
-    clearResults();
+    view.renderAccounts(accountEmails);
+    view.clearResults();
     if (!accountEmails.length) {
       polling.reset();
-      setStatus("No email accounts connected.");
+      view.setStatus("No email accounts connected.");
       return;
     }
     startPolling();
@@ -61,18 +58,18 @@ export function createPopupController({
     if (usingResult || removingAccount || addingAccount) return;
     usingResult = true;
     abortCheck();
-    setRemoveAndCheckDisabled(true);
-    setResultButtonsDisabled(true);
+    view.setRemoveAndCheckDisabled(true);
+    view.setResultButtonsDisabled(true);
     try {
       await action();
       polling.reset();
     } catch (error) {
-      setStatus(error.message, true);
-      setResultButtonsDisabled(false);
+      view.setStatus(error.message, true);
+      view.setResultButtonsDisabled(false);
     } finally {
       usingResult = false;
-      if (reusable) setResultButtonsDisabled(false);
-      setRemoveAndCheckDisabled(addingAccount);
+      if (reusable) view.setResultButtonsDisabled(false);
+      view.setRemoveAndCheckDisabled(addingAccount);
       if (polling.deadline) scheduleCheck();
       else closeSession();
     }
@@ -97,8 +94,8 @@ export function createPopupController({
       });
       if (!result?.ok)
         throw new Error(result?.error || "Could not fill this page.");
-      setStatus("Code filled. The website may continue automatically.");
-      markCodeFilled(button);
+      view.setStatus("Code filled. The website may continue automatically.");
+      view.markCodeFilled(button);
     });
   }
   async function useSelectedLink(item, button) {
@@ -108,15 +105,15 @@ export function createPopupController({
       if (!isSupportedEmailLinkUrl(item.url))
         throw new Error("This link is not supported.");
       if (mode === "passwordResetLinks") {
-        if (!clipboard) throw new Error("Clipboard unavailable. Try copying again from the popup.");
-        await clipboard.writeText(item.url);
-        button.textContent = "Copied";
-        setStatus("Password reset link copied to clipboard.");
+        await copyPasswordResetLink(clipboard, item.url,
+          "Clipboard unavailable. Close and reopen this popup, then try again.");
+        view.markLinkCopied(button);
+        view.setStatus(MAIL_MODES.passwordResetLinks.copySuccessStatus);
         return;
       }
       await chrome.tabs.create({ url: item.url });
-      markLinkOpened(button);
-      setStatus("Confirmation link opened in a new tab.");
+      view.markLinkOpened(button);
+      view.setStatus("Confirmation link opened in a new tab.");
     }, { reusable: mode === "passwordResetLinks" });
   }
   function scheduleCheck(delay = POLL_INTERVAL_MS) {
@@ -132,7 +129,7 @@ export function createPopupController({
     polling.clear();
     closeSession();
     if (!usingResult && !removingAccount)
-      setStatus(`Automatic checking finished. Check again for newer ${MAIL_MODES[mode].resultLabel}.`);
+      view.setStatus(`Automatic checking finished. Check again for newer ${MAIL_MODES[mode].resultLabel}.`);
   }
   async function checkInbox() {
     if (usingResult || removingAccount) return;
@@ -146,14 +143,14 @@ export function createPopupController({
     const requestGeneration = polling.generation;
     const startedAt = clock.now();
     let failed = false;
-    setStatus("Checking your connected inboxes…");
+    view.setStatus("Checking your connected inboxes…");
     try {
       const response = await sendSessionRequest(mode);
       const results = response[mode];
       if (!usingResult && polling.isCurrent(requestGeneration)) {
-        if (mode !== "codes") renderLinks(results, mode);
-        else renderCodes(results, targetTab);
-        setStatus(
+        if (mode !== "codes") view.renderLinks(results, mode);
+        else view.renderCodes(results, targetTab);
+        view.setStatus(
           response.warnings?.length
             ? `Some accounts could not be checked: ${response.warnings.join("; ")}`
             : results.length ? MAIL_MODES[mode].foundStatus : MAIL_MODES[mode].emptyStatus,
@@ -162,13 +159,13 @@ export function createPopupController({
     } catch (error) {
       failed = true;
       if (!usingResult && polling.isCurrent(requestGeneration)) {
-        clearResults();
-        setStatus(error.message, true);
+        view.clearResults();
+        view.setStatus(error.message, true);
       }
     } finally {
       if (polling.isCurrent(requestGeneration)) {
         checking = false;
-        setRemoveAndCheckDisabled(usingResult || removingAccount || addingAccount);
+        view.setRemoveAndCheckDisabled(usingResult || removingAccount || addingAccount);
         scheduleCheck(
           failed
             ? POLL_INTERVAL_MS
@@ -183,84 +180,76 @@ export function createPopupController({
   function selectMode(nextMode) {
     if (usingResult || removingAccount || addingAccount) return;
     abortCheck();
-    if (mode !== nextMode) clearResults();
+    if (mode !== nextMode) view.clearResults();
     mode = nextMode;
     // Unchanged results retain their buttons, including the disabled state
     // left by a successful fill. A manual check starts a new selection.
-    setResultButtonsDisabled(mode === "codes" && !targetTab);
-    setMode(mode);
+    view.setResultButtonsDisabled(mode === "codes" && !targetTab);
+    view.setMode(mode);
     startPolling();
   }
-  $("checkCodes").addEventListener("click", () => selectMode("codes"));
-  $("checkConfirmationLinks").addEventListener("click", () => selectMode("confirmationLinks"));
-  $("checkPasswordResetLinks").addEventListener("click", () => selectMode("passwordResetLinks"));
-  $("addAccountForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
+  async function addAccount() {
     if (addingAccount || removingAccount) return;
     addingAccount = true;
-    setAddAccountDisabled(true);
-    setRemoveAndCheckDisabled(true);
-    setStatus("Checking your Yahoo connection…");
-    const { email, password } = readCredentialsAndClearPassword();
+    view.setAddAccountDisabled(true);
+    view.setRemoveAndCheckDisabled(true);
+    view.setStatus("Checking your Yahoo connection…");
+    const { email, password } = view.readCredentialsAndClearPassword();
     try {
       const result = await sendOneOffRequest({
         action: "saveAccount",
         email,
         password,
       });
-      clearAccountEmail();
+      view.clearAccountEmail();
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
-      setStatus(error.message, true);
+      view.setStatus(error.message, true);
     } finally {
       addingAccount = false;
-      setAddAccountDisabled(false);
-      setRemoveAndCheckDisabled(usingResult || removingAccount);
+      view.setAddAccountDisabled(false);
+      view.setRemoveAndCheckDisabled(usingResult || removingAccount);
     }
-  });
-  $("addAccount").addEventListener("click", () => {
-    showAccountSetup();
-  });
+  }
   async function removeAccount(email) {
     if (addingAccount || removingAccount) return;
     polling.reset();
     removingAccount = true;
     abortCheck();
-    setRemoveAndCheckDisabled(true);
+    view.setRemoveAndCheckDisabled(true);
     try {
       const result = await sendOneOffRequest({ action: "removeAccount", email });
       removingAccount = false;
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
-      setStatus(error.message, true);
+      view.setStatus(error.message, true);
       polling.restart();
     } finally {
       removingAccount = false;
-      setRemoveAndCheckDisabled(false);
+      view.setRemoveAndCheckDisabled(false);
       if (polling.deadline && !checking) scheduleCheck();
     }
   }
   async function initialize() {
-    setExtensionId(chrome.runtime.id);
-    setMode(mode);
+    view.setMode(mode);
     const [tab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,
     });
     if (tab?.url?.startsWith("https://")) targetTab = tab;
-    setDestination(targetTab
+    view.setDestination(targetTab
       ? new URL(targetTab.url).hostname
       : "an HTTPS sign-in page");
     try {
       const result = await sendSessionRequest("status");
       if (result.accountEmails?.length) applyConnectedAccounts(result.accountEmails);
       else {
-        showAccountSetup();
-        setStatus("Connect once. No webmail tab needed.");
+        view.showAccountSetup();
+        view.setStatus("Connect once. No webmail tab needed.");
       }
     } catch (error) {
-      setStatus(error.message, true);
-      showCompanionSetup();
+      view.setStatus(error.message, true);
+      view.showCompanionSetup();
     }
   }
 

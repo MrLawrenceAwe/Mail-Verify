@@ -1,7 +1,7 @@
 import { MAIL_MODES } from "./mail-modes.js";
 import { appendEmailLinkDetails } from "./email-link-details.js";
 
-export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink }) {
+export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink, onSelectMode, onAddAccount }) {
   const $ = (id) => document.getElementById(id);
   let renderedResultsKey;
 
@@ -17,10 +17,6 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
 
   function showCompanionSetup() {
     $("companionSetup").hidden = false;
-  }
-
-  function setExtensionId(id) {
-    $("extensionId").value = id;
   }
 
   function setMode(mode) {
@@ -65,6 +61,10 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
 
   function markLinkOpened(button) {
     button.textContent = "Opened";
+  }
+
+  function markLinkCopied(button) {
+    button.textContent = MAIL_MODES.passwordResetLinks.copiedLabel;
   }
 
   function renderAccounts(accounts) {
@@ -139,8 +139,19 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     }
   }
 
-  return { setStatus, showAccountSetup, showCompanionSetup, setExtensionId,
+  for (const [id, mode] of [
+    ["checkCodes", "codes"],
+    ["checkConfirmationLinks", "confirmationLinks"],
+    ["checkPasswordResetLinks", "passwordResetLinks"],
+  ]) $(id).addEventListener("click", () => onSelectMode(mode));
+  $("addAccountForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    return onAddAccount();
+  });
+  $("addAccount").addEventListener("click", showAccountSetup);
+
+  return { setStatus, showAccountSetup, showCompanionSetup,
     setMode, setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
     clearAccountEmail, setRemoveAndCheckDisabled, setResultButtonsDisabled,
-    markCodeFilled, markLinkOpened, renderAccounts, clearResults, renderCodes, renderLinks };
+    markCodeFilled, markLinkOpened, markLinkCopied, renderAccounts, clearResults, renderCodes, renderLinks };
 }
