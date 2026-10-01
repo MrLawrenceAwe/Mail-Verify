@@ -1,6 +1,6 @@
 # Mail Verify
 
-Email verification codes and confirmation links for desktop Chrome on macOS. The project has provider-neutral branding; Yahoo is the only connected email provider currently supported. Other providers will need their own connection support. No webmail browser tab is needed. A code picker appears automatically on supported HTTPS verification forms. Click the matching email code to fill it; the toolbar popup is only needed for account setup or manual checks.
+Email verification codes, confirmation links, and password reset links for desktop Chrome on macOS. The project has provider-neutral branding; Yahoo is the only connected email provider currently supported. Other providers will need their own connection support. No webmail browser tab is needed. A code picker appears automatically on supported HTTPS verification forms. Click the matching email code to fill it; the toolbar popup is only needed for account setup or manual checks.
 
 ## Set up on this Mac
 
@@ -31,11 +31,19 @@ No toolbar popup is required after setup. Hidden tabs stop checking. Scroll and 
 
 ## Confirmation links
 
-On supported HTTPS “Check your email” or “Check your inbox” screens, a small **Mail Verify confirmation links** card appears at the bottom right. It checks every 8 seconds for up to 2 minutes while the tab is active, showing mail received since the step appeared (with a five-second allowance). It stays out of the way when a recognised code field is present. Use × or Escape to dismiss it for that page, or ↻ to check again. Resending clears older results. Common English prompts in short visible panels are supported; password-reset and newsletter screens are excluded.
+On supported HTTPS “Check your email” or “Check your inbox” screens, a small **Mail Verify confirmation links** card appears at the bottom right. It checks every 8 seconds for up to 2 minutes while the tab is active, showing mail received since the step appeared (with a five-second allowance). It stays out of the way when a recognised code field is present. Use × or Escape to dismiss it for that page, or ↻ to check again. Resending clears older results. Common English prompts in short visible panels are supported; newsletter screens are excluded. Password reset waiting screens show a separate reset-link card.
 
 For manual checking or pages that are not detected, open the toolbar popup and click **Find confirmation links**. It checks the latest 30 inbox messages from the last 10 minutes across connected accounts and polls while the popup stays open, for up to 2 minutes. Review the account, sender, subject, and destination domain, then click **Open confirmation link** to open it in a new Chrome tab. Opening a link may immediately confirm the account. **Check for a code** switches back to code checking.
 
 Extraction happens locally without AI or visiting links in advance. The picker recognises explicit English “Verify email”, “Confirm account”, and “Activate account” instructions in visible HTML links or immediately before plain-text URLs. For emails with both formats, it uses the HTML link when one qualifies and otherwise checks the plain-text version. It accepts HTTPS links, excludes password-reset subjects, and omits messages with multiple distinct qualifying links. It does not authenticate senders or automatically match a link to the current site. Tracking URLs show their initial destination; redirects and any further confirmation steps are handled by the website. Unusual wording and older emails may not appear.
+
+## Password reset links
+
+Request a password reset email on the website. On recognised HTTPS reset-email waiting screens, Mail Verify shows recent reset emails with the account, sender, subject, and destination domain. Click **Copy password reset link**, then paste it where you want to use it. The link is copied only when clicked; Mail Verify does not open it automatically. The card checks every 8 seconds for up to 2 minutes and clears older results after a resend, using the same freshness rules as confirmation links.
+
+For manual checking, open the toolbar popup and choose **Find password reset links**, then **Copy password reset link**. A **Copied** confirmation appears after a successful clipboard write. You can copy the same link again or select another account’s link. If the website blocks clipboard access for the card, use the toolbar popup.
+
+Extraction happens locally and requires an explicit English reset instruction such as “Reset your password”, “Change your password”, or “Password reset” on a visible HTML link or immediately before a plain-text URL. Help/support links and negated reset instructions are excluded. It scans recent inbox messages, accepts HTTPS links, prefers qualifying HTML over plain text, ignores attachments and hidden links, and omits messages with multiple distinct qualifying reset links. It does not visit links in advance, authenticate senders, or match them to the current website. Check the sender and destination before copying.
 
 ## Current limits
 
@@ -51,7 +59,7 @@ Extraction happens locally without AI or visiting links in advance. The picker r
 
 Email access goes directly from your Mac to `imap.mail.yahoo.com:993` over TLS. Credentials are stored together as a generic password in macOS Keychain under `local.yahoo_code_fill`. An existing single-account credential is retained when adding another account. Credentials are never stored in extension storage, configuration files, logs, or command-line arguments. The companion uses a read-only inbox and BODY.PEEK retrieval, so checking does not mark messages read.
 
-The extension requests `nativeMessaging`, `activeTab`, and `scripting`, and runs a content script on HTTPS sites to recognise code fields automatically. Chrome does not necessarily show a permission prompt after reloading an unpacked extension. If the on-page picker is absent after refreshing the website, open the extension’s **Details** in `chrome://extensions` and check that **Site access** allows it to run on that site. There are no analytics or AI integrations. The on-page picker runs in an isolated content-script context with a closed shadow root. Codes remain in memory and are written into a website’s input only when you click Fill; that website can then read the code.
+The extension requests `nativeMessaging`, `activeTab`, `scripting`, and `clipboardWrite` (to copy a selected reset link), and runs a content script on HTTPS sites to recognise code fields automatically. Chrome does not necessarily show a permission prompt after reloading an unpacked extension. If the on-page picker is absent after refreshing the website, open the extension’s **Details** in `chrome://extensions` and check that **Site access** allows it to run on that site. There are no analytics or AI integrations. The on-page picker runs in an isolated content-script context with a closed shadow root. Codes remain in memory and are written into a website’s input only when you click Fill; that website can then read the code.
 
 Chrome starts the companion on demand for automatic checks on the active tab. Background checks reuse the Yahoo connection while the picker is polling and close it after 15 seconds without a new check; simultaneous checks share an in-flight scan. Codes found in the newest five eligible messages are returned immediately; older candidates are checked on later polls, with newly arrived mail taking priority. If that first batch contains no code, the check continues through the remaining candidates. Each check verifies that the saved account is still connected. The popup retains its reusable connection while open. No background login item, public server, or open network listener is installed. Native messaging is restricted to this extension ID.
 
@@ -88,7 +96,7 @@ The installer test installs into a temporary directory, launches that copy to ve
 - `extension/companion-client.js` handles one-off requests and the reusable native-messaging session.
 - `extension/code-fields.js` exports the self-contained field detector and filler injected into the selected page. Its helpers stay inside the function because Chrome serializes it into the page. `mail-timing.js`, `step-text.js`, and `confirmation-url.js` share rules across the on-page and popup flows.
 - `companion/host.py` handles request dispatch and native-message framing; `account_sessions.py` coordinates connected accounts, while `inbox_session.py` manages IMAP connections and bounded inbox scans.
-- `companion/code_extraction.py` extracts a single unambiguous code; `link_extraction.py` extracts account confirmation links. `email_content.py` shares MIME traversal and visible HTML parsing; both extractors use the bounded inbox scanner.
+- `companion/code_extraction.py` extracts a single unambiguous code; `link_extraction.py` extracts account confirmation and password reset links. `email_content.py` shares MIME traversal and visible HTML parsing; both extractors use the bounded inbox scanner.
 - `companion/keychain.py` stores credentials; `errors.py` defines user-facing errors.
 - `companion/install.py` installs and removes the companion's Python runtime modules. Tests are grouped by the production module they cover.
 

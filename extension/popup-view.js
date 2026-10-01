@@ -1,4 +1,4 @@
-export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenLink }) {
+export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink }) {
   const $ = (id) => document.getElementById(id);
   let renderedResultsKey;
 
@@ -46,6 +46,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
   function setRemoveAndCheckDisabled(disabled) {
     $("checkCodes").disabled = disabled;
     $("checkLinks").disabled = disabled;
+    $("checkResetLinks").disabled = disabled;
     for (const button of $("accounts").querySelectorAll("button")) button.disabled = disabled;
   }
 
@@ -116,8 +117,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
     }
   }
 
-  function renderLinks(links) {
-    const key = "links:" + JSON.stringify(links);
+  function renderLinks(links, mode) {
+    const key = mode + ":" + JSON.stringify(links);
     if (key === renderedResultsKey) return;
     renderedResultsKey = key;
     $("results").replaceChildren();
@@ -131,8 +132,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onOpenL
         card.append(line);
       }
       const button = document.createElement("button");
-      button.textContent = "Open confirmation link ↗";
-      button.addEventListener("click", () => onOpenLink(item, button));
+      button.textContent = mode === "resetLinks" ? "Copy password reset link" : "Open confirmation link ↗";
+      button.addEventListener("click", () => onUseLink(item, button));
       card.append(button);
       $("results").append(card);
     }

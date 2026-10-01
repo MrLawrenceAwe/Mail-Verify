@@ -6,7 +6,7 @@ import ssl
 import time
 
 from code_extraction import extract_code_details
-from link_extraction import extract_link_details
+from link_extraction import extract_link_details, extract_password_reset_details
 from errors import UserError
 
 MAX_MESSAGE_AGE_SECONDS = 600
@@ -36,7 +36,8 @@ def connect_imap(credentials):
 
 class InboxSession:
     def __init__(self, credentials, kind="codes"):
-        self.extract_details = extract_link_details if kind == "links" else extract_code_details
+        self.extract_details = {"codes": extract_code_details, "links": extract_link_details,
+                                "resetLinks": extract_password_reset_details}[kind]
         self.credentials = credentials
         self.conn = None
         self.last_seen_uid = None

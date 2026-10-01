@@ -51,6 +51,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     [
       "checkCodes",
       "checkLinks",
+      "checkResetLinks",
       "accounts",
       "addAccount",
       "results",
@@ -73,6 +74,9 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     closes: 0,
     fetchCodes: async () => codes,
     fetchLinks: async () => [],
+    fetchResetLinks: async () => [],
+    copied: [],
+    failCopy: false,
     opened: [],
     failFill: false,
     failRemove: false,
@@ -89,6 +93,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     async sendSessionRequest(action) {
       return action === "status"
         ? { accountEmails: account ? [account] : [] }
+        : action === "resetLinks" ? { resetLinks: await state.fetchResetLinks() }
         : action === "links" ? { links: await state.fetchLinks() } : { codes: await state.fetchCodes() };
     },
     async sendOneOffRequest(request) {
@@ -99,6 +104,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     },
   };
   const popup = createPopupController({
+    clipboard: { async writeText(value) { if (state.failCopy) throw Error("Clipboard denied"); if (state.copyWait) await state.copyWait; state.copied.push(value); } },
     document: {
       getElementById: (id) => controls[id],
       createElement: (tag) => new FakeElement(tag),
@@ -393,4 +399,77 @@ test("switching modes ignores a pending code response", async () => {
   await settle();
   assert.equal(controls.codeContext.hidden, false);
   assert.match(controls.results.querySelectorAll("button")[0].textContent, /Fill on/);
+});
+
+
+test("password reset links are copied only on click without opening a tab", async () => {
+  const { controls, state, scheduled } = await setup();
+  state.fetchResetLinks = async () => [link];
+  controls.checkResetLinks.trigger();
+  await settle();
+  assert.deepEqual(state.copied, []);
+  const button = controls.results.querySelectorAll("button")[0];
+  assert.equal(button.textContent, "Copy password reset link");
+  await button.trigger();
+  assert.deepEqual(state.copied, [link.url]);
+  assert.deepEqual(state.opened, []);
+  assert.equal(button.textContent, "Copied");
+  assert.match(controls.status.textContent, /copied to clipboard/);
+  assert.equal(scheduled.size, 0);
+});
+
+test("reset copy rejects expired links and reports clipboard failures", async () => {
+  for (const scenario of ["expired", "unsafe", "denied"]) {
+    const { controls, state } = await setup();
+    state.fetchResetLinks = async () => [{ ...link,
+      receivedAt: scenario === "expired" ? -700000 : link.receivedAt,
+      url: scenario === "unsafe" ? "http://example.com/reset" : link.url }];
+    state.failCopy = scenario === "denied";
+    controls.checkResetLinks.trigger();
+    await settle();
+    const button = controls.results.querySelectorAll("button")[0];
+    await button.trigger();
+    assert.deepEqual(state.copied, []);
+    assert.deepEqual(state.opened, []);
+    assert.equal(button.disabled, false);
+    assert.match(controls.status.textContent, /too old|not supported|Clipboard denied/);
+  }
+});
+
+
+test("reset links can be recopied and another account selected after an unchanged check", async () => {
+  const { controls, state } = await setup();
+  const second = { ...link, accountEmail: "second@yahoo.com", url: "https://example.com/reset?token=second" };
+  state.fetchResetLinks = async () => [link, second];
+  controls.checkResetLinks.trigger();
+  await settle();
+  const buttons = controls.results.querySelectorAll("button");
+  await buttons[0].trigger();
+  assert.ok(buttons.every(button => !button.disabled));
+  await buttons[0].trigger();
+  controls.checkResetLinks.trigger();
+  await settle();
+  assert.deepEqual(controls.results.querySelectorAll("button"), buttons);
+  assert.ok(buttons.every(button => !button.disabled));
+  await buttons[1].trigger();
+  assert.deepEqual(state.copied, [link.url, link.url, second.url]);
+  assert.deepEqual(state.opened, []);
+});
+
+test("reset copy locks results only while the clipboard write is pending", async () => {
+  const { controls, state } = await setup();
+  let finishCopy;
+  state.copyWait = new Promise(resolve => { finishCopy = resolve; });
+  state.fetchResetLinks = async () => [link];
+  controls.checkResetLinks.trigger();
+  await settle();
+  const button = controls.results.querySelectorAll("button")[0];
+  const pending = button.trigger();
+  await settle();
+  assert.equal(button.disabled, true);
+  assert.equal(controls.checkResetLinks.disabled, true);
+  finishCopy();
+  await pending;
+  assert.equal(button.disabled, false);
+  assert.equal(controls.checkResetLinks.disabled, false);
 });

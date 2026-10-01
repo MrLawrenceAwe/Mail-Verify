@@ -1,4 +1,4 @@
-"""Extract an unambiguous account confirmation link without visiting it."""
+"""Extract an unambiguous confirmation or password reset link without visiting it."""
 import email
 from email import policy
 import re
@@ -52,10 +52,35 @@ class EmailLinkParser(VisibleEmailHTMLParser):
             self.anchor = None
 
 
+RESET_LABEL_PATTERN = re.compile(
+    r"\b(?:reset|change|recover)\s+(?:(?:your|my|the|this)\s+)?password\b", re.I,
+)
+RESET_LINK_LABEL_PATTERN = re.compile(r"password\s+(?:reset|recovery)(?:\s+link)?[\s:!.-]*", re.I)
+RESET_UNRELATED_LABEL_PATTERN = re.compile(
+    r"\b(?:help|support|contact|troubleshoot(?:ing)?|faq|documentation|learn|not|never)\b|"
+    r"\b(?:didn|don|wasn|isn)['’]t\b", re.I,
+)
+RESET_EXCLUDED_PATTERN = re.compile(r"\b(?:unsubscribe|delete|cancel|payment|purchase)\b", re.I)
+
+
 def extract_link_details(raw):
+    return extract_labelled_link(raw, CONFIRMATION_LABEL_PATTERN.search, EXCLUDED_LABEL_PATTERN, EXCLUDED_SUBJECT_PATTERN)
+
+
+def extract_password_reset_details(raw):
+    return extract_labelled_link(raw, is_password_reset_label, RESET_EXCLUDED_PATTERN, RESET_EXCLUDED_PATTERN)
+
+
+def is_password_reset_label(label):
+    if RESET_UNRELATED_LABEL_PATTERN.search(label):
+        return False
+    return bool(RESET_LABEL_PATTERN.search(label) or RESET_LINK_LABEL_PATTERN.fullmatch(label.strip()))
+
+
+def extract_labelled_link(raw, label_matches, excluded_label_pattern, excluded_subject_pattern):
     msg = email.message_from_bytes(raw, policy=policy.default)
     subject, headers = message_headers(msg)
-    if EXCLUDED_SUBJECT_PATTERN.search(subject):
+    if excluded_subject_pattern.search(subject):
         return None
     # HTML and plain text are alternative renderings of one message. Prefer
     # visible HTML links; the text version can use a different tracking URL.
@@ -67,12 +92,16 @@ def extract_link_details(raw):
             links = parser.links
             candidates = html_candidates
         else:
-            # Require an explicit confirmation instruction immediately before a URL.
+            # Require an explicit link instruction immediately before a URL.
             links = []
-            for match in re.finditer(r"https://[^\s<>\"']+", value):
-                context = value[max(0, match.start() - 180):match.start()]
+            previous_url_end = 0
+            for match in re.finditer(r"https?://[^\s<>\"']+", value):
+                # Even an unsupported HTTP URL ends its instruction; it must
+                # not label a later HTTPS footer URL.
+                context = value[max(previous_url_end, match.start() - 180):match.start()]
+                previous_url_end = match.end()
                 context = re.split(r"\n\s*\n", context)[-1]
-                # A confirmation phrase in an earlier sentence must not turn a
+                # An action phrase in an earlier sentence must not turn a
                 # later help, privacy, or other unrelated URL into a candidate.
                 sentences = re.split(r"[.!?](?:\s+|$)", context)
                 context = next(
@@ -83,7 +112,7 @@ def extract_link_details(raw):
             candidates = plain_candidates
         for url, label in links:
             label = re.sub(r"\s+", " ", label)
-            if CONFIRMATION_LABEL_PATTERN.search(label) and not EXCLUDED_LABEL_PATTERN.search(label) and is_supported_confirmation_url(url):
+            if label_matches(label) and not excluded_label_pattern.search(label) and is_supported_confirmation_url(url):
                 candidates.add(url)
     candidates = html_candidates if html_candidates else plain_candidates
     if len(candidates) != 1:

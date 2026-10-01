@@ -1,4 +1,6 @@
-export function createConfirmationView(document, { onClose, onRetry, beforeOpen }) {
+export function createConfirmationView(document, { onClose, onRetry, beforeUse, copyLink, mode }) {
+  const reset = mode === "resetLinks";
+  const title = reset ? "Mail Verify password reset links" : "Mail Verify confirmation links";
   const host = document.createElement("div");
   host.dataset.mailVerify = "confirmation";
   host.style.cssText = "position:fixed;z-index:2147483647;right:16px;bottom:16px";
@@ -11,8 +13,8 @@ export function createConfirmationView(document, { onClose, onRetry, beforeOpen 
     button:focus-visible,a:focus-visible { outline:2px solid #225bd3;outline-offset:2px; }
     p { margin:8px 0;overflow-wrap:anywhere; } small { font-size:11px;color:#5c687c; }
     article { border-top:1px solid #e2e8f1;padding-top:8px;margin-top:10px; }
-    a { display:block;background:#2763dc;color:white;text-decoration:none;padding:8px 10px;border-radius:7px;text-align:center; }
-  </style><section aria-label="Mail Verify confirmation links"><header><strong>Mail Verify confirmation links</strong><button id="retry" aria-label="Check mail again">↻</button><button id="close" aria-label="Dismiss confirmation links">×</button></header><p id="status" role="status" aria-live="polite"></p><div id="results"></div><small>Check the sender and destination. Opening a link may confirm your account.</small></section>`;
+    article button, a { display:block;width:100%;box-sizing:border-box;background:#2763dc;color:white;text-decoration:none;padding:8px 10px;border-radius:7px;text-align:center; }
+  </style><section aria-label="${title}"><header><strong>${title}</strong><button id="retry" aria-label="Check mail again">↻</button><button id="close" aria-label="Dismiss links">×</button></header><p id="status" role="status" aria-live="polite"></p><div id="results"></div><small>${reset ? "Check the sender and destination, then copy your reset link." : "Check the sender and destination. Opening a link may confirm your account."}</small></section>`;
   root.querySelector("#close").onclick = onClose;
   root.querySelector("#retry").onclick = onRetry;
   const results = root.querySelector("#results");
@@ -32,13 +34,30 @@ export function createConfirmationView(document, { onClose, onRetry, beforeOpen 
           line.textContent = text;
           card.append(line);
         }
-        const link = document.createElement("a");
-        link.textContent = "Open confirmation link ↗";
-        link.href = item.url;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.addEventListener("click", (event) => { if (!beforeOpen(item)) event.preventDefault(); });
-        link.addEventListener("auxclick", (event) => { if (!beforeOpen(item)) event.preventDefault(); });
+        const link = document.createElement(reset ? "button" : "a");
+        if (reset) {
+          link.textContent = "Copy password reset link";
+          link.addEventListener("click", async () => {
+            if (link.disabled || !beforeUse(item)) return;
+            link.disabled = true;
+            try {
+              await copyLink(item);
+              link.textContent = "Copied";
+              root.querySelector("#status").textContent = "Password reset link copied to clipboard.";
+            } catch (error) {
+              root.querySelector("#status").textContent = error.message;
+            } finally {
+              link.disabled = false;
+            }
+          });
+        } else {
+          link.textContent = "Open confirmation link ↗";
+          link.href = item.url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.addEventListener("click", (event) => { if (!beforeUse(item)) event.preventDefault(); });
+          link.addEventListener("auxclick", (event) => { if (!beforeUse(item)) event.preventDefault(); });
+        }
         card.append(link);
         results.append(card);
       }

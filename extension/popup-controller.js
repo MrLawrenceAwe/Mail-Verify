@@ -14,6 +14,7 @@ export function createPopupController({
   clock = Date,
   setTimeout = globalThis.setTimeout,
   clearTimeout = globalThis.clearTimeout,
+  clipboard = globalThis.navigator?.clipboard,
 }) {
   const $ = (id) => document.getElementById(id);
   const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
@@ -32,7 +33,7 @@ export function createPopupController({
   } = createPopupView(document, {
     onRemoveAccount: (email) => removeAccount(email),
     onFillCode: (item, button) => fillSelectedCode(item, button),
-    onOpenLink: (item, button) => openSelectedLink(item, button),
+    onUseLink: (item, button) => useSelectedLink(item, button),
   });
   function applyConnectedAccounts(accountEmails) {
     abortCheck();
@@ -55,7 +56,7 @@ export function createPopupController({
     checking = false;
     closeSession();
   }
-  async function useSelectedResult(action) {
+  async function useSelectedResult(action, { reusable = false } = {}) {
     if (usingResult || removingAccount || addingAccount) return;
     usingResult = true;
     abortCheck();
@@ -69,6 +70,7 @@ export function createPopupController({
       setResultButtonsDisabled(false);
     } finally {
       usingResult = false;
+      if (reusable) setResultButtonsDisabled(false);
       setRemoveAndCheckDisabled(addingAccount);
       if (polling.deadline) scheduleCheck();
       else closeSession();
@@ -98,16 +100,23 @@ export function createPopupController({
       markCodeFilled(button);
     });
   }
-  async function openSelectedLink(item, button) {
+  async function useSelectedLink(item, button) {
     await useSelectedResult(async () => {
       if (!isFreshMessage(item.receivedAt, clock.now()))
-        throw new Error("This link is too old. Request a new confirmation email.");
+        throw new Error("This link is too old. Request a new email.");
       if (!isSupportedConfirmationUrl(item.url))
-        throw new Error("This confirmation link is not supported.");
+        throw new Error("This link is not supported.");
+      if (mode === "resetLinks") {
+        if (!clipboard) throw new Error("Clipboard unavailable. Try copying again from the popup.");
+        await clipboard.writeText(item.url);
+        button.textContent = "Copied";
+        setStatus("Password reset link copied to clipboard.");
+        return;
+      }
       await chrome.tabs.create({ url: item.url });
       markLinkOpened(button);
       setStatus("Confirmation link opened in a new tab.");
-    });
+    }, { reusable: mode === "resetLinks" });
   }
   function scheduleCheck(delay = POLL_INTERVAL_MS) {
     if (polling.expired()) {
@@ -122,7 +131,7 @@ export function createPopupController({
     polling.clear();
     closeSession();
     if (!usingResult && !removingAccount)
-      setStatus(`Automatic checking finished. Check again for newer ${mode}.`);
+      setStatus(`Automatic checking finished. Check again for newer ${mode === "resetLinks" ? "password reset links" : mode}.`);
   }
   async function checkInbox() {
     if (usingResult || removingAccount) return;
@@ -141,12 +150,12 @@ export function createPopupController({
       const response = await sendSessionRequest(mode);
       const results = response[mode];
       if (!usingResult && polling.isCurrent(requestGeneration)) {
-        if (mode === "links") renderLinks(results);
+        if (mode !== "codes") renderLinks(results, mode);
         else renderCodes(results, targetTab);
         setStatus(
           response.warnings?.length ? `Some accounts could not be checked: ${response.warnings.join("; ")}` : results.length
-            ? mode === "links" ? "Check the sender and destination, then open your confirmation link." : "Choose the code for this website. Checking for newer codes…"
-            : mode === "links" ? "No recent confirmation link yet. Request one and keep this popup open." : "No recent code yet. Request one on the website; keep this popup open.",
+            ? mode === "resetLinks" ? "Check the sender and destination, then copy your password reset link." : mode === "links" ? "Check the sender and destination, then open your confirmation link." : "Choose the code for this website. Checking for newer codes…"
+            : mode === "resetLinks" ? "No recent password reset link yet. Request one and keep this popup open." : mode === "links" ? "No recent confirmation link yet. Request one and keep this popup open." : "No recent code yet. Request one on the website; keep this popup open.",
         );
       }
     } catch (error) {
@@ -180,6 +189,7 @@ export function createPopupController({
   }
   $("checkCodes").addEventListener("click", () => selectMode("codes"));
   $("checkLinks").addEventListener("click", () => selectMode("links"));
+  $("checkResetLinks").addEventListener("click", () => selectMode("resetLinks"));
   $("addAccountForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (addingAccount || removingAccount) return;
