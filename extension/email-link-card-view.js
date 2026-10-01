@@ -1,8 +1,12 @@
-export function createConfirmationView(document, { onClose, onRetry, beforeUse, copyLink, mode }) {
-  const reset = mode === "resetLinks";
-  const title = reset ? "Mail Verify password reset links" : "Mail Verify confirmation links";
+import { MAIL_MODES } from "./mail-modes.js";
+import { appendEmailLinkDetails } from "./email-link-details.js";
+
+export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse, copyLink, mode }) {
+  const reset = mode === "passwordResetLinks";
+  const { resultLabel, actionLabel, guidance } = MAIL_MODES[mode];
+  const title = `Mail Verify ${resultLabel}`;
   const host = document.createElement("div");
-  host.dataset.mailVerify = "confirmation";
+  host.dataset.mailVerify = "email-links";
   host.style.cssText = "position:fixed;z-index:2147483647;right:16px;bottom:16px";
   const root = host.attachShadow({ mode: "closed" });
   root.innerHTML = `<style>
@@ -14,7 +18,7 @@ export function createConfirmationView(document, { onClose, onRetry, beforeUse, 
     p { margin:8px 0;overflow-wrap:anywhere; } small { font-size:11px;color:#5c687c; }
     article { border-top:1px solid #e2e8f1;padding-top:8px;margin-top:10px; }
     article button, a { display:block;width:100%;box-sizing:border-box;background:#2763dc;color:white;text-decoration:none;padding:8px 10px;border-radius:7px;text-align:center; }
-  </style><section aria-label="${title}"><header><strong>${title}</strong><button id="retry" aria-label="Check mail again">↻</button><button id="close" aria-label="Dismiss links">×</button></header><p id="status" role="status" aria-live="polite"></p><div id="results"></div><small>${reset ? "Check the sender and destination, then copy your reset link." : "Check the sender and destination. Opening a link may confirm your account."}</small></section>`;
+  </style><section aria-label="${title}"><header><strong>${title}</strong><button id="retry" aria-label="Check mail again">↻</button><button id="close" aria-label="Dismiss links">×</button></header><p id="status" role="status" aria-live="polite"></p><div id="results"></div><small>${guidance}</small></section>`;
   root.querySelector("#close").onclick = onClose;
   root.querySelector("#retry").onclick = onRetry;
   const results = root.querySelector("#results");
@@ -29,14 +33,10 @@ export function createConfirmationView(document, { onClose, onRetry, beforeUse, 
       results.replaceChildren();
       for (const item of items) {
         const card = document.createElement("article");
-        for (const text of [item.accountEmail, item.sender, item.subject, `Destination: ${new URL(item.url).hostname}`]) {
-          const line = document.createElement("p");
-          line.textContent = text;
-          card.append(line);
-        }
+        appendEmailLinkDetails(document, card, item);
         const link = document.createElement(reset ? "button" : "a");
+        link.textContent = actionLabel;
         if (reset) {
-          link.textContent = "Copy password reset link";
           link.addEventListener("click", async () => {
             if (link.disabled || !beforeUse(item)) return;
             link.disabled = true;
@@ -51,7 +51,6 @@ export function createConfirmationView(document, { onClose, onRetry, beforeUse, 
             }
           });
         } else {
-          link.textContent = "Open confirmation link ↗";
           link.href = item.url;
           link.target = "_blank";
           link.rel = "noopener noreferrer";

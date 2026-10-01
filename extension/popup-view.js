@@ -1,3 +1,6 @@
+import { MAIL_MODES } from "./mail-modes.js";
+import { appendEmailLinkDetails } from "./email-link-details.js";
+
 export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink }) {
   const $ = (id) => document.getElementById(id);
   let renderedResultsKey;
@@ -22,6 +25,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
 
   function setMode(mode) {
     $("codeContext").hidden = mode !== "codes";
+    $("linkGuidance").hidden = mode === "codes";
+    $("linkGuidance").textContent = MAIL_MODES[mode].guidance || "";
   }
 
   function setDestination(text) {
@@ -45,8 +50,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
 
   function setRemoveAndCheckDisabled(disabled) {
     $("checkCodes").disabled = disabled;
-    $("checkLinks").disabled = disabled;
-    $("checkResetLinks").disabled = disabled;
+    $("checkConfirmationLinks").disabled = disabled;
+    $("checkPasswordResetLinks").disabled = disabled;
     for (const button of $("accounts").querySelectorAll("button")) button.disabled = disabled;
   }
 
@@ -125,14 +130,9 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     for (const item of links) {
       const card = document.createElement("article");
       card.className = "card";
-      for (const value of [item.accountEmail, item.sender, item.subject, `Destination: ${new URL(item.url).hostname}`]) {
-        const line = document.createElement("p");
-        line.textContent = value;
-        line.className = "result-detail";
-        card.append(line);
-      }
+      appendEmailLinkDetails(document, card, item, "result-detail");
       const button = document.createElement("button");
-      button.textContent = mode === "resetLinks" ? "Copy password reset link" : "Open confirmation link ↗";
+      button.textContent = MAIL_MODES[mode].actionLabel;
       button.addEventListener("click", () => onUseLink(item, button));
       card.append(button);
       $("results").append(card);

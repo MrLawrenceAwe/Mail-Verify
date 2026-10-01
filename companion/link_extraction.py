@@ -16,7 +16,7 @@ EXCLUDED_SUBJECT_PATTERN = re.compile(
 )
 
 
-def is_supported_confirmation_url(value):
+def is_supported_email_link_url(value):
     if len(value) > 4096 or re.search(r"[\s\x00-\x1f\x7f\\]", value):
         return False
     try:
@@ -63,11 +63,11 @@ RESET_UNRELATED_LABEL_PATTERN = re.compile(
 RESET_EXCLUDED_PATTERN = re.compile(r"\b(?:unsubscribe|delete|cancel|payment|purchase)\b", re.I)
 
 
-def extract_link_details(raw):
+def extract_confirmation_link_details(raw):
     return extract_labelled_link(raw, CONFIRMATION_LABEL_PATTERN.search, EXCLUDED_LABEL_PATTERN, EXCLUDED_SUBJECT_PATTERN)
 
 
-def extract_password_reset_details(raw):
+def extract_password_reset_link_details(raw):
     return extract_labelled_link(raw, is_password_reset_label, RESET_EXCLUDED_PATTERN, RESET_EXCLUDED_PATTERN)
 
 
@@ -115,7 +115,7 @@ def extract_labelled_link(raw, label_matches, excluded_label_pattern, excluded_s
             candidates = plain_candidates
         for url, label in links:
             label = re.sub(r"\s+", " ", label)
-            if label_matches(label) and not excluded_label_pattern.search(label) and is_supported_confirmation_url(url):
+            if label_matches(label) and not excluded_label_pattern.search(label) and is_supported_email_link_url(url):
                 candidates.add(url)
     candidates = html_candidates if html_candidates else plain_candidates
     if len(candidates) != 1:
