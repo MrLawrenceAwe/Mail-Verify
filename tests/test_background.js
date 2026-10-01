@@ -76,3 +76,11 @@ test("link requests use their own result type and enforce active tab access", as
   assert.deepEqual(await fixture.request({}, "links"), { ok: true, links, warnings: [] });
   assert.equal((await fixture.request({ tab: { id: 2 } }, "links")).ok, false);
 });
+
+
+test("password reset requests return reset links and enforce active tab access", async () => {
+  const resetLinks = [{ url: "https://example.com/reset", receivedAt: 1000 }];
+  const fixture = setup({ ok: true, resetLinks });
+  assert.deepEqual(await fixture.request({}, "resetLinks"), { ok: true, resetLinks, warnings: [] });
+  assert.equal((await fixture.request({ tab: { id: 2 } }, "resetLinks")).ok, false);
+});

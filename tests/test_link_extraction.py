@@ -5,7 +5,7 @@ import json
 import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
-from link_extraction import extract_link_details, is_supported_confirmation_url
+from link_extraction import extract_link_details, extract_password_reset_details, is_supported_confirmation_url
 
 class LinkExtractionTests(unittest.TestCase):
     def test_confirmation_url_policy_matches_extension_cases(self):
@@ -101,3 +101,96 @@ class LinkExtractionTests(unittest.TestCase):
         msg.set_content('Welcome')
         msg.add_attachment(b'<a href="https://example.com">Verify email</a>', maintype='text', subtype='html', filename='attachment.html')
         self.assertIsNone(extract_link_details(msg.as_bytes()))
+
+
+    def test_plain_confirmation_footer_does_not_inherit_the_instruction(self):
+        raw = self.message("Confirm your email: https://example.com/confirm?token=real\nPrivacy policy: https://example.com/privacy", "plain")
+        self.assertEqual(extract_link_details(raw)["url"], "https://example.com/confirm?token=real")
+
+
+class PasswordResetExtractionTests(unittest.TestCase):
+    message = LinkExtractionTests.message
+    def test_explicit_reset_html_and_plain(self):
+        for label in ("Reset your password", "Reset password", "Change my password", "Password reset", "Recover your password"):
+            for subtype, body in (("html", f'<a href="https://example.com/reset?token=a&amp;b=2">{label}</a>'),
+                                  ("plain", f'{label}:\nhttps://example.com/reset?token=a&b=2')):
+                with self.subTest(label=label, subtype=subtype):
+                    raw = self.message(body, subtype, "Password reset request")
+                    self.assertEqual(extract_password_reset_details(raw)["url"], "https://example.com/reset?token=a&b=2")
+                    self.assertIsNone(extract_link_details(raw))
+
+    def test_reset_rejects_unsafe_hidden_ambiguous_and_unrelated_links(self):
+        for body in (
+            '<a href="http://example.com/reset">Reset password</a>',
+            '<a href="https://user@example.com/reset">Reset password</a>',
+            '<a hidden href="https://example.com/reset">Reset password</a>',
+            '<a href="https://example.com/a">Reset password</a><a href="https://example.com/b">Reset password</a>',
+            '<a href="https://example.com/help">Contact support</a>',
+            '<a href="https://example.com/verify">Verify email</a>',
+            '<a href="https://example.com/reset">Cancel password reset</a>',
+        ):
+            with self.subTest(body=body):
+                self.assertIsNone(extract_password_reset_details(self.message(body, subject="Reset password")))
+        self.assertIsNone(extract_password_reset_details(self.message(
+            "Reset your password using the button. For help visit https://example.com/help", "plain")))
+
+    def test_reset_multipart_prefers_html_and_ignores_attachments(self):
+        msg = EmailMessage()
+        msg.set_content("Reset your password: https://example.com/reset")
+        msg.add_alternative('<a href="https://track.example.com/click">Reset password</a>', subtype="html")
+        self.assertEqual(extract_password_reset_details(msg.as_bytes())["url"], "https://track.example.com/click")
+        attachment = EmailMessage()
+        attachment.set_content("Welcome")
+        attachment.add_attachment(b'<a href="https://example.com/reset">Reset password</a>', maintype="text", subtype="html", filename="reset.html")
+        self.assertIsNone(extract_password_reset_details(attachment.as_bytes()))
+
+
+    def test_help_and_negated_reset_contexts_are_not_reset_actions(self):
+        for subtype, body in (
+            ("html", '<a href="https://example.com/help">Password reset help</a>'),
+            ("html", '<a href="https://example.com/help">Help to reset your password</a>'),
+            ("html", '<a href="https://example.com/help">Did not request a password reset?</a>'),
+            ("plain", "If you did not request a password reset, contact support at https://example.com/support"),
+            ("plain", "If you didn't request this, reset your password at https://example.com/security"),
+            ("plain", "For help with your password reset: https://example.com/help"),
+        ):
+            with self.subTest(body=body):
+                self.assertIsNone(extract_password_reset_details(self.message(body, subtype, "Password reset")))
+
+    def test_help_link_does_not_hide_the_real_reset_action(self):
+        for subtype, body in (
+            ("html", '<a href="https://example.com/reset?token=real">Reset your password</a><a href="https://example.com/help">Password reset help</a>'),
+            ("plain", "Reset your password: https://example.com/reset?token=real\n\nIf you did not request a password reset, contact support at https://example.com/help"),
+        ):
+            with self.subTest(subtype=subtype):
+                self.assertEqual(extract_password_reset_details(self.message(body, subtype, "Password reset"))["url"], "https://example.com/reset?token=real")
+
+    def test_password_reset_link_label_is_supported(self):
+        raw = self.message('<a href="https://example.com/reset">Password reset link</a>', subject="Password reset")
+        self.assertEqual(extract_password_reset_details(raw)["url"], "https://example.com/reset")
+
+
+    def test_positive_conditional_reset_instructions_are_supported(self):
+        for label in (
+            "If you requested a password reset, click here to reset your password:",
+            "If you'd like to reset your password, use this link:",
+        ):
+            for subtype, body in (("plain", f"{label} https://example.com/reset?token=real"),
+                                  ("html", f'<a href="https://example.com/reset?token=real">{label}</a>')):
+                with self.subTest(label=label, subtype=subtype):
+                    self.assertEqual(extract_password_reset_details(self.message(body, subtype, "Password reset"))["url"], "https://example.com/reset?token=real")
+
+    def test_plain_reset_footer_does_not_inherit_the_instruction(self):
+        for separator in ("\n", " ", "\n\n"):
+            for footer in ("Privacy policy: https://example.com/privacy", "Visit our website: https://example.com/"):
+                with self.subTest(separator=separator, footer=footer):
+                    raw = self.message("Reset your password: https://example.com/reset?token=real" + separator + footer, "plain")
+                    self.assertEqual(extract_password_reset_details(raw)["url"], "https://example.com/reset?token=real")
+
+    def test_explicit_second_reset_url_still_causes_ambiguity(self):
+        raw = self.message("Reset your password: https://example.com/reset?token=one\nReset your password: https://example.com/reset?token=two", "plain")
+        self.assertIsNone(extract_password_reset_details(raw))
+
+    def test_unsupported_preceding_url_cannot_label_a_later_url(self):
+        raw = self.message("Reset your password: http://example.com/reset\nPrivacy policy: https://example.com/privacy", "plain")
+        self.assertIsNone(extract_password_reset_details(raw))

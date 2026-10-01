@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Mail Verify",
-  "version": "0.4.2",
-  "description": "Find email verification codes and account confirmation links; fill a code or open a selected link.",
+  "version": "0.5.0",
+  "description": "Find email codes, account confirmation links and password reset links; fill, open or copy a selected result.",
   "permissions": [
     "nativeMessaging",
     "activeTab",
-    "scripting"
+    "scripting",
+    "clipboardWrite"
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Mail Verify — email codes and confirmation links"
+    "default_title": "Mail Verify \u2014 email codes and links"
   },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz9O0M+wj5pu3u3t3+79ljQaQpdy4v/OLlCEHnc4uKNS10szhjccxQxx585+qiRXEXNd9MzJiO1r5HfvLzqVSeKI8s2D80y9Ehgb7M0VhCHr/nHziZcsSALWp6kp/uE6KTPzT/Qzctw2CY7YcnySR1CTQSm5wiLLiLWvTkKmkBb1AfMPUS+gPT/gC+N27Vx1rjy0X/N5aV/ikE54C4qV6AqZfnfYMaOh63/hvaxTwW0L6/fB3xK/bQI812JTMdGgfsiueZHMHqNPzdMWf6DS+1UPLeSKIv7hg9/2w2tnLbuJKWudbx62kdNMD0SR3hRArPcMY7L4kyEOKjcT7vGH1ywIDAQAB",
   "background": {

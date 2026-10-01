@@ -24,6 +24,16 @@ class HostTests(unittest.TestCase):
         lock_patch.start()
         self.addCleanup(lock_patch.stop)
 
+    def test_reset_links_dispatches_to_reset_extractor(self):
+        credentials = {"email": "test@yahoo.com", "password": "unused"}
+        sessions = account_sessions.AccountSessions()
+        item = {"url": "https://example.com/reset", "receivedAt": 1000, "uid": 1}
+        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "check_with_timeout", return_value=[item]):
+            result = host.handle_request({"action": "resetLinks"}, sessions)
+        self.assertEqual(result, {"resetLinks": [{**item, "accountEmail": credentials["email"]}], "warnings": []})
+        from link_extraction import extract_password_reset_details
+        self.assertIs(sessions.sessions[credentials["email"]].extract_details, extract_password_reset_details)
+
     def test_frame(self):
         p = json.dumps({"action": "status"}).encode()
         self.assertEqual(
