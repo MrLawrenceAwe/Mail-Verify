@@ -31,6 +31,16 @@ class LinkExtractionTests(unittest.TestCase):
         result = extract_link_details(self.message('Confirm your account:\nhttps://example.com/activate?token=abc', 'plain'))
         self.assertEqual(result["url"], 'https://example.com/activate?token=abc')
 
+    def test_blank_lines_between_instruction_and_url(self):
+        for separator in ("\n\n", "\r\n\r\n", "\n \t\n\n"):
+            with self.subTest(separator=separator):
+                raw = self.message("Verify your email:" + separator + "https://example.com/verify?token=abc", "plain")
+                self.assertEqual(extract_link_details(raw)["url"], "https://example.com/verify?token=abc")
+
+    def test_unrelated_paragraph_cannot_inherit_confirmation_instruction(self):
+        raw = self.message("Verify your email using the dashboard button.\n\nPrivacy policy:\n\nhttps://example.com/privacy", "plain")
+        self.assertIsNone(extract_link_details(raw))
+
     def test_plain_text_confirmation_does_not_label_a_later_unrelated_url(self):
         body = (
             "Confirm your account by using the button in your dashboard. "
@@ -110,6 +120,17 @@ class LinkExtractionTests(unittest.TestCase):
 
 class PasswordResetExtractionTests(unittest.TestCase):
     message = LinkExtractionTests.message
+
+    def test_blank_lines_between_instruction_and_url(self):
+        for separator in ("\n\n", "\r\n\r\n", "\n \t\n\n"):
+            with self.subTest(separator=separator):
+                raw = self.message("Reset your password:" + separator + "https://example.com/reset?token=abc", "plain")
+                self.assertEqual(extract_password_reset_details(raw)["url"], "https://example.com/reset?token=abc")
+
+    def test_unrelated_paragraph_cannot_inherit_reset_instruction(self):
+        raw = self.message("Reset your password using the dashboard button.\n\nPrivacy policy:\n\nhttps://example.com/privacy", "plain")
+        self.assertIsNone(extract_password_reset_details(raw))
+
     def test_explicit_reset_html_and_plain(self):
         for label in ("Reset your password", "Reset password", "Change my password", "Password reset", "Recover your password"):
             for subtype, body in (("html", f'<a href="https://example.com/reset?token=a&amp;b=2">{label}</a>'),

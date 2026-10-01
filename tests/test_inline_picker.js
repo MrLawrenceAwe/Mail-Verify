@@ -381,6 +381,34 @@ test("returning to a hidden tab starts a check while the old one is pending", as
   assert.equal(results.children[0].strong.textContent, "Fill code 111111");
 });
 
+test("countdown completion retains codes without starting a new attempt", async () => {
+  for (const countdown of ["Resend in 30 seconds", "Resend code in 30s", "Resend in 00:30"]) {
+    let observer, now = 10_000;
+    const form = { textContent: `We sent a code to alice@example.test. ${countdown}`, contains: () => true };
+    const anchor = { form };
+    const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+    let requests = 0;
+    const { timers, results, elements } = pickerBrowser({
+      handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+      now: () => now,
+      check: async () => { requests++; return { ok: true, codes: [code] }; },
+      onObserve: callback => { observer = callback; },
+    });
+    const flush = () => new Promise(resolve => setImmediate(resolve));
+    await flush();
+    now = 40_000;
+    form.textContent = "We sent a code to alice@example.test. Resend code";
+    observer([{ type: "characterData", target: {} }]);
+    await timers.run(150);
+    await flush();
+    assert.equal(results.children[0]?.strong.textContent, "Fill code 111111", countdown);
+    assert.equal(requests, 1, "countdown completion must not trigger a new attempt");
+    elements["#retry"].onclick();
+    await flush();
+    assert.equal(results.children[0]?.strong.textContent, "Fill code 111111", "retry retains the same code");
+  }
+});
+
 test("changed verification instructions reset codes on the same field and URL", async () => {
   let observer, now = 10_000, mounts = 0;
   const parent = {};

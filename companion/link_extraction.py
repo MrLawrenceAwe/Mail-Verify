@@ -100,7 +100,10 @@ def extract_labelled_link(raw, label_matches, excluded_label_pattern, excluded_s
                 # not label a later HTTPS footer URL.
                 context = value[max(previous_url_end, match.start() - 180):match.start()]
                 previous_url_end = match.end()
-                context = re.split(r"\n\s*\n", context)[-1]
+                # Blank lines before the URL are layout, not a new paragraph.
+                # Keep only the last nonempty paragraph so unrelated prose
+                # still separates a footer URL from an earlier instruction.
+                context = re.split(r"\n\s*\n", context.rstrip())[-1]
                 # An action phrase in an earlier sentence must not turn a
                 # later help, privacy, or other unrelated URL into a candidate.
                 sentences = re.split(r"[.!?](?:\s+|$)", context)
