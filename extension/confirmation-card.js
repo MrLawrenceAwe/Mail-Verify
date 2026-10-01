@@ -220,7 +220,7 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
   });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismiss(); });
   document.addEventListener("click", (event) => {
-    const control = event.target.closest?.("button, a, [role=button], input[type=submit]");
+    const control = event.target.closest?.("button, a, [role=button], input[type=button], input[type=submit]");
     if (!screenActive || !isConfirmationRequestControl(control)) return;
     minReceivedAtMs = resendCutoff(clock.now());
     dismissed = false;
