@@ -5,20 +5,20 @@ export function createPollingLifecycle({ clock, setTimeout, clearTimeout, interv
   return {
     get deadline() { return deadline; },
     get generation() { return generation; },
-    restart() { deadline = clock.now() + POLL_WINDOW_MS; },
-    reset() { this.clear(); deadline = 0; },
-    clear() { clearTimeout(timer); timer = undefined; },
-    invalidate() { generation++; },
+    renewDeadline() { deadline = clock.now() + POLL_WINDOW_MS; },
+    reset() { this.cancelScheduledCheck(); deadline = 0; },
+    cancelScheduledCheck() { clearTimeout(timer); timer = undefined; },
+    invalidateResponses() { generation++; },
     isCurrent(value) { return value === generation; },
-    expired() { return clock.now() >= deadline; },
+    hasExpired() { return clock.now() >= deadline; },
     schedule(callback, delay = intervalMs) {
-      this.clear();
+      this.cancelScheduledCheck();
       timer = setTimeout(callback, delay);
     },
   };
 }
 
-export function createRetryGate() {
+function createCheckGate() {
   let active, retry = false;
   return {
     get busy() { return !!active; },
@@ -41,4 +41,23 @@ export function createRetryGate() {
       return requested;
     },
   };
+}
+
+export function createInlinePollingLifecycle(options) {
+  const polling = createPollingLifecycle(options);
+  const checks = createCheckGate();
+  return Object.assign(polling, {
+    checks,
+    cancelChecks() {
+      polling.invalidateResponses();
+      checks.invalidate();
+      polling.cancelScheduledCheck();
+    },
+    renewAndQueueRetry() {
+      polling.renewDeadline();
+      if (!checks.requestRetry()) return false;
+      polling.invalidateResponses();
+      return true;
+    },
+  });
 }

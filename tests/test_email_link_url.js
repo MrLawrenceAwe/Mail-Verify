@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { isSupportedEmailLinkUrl } from "../extension/email-link-url.js";
+import { isSupportedEmailLinkUrl } from "../extension/shared/email-link-url.js";
 
 const cases = JSON.parse(readFileSync(new URL("./fixtures/email-link-urls.json", import.meta.url)));
 

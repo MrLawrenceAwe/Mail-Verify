@@ -1,12 +1,12 @@
-import { copyPasswordResetLink } from "./reset-link-copy.js";
-import { MAIL_MODES } from "./mail-modes.js";
+import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
+import { MAIL_TYPES } from "../shared/mail-types.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
-import { isSupportedEmailLinkUrl } from "./email-link-url.js";
-import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "./step-text.js";
-import { initialStepCutoff, isFreshMessage, resendCutoff } from "./mail-timing.js";
+import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
+import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
+import { initialStepCutoff, isFreshMessage, resendCutoff } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
-import { createPollingLifecycle, createRetryGate } from "./polling-lifecycle.js";
+import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
 
 const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;
@@ -27,7 +27,7 @@ export function isPasswordResetScreen(text) {
   const emailSent = /\bcheck\s+(?:your\s+)?(?:e-?mail|inbox)\b|\bsent\b.{0,80}\b(?:e-?mail|link)\b|\b(?:e-?mail|link)\b.{0,40}\bsent\b|\b(?:click|follow|open)\b.{0,45}\blink\b/i;
   const confirmation = /\b(?:confirm|verify|activate)\b.{0,35}\b(?:e-?mail|account)\b|\b(?:confirmation|verification|activation)\s+(?:e-?mail|link)\b/i;
   // Bind the purpose to the waiting instruction or the heading immediately
-  // before it. Navigation elsewhere in the panel must not switch link modes.
+  // before it. Navigation elsewhere in the panel must not switch link mail types.
   // Join grammatical continuations across elements, while retaining line
   // boundaries for standalone headings and navigation such as Forgot password.
   const instructions = value
@@ -47,12 +47,12 @@ export function detectEmailLinkStep(document) {
     if (!panel?.getClientRects().length ||
         !panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     const text = panel.innerText || "";
-    const mode = isPasswordResetScreen(text) ? "passwordResetLinks"
+    const mailType = isPasswordResetScreen(text) ? "passwordResetLinks"
       : matchesConfirmationPrompt(text) ? "confirmationLinks" : null;
-    if (!mode) continue;
+    if (!mailType) continue;
     if (!emailLinkPanelIds.has(panel)) emailLinkPanelIds.set(panel, nextEmailLinkPanelId++);
     // Countdown changes retain the step; a new task in the same panel changes it.
-    return { key: `${emailLinkPanelIds.get(panel)}:${normalizeStepText(text)}`, mode };
+    return { key: `${emailLinkPanelIds.get(panel)}:${normalizeStepText(text)}`, mailType };
   }
   return null;
 }
@@ -72,7 +72,7 @@ export function isEmailLinkRequestControl(control) {
     /\b(?:e-?mail|link)\b/i.test(label);
 }
 
-export function mutationAffectsEmailLinkCard(records, host, document, screenActive) {
+export function mutationAffectsEmailLinkCard(records, host, document, hasActiveStep) {
   const panels = "main, [role=main], form, [role=dialog]";
   const relevantElements = `${panels}, input`;
   const relevantText = (value) => /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(value || "");
@@ -80,7 +80,7 @@ export function mutationAffectsEmailLinkCard(records, host, document, screenActi
     const target = record.target;
     if (target === host || host?.contains(target)) return false;
     const element = target.nodeType === 1 ? target : target.parentElement;
-    const inActivePanel = screenActive &&
+    const inActivePanel = hasActiveStep &&
       (element?.closest?.(panels) || !document.querySelector?.(panels));
     if (record.type === "attributes")
       return !!(target.matches?.(relevantElements) || target.querySelector?.(relevantElements));
@@ -97,52 +97,45 @@ export function mutationAffectsEmailLinkCard(records, host, document, screenActi
 export function startEmailLinkCard({ browser = globalThis, detectStep = detectEmailLinkStep,
   page = getPageCoordinator(browser), detectCode = () => page.detectCodeField().ok, createView = createEmailLinkCardView } = {}) {
   const { document, location, chrome, setTimeout, clearTimeout, Date: clock = Date } = browser;
-  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 8000 });
-  const checks = createRetryGate();
+  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 8000 });
+  const { checks } = polling;
   let view, scanTimer;
-  let lastURL = location.href, dismissed = false, minReceivedAtMs, screenActive = false, stepKey;
+  let lastURL = location.href, dismissed = false, minReceivedAtMs, hasActiveStep = false, stepKey;
   let currentLinks = [];
-  let mode = "confirmationLinks";
+  let mailType = "confirmationLinks";
   function isCurrentStep() {
     const step = detectStep(document);
-    return step?.key === stepKey && step?.mode === mode;
+    return step?.key === stepKey && step?.mailType === mailType;
   }
   function unmountCard() {
-    polling.invalidate();
-    checks.invalidate();
-    polling.clear();
+    polling.cancelChecks();
     view?.host.remove();
     view = undefined;
   }
   function dismissCard() { dismissed = true; unmountCard(); }
   function restartPolling() {
-    polling.restart();
-    if (checks.requestRetry()) {
-      // Ignore the current response and run one new check as soon as it ends.
-      polling.invalidate();
-      return;
-    }
+    if (polling.renewAndQueueRetry()) return;
     checkForLinks();
   }
   async function checkForLinks() {
-    polling.clear();
+    polling.cancelScheduledCheck();
     if (!view || document.hidden || checks.busy) return;
     if (lastURL !== location.href || detectCode() || !isCurrentStep()) { syncLinkCard(); return; }
-    if (polling.expired()) {
+    if (polling.hasExpired()) {
       view.setStatus("Checking finished. Click ↻ to check again.");
       return;
     }
     const requestGeneration = polling.generation;
     const checkToken = checks.start();
     try {
-      const response = await requestInlineCheck(chrome.runtime, mode);
+      const response = await requestInlineCheck(chrome.runtime, mailType);
       if (!polling.isCurrent(requestGeneration) || !view || document.hidden) return;
       if (lastURL !== location.href || detectCode() || !isCurrentStep()) { syncLinkCard(); return; }
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
-      currentLinks = selectEmailLinks(response[mode] || [], minReceivedAtMs, clock.now());
+      currentLinks = selectEmailLinks(response[mailType] || [], minReceivedAtMs, clock.now());
       view.renderLinks(currentLinks);
       view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
-        currentLinks.length ? MAIL_MODES[mode].foundStatus : MAIL_MODES[mode].waitingStatus);
+        currentLinks.length ? MAIL_TYPES[mailType].foundStatus : MAIL_TYPES[mailType].waitingStatus);
     } catch (error) {
       if (polling.isCurrent(requestGeneration) && view) {
         currentLinks = [];
@@ -161,23 +154,23 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       unmountCard();
       lastURL = location.href;
       dismissed = false;
-      screenActive = false;
+      hasActiveStep = false;
       minReceivedAtMs = undefined;
     }
     if (document.hidden) { unmountCard(); return; }
     const nextStep = detectCode() ? null : detectStep(document);
     if (nextStep === null) {
       unmountCard();
-      screenActive = false;
+      hasActiveStep = false;
       stepKey = undefined;
       minReceivedAtMs = undefined;
       polling.reset();
       return;
     }
-    if (screenActive && (nextStep.key !== stepKey || nextStep.mode !== mode)) {
+    if (hasActiveStep && (nextStep.key !== stepKey || nextStep.mailType !== mailType)) {
       unmountCard();
       dismissed = false;
-      screenActive = false;
+      hasActiveStep = false;
       // A changed panel can represent a different signup. IMAP arrival times
       // have one-second precision, so start with the next second to exclude
       // links delivered just before this step appeared.
@@ -185,17 +178,17 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       polling.reset();
     }
     if (dismissed) return;
-    if (!screenActive) {
-      screenActive = true;
+    if (!hasActiveStep) {
+      hasActiveStep = true;
       stepKey = nextStep.key;
-      mode = nextStep.mode;
+      mailType = nextStep.mailType;
       minReceivedAtMs ??= initialStepCutoff(clock.now());
-      polling.restart();
+      polling.renewDeadline();
     }
     if (view) return;
     currentLinks = [];
     view = createView(document, {
-      onClose: dismissCard, onRetry: restartPolling, mode,
+      onClose: dismissCard, onRetry: restartPolling, mailType,
       async copyLink(item) {
         await copyPasswordResetLink(browser.navigator?.clipboard, item.url,
           "Clipboard unavailable. Use Find password reset links in the toolbar popup.");
@@ -208,12 +201,12 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
           view?.setStatus("This link is no longer current. Request a new email or check again.");
           return false;
         }
-        if (mode !== "passwordResetLinks") dismissCard();
+        if (mailType !== "passwordResetLinks") dismissCard();
         return true;
       },
     });
     document.documentElement.append(view.host);
-    view.setStatus(MAIL_MODES[mode].waitingStatus);
+    view.setStatus(MAIL_TYPES[mailType].waitingStatus);
     checkForLinks();
   }
   function scheduleScan() {
@@ -221,16 +214,16 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     scanTimer = setTimeout(() => { scanTimer = undefined; syncLinkCard(); }, 250);
   }
   page.onMutation((records) => {
-    if (mutationAffectsEmailLinkCard(records, view?.host, document, screenActive)) scheduleScan();
+    if (mutationAffectsEmailLinkCard(records, view?.host, document, hasActiveStep)) scheduleScan();
   });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismissCard(); });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
-    if (!screenActive || !isEmailLinkRequestControl(control)) return;
+    if (!hasActiveStep || !isEmailLinkRequestControl(control)) return;
     minReceivedAtMs = resendCutoff(clock.now());
     dismissed = false;
     unmountCard();
-    polling.restart();
+    polling.renewDeadline();
     syncLinkCard();
   }, true);
   page.onPageChange(scheduleScan);

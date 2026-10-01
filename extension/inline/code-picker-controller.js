@@ -1,12 +1,12 @@
-import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "./step-text.js";
-import { handleCodeField } from "./code-fields.js";
+import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
+import { handleCodeField } from "../shared/code-fields.js";
 import { createCodePickerView } from "./code-picker-view.js";
-import { initialStepCutoff, isFreshMessage, resendCutoff } from "./mail-timing.js";
+import { initialStepCutoff, isFreshMessage, resendCutoff } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
-import { createPollingLifecycle, createRetryGate } from "./polling-lifecycle.js";
+import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
 
-export function suggestionPosition(rect, width, height, viewportWidth, viewportHeight) {
+export function calculatePickerPosition(rect, width, height, viewportWidth, viewportHeight) {
   const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
   const below = rect.bottom + 4;
   const top = below + height <= viewportHeight - 8
@@ -81,17 +81,15 @@ export function isCodeRequestControl(control) {
 export function startCodePicker({ browser = globalThis, handleField = handleCodeField, page = getPageCoordinator(browser, handleField) } = {}) {
   const { document, window, location, chrome, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
-  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 2000 });
-  const checks = createRetryGate();
+  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 2000 });
+  const { checks } = polling;
   let view;
   let dismissed = false, filledStep = false, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);
   function unmountPicker({ preserveStep = false } = {}) {
-    polling.invalidate();
-    checks.invalidate();
-    polling.clear();
+    polling.cancelChecks();
     view?.host.remove();
     view = undefined;
     if (!preserveStep) {
@@ -107,17 +105,13 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     for (const key of seenMessageKeys) excludedMessageKeys.add(key);
   }
   function restartPolling() {
-    polling.restart();
-    if (checks.requestRetry()) {
-      polling.invalidate();
-      return;
-    }
+    if (polling.renewAndQueueRetry()) return;
     checkForCodes();
   }
   function positionPicker(field = detectCodeField()) {
     if (!view || !field.ok) return;
     const bounds = view.host.getBoundingClientRect();
-    const { left, top } = suggestionPosition(field.rect, bounds.width, bounds.height, browser.innerWidth, browser.innerHeight);
+    const { left, top } = calculatePickerPosition(field.rect, bounds.width, bounds.height, browser.innerWidth, browser.innerHeight);
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
@@ -151,13 +145,13 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     positionPicker(field);
   }
   async function checkForCodes() {
-    polling.clear();
+    polling.cancelScheduledCheck();
     if (lastURL !== location.href) {
       syncPicker();
       return;
     }
     if (checks.busy || !view || document.hidden || !detectCodeField().ok) return;
-    const check = checks.start();
+    const checkToken = checks.start();
     const requestGeneration = polling.generation;
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
@@ -186,14 +180,14 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
         view.setStatus(error.message);
       }
     } finally {
-      const retry = checks.finish(check);
+      const retry = checks.finish(checkToken);
       if (retry === null) return;
       if (retry) {
         if (view && !document.hidden) checkForCodes();
         return;
       }
       if (view) positionPicker();
-      if (view && !polling.expired()) {
+      if (view && !polling.hasExpired()) {
         polling.schedule(checkForCodes, polling.isCurrent(requestGeneration) ? 2000 : 0);
       } else if (view && !view.hasCodes() && !checkFailed) {
         view.setStatus("No code found. Click ↻ to check again.");
@@ -267,7 +261,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     excludeSeenMessages();
     dismissed = false;
     filledStep = false;
-    polling.invalidate();
+    polling.invalidateResponses();
     view?.clearCodes();
     if (view) {
       view.setStatus("Waiting for your new code…");

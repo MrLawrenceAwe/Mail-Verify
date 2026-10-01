@@ -1,4 +1,4 @@
-import { handleCodeField } from "./code-fields.js";
+import { handleCodeField } from "../shared/code-fields.js";
 
 const coordinators = new WeakMap();
 

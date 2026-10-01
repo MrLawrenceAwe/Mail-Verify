@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { suggestionPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl, startCodePicker } from "../extension/code-picker.js";
+import { calculatePickerPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl, startCodePicker } from "../extension/inline/code-picker-controller.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createFakeTimers } from "./fake_timers.js";
 
@@ -51,8 +51,8 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
 }
 
 test("suggestions sit below the field and stay within the viewport", () => {
-  assert.deepEqual(suggestionPosition({ left: 100, top: 200, bottom: 240 }, 300, 110, 1000, 800), { left: 100, top: 244 });
-  assert.deepEqual(suggestionPosition({ left: 900, top: 700, bottom: 740 }, 300, 110, 1000, 800), { left: 692, top: 586 });
+  assert.deepEqual(calculatePickerPosition({ left: 100, top: 200, bottom: 240 }, 300, 110, 1000, 800), { left: 100, top: 244 });
+  assert.deepEqual(calculatePickerPosition({ left: 900, top: 700, bottom: 740 }, 300, 110, 1000, 800), { left: 692, top: 586 });
 });
 
 test("picker repositions using the current viewport after resize", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { copyPasswordResetLink } from "../extension/reset-link-copy.js";
+import { copyPasswordResetLink } from "../extension/shared/reset-link-copy.js";
 
 test("clipboard access failures retain their cause and provide retry guidance", async () => {
   await assert.rejects(copyPasswordResetLink({

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCompanionClient } from "../extension/companion-client.js";
+import { createCompanionClient } from "../extension/shared/companion-client.js";
 
 const code = { code: "123456" };
 

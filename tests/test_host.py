@@ -28,11 +28,11 @@ class HostTests(unittest.TestCase):
         credentials = {"email": "test@yahoo.com", "password": "unused"}
         sessions = account_sessions.AccountSessions()
         item = {"url": "https://example.com/reset", "receivedAt": 1000, "uid": 1}
-        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "check_with_timeout", return_value=[item]):
+        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "fetch_with_timeout", return_value=[item]):
             result = host.handle_request({"action": "passwordResetLinks"}, sessions)
         self.assertEqual(result, {"passwordResetLinks": [{**item, "accountEmail": credentials["email"]}], "warnings": []})
         from link_extraction import extract_password_reset_link_details
-        self.assertIs(sessions.sessions[credentials["email"]].extract_details, extract_password_reset_link_details)
+        self.assertIs(sessions.sessions[credentials["email"]].extract_item, extract_password_reset_link_details)
 
     def test_non_string_actions_are_rejected_as_unsupported(self):
         for action in (None, [], {}):
@@ -86,7 +86,7 @@ class HostTests(unittest.TestCase):
         session = account_sessions.InboxSession(credentials)
         sessions = account_sessions.AccountSessions()
         sessions.sessions["test@yahoo.com"] = session
-        with patch.object(host, "keychain", return_value={"accounts": [dict(credentials)]}), patch.object(session, "close") as close, patch.object(account_sessions, "check_with_timeout", return_value=[]) as check:
+        with patch.object(host, "keychain", return_value={"accounts": [dict(credentials)]}), patch.object(session, "close") as close, patch.object(account_sessions, "fetch_with_timeout", return_value=[]) as check:
             self.assertEqual(host.handle_request({"action": "codes"}, sessions), {"codes": [], "warnings": []})
             close.assert_not_called()
             check.assert_called_once_with(session)

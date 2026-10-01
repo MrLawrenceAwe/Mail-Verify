@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { requestInlineCheck } from "../extension/inline-client.js";
+import { requestInlineCheck } from "../extension/inline/inline-client.js";
 
 function runtime() {
   let message, disconnect, sent, closed = false;
@@ -24,7 +24,7 @@ function runtime() {
 test("inline check keeps its port open until the response arrives", async () => {
   const chromeRuntime = runtime();
   const pending = requestInlineCheck(chromeRuntime, "codes");
-  assert.deepEqual(chromeRuntime.sent, { kind: "codes" });
+  assert.deepEqual(chromeRuntime.sent, { mailType: "codes" });
   assert.equal(chromeRuntime.closed, false);
   chromeRuntime.respond({ ok: true, codes: [] });
   assert.deepEqual(await pending, { ok: true, codes: [] });
