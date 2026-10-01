@@ -78,7 +78,7 @@ def handle_request(request, sessions):
             keychain("set", {"accounts": account_credentials})
         sessions.remove(address)
         return {"accountEmails": [item["email"] for item in account_credentials]}
-    if action in ("codes", "links", "resetLinks"):
+    if action in ("codes", "confirmationLinks", "passwordResetLinks"):
         account_credentials = load_account_credentials()
         if not account_credentials:
             sessions.close()

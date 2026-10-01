@@ -1,4 +1,5 @@
-import { isSupportedConfirmationUrl } from "./confirmation-url.js";
+import { MAIL_MODES } from "./mail-modes.js";
+import { isSupportedEmailLinkUrl } from "./email-link-url.js";
 import { handleCodeField } from "./code-fields.js";
 import { isFreshMessage } from "./mail-timing.js";
 import { createPopupView } from "./popup-view.js";
@@ -104,9 +105,9 @@ export function createPopupController({
     await useSelectedResult(async () => {
       if (!isFreshMessage(item.receivedAt, clock.now()))
         throw new Error("This link is too old. Request a new email.");
-      if (!isSupportedConfirmationUrl(item.url))
+      if (!isSupportedEmailLinkUrl(item.url))
         throw new Error("This link is not supported.");
-      if (mode === "resetLinks") {
+      if (mode === "passwordResetLinks") {
         if (!clipboard) throw new Error("Clipboard unavailable. Try copying again from the popup.");
         await clipboard.writeText(item.url);
         button.textContent = "Copied";
@@ -116,7 +117,7 @@ export function createPopupController({
       await chrome.tabs.create({ url: item.url });
       markLinkOpened(button);
       setStatus("Confirmation link opened in a new tab.");
-    }, { reusable: mode === "resetLinks" });
+    }, { reusable: mode === "passwordResetLinks" });
   }
   function scheduleCheck(delay = POLL_INTERVAL_MS) {
     if (polling.expired()) {
@@ -131,7 +132,7 @@ export function createPopupController({
     polling.clear();
     closeSession();
     if (!usingResult && !removingAccount)
-      setStatus(`Automatic checking finished. Check again for newer ${mode === "resetLinks" ? "password reset links" : mode}.`);
+      setStatus(`Automatic checking finished. Check again for newer ${MAIL_MODES[mode].resultLabel}.`);
   }
   async function checkInbox() {
     if (usingResult || removingAccount) return;
@@ -153,9 +154,9 @@ export function createPopupController({
         if (mode !== "codes") renderLinks(results, mode);
         else renderCodes(results, targetTab);
         setStatus(
-          response.warnings?.length ? `Some accounts could not be checked: ${response.warnings.join("; ")}` : results.length
-            ? mode === "resetLinks" ? "Check the sender and destination, then copy your password reset link." : mode === "links" ? "Check the sender and destination, then open your confirmation link." : "Choose the code for this website. Checking for newer codes…"
-            : mode === "resetLinks" ? "No recent password reset link yet. Request one and keep this popup open." : mode === "links" ? "No recent confirmation link yet. Request one and keep this popup open." : "No recent code yet. Request one on the website; keep this popup open.",
+          response.warnings?.length
+            ? `Some accounts could not be checked: ${response.warnings.join("; ")}`
+            : results.length ? MAIL_MODES[mode].foundStatus : MAIL_MODES[mode].emptyStatus,
         );
       }
     } catch (error) {
@@ -191,8 +192,8 @@ export function createPopupController({
     startPolling();
   }
   $("checkCodes").addEventListener("click", () => selectMode("codes"));
-  $("checkLinks").addEventListener("click", () => selectMode("links"));
-  $("checkResetLinks").addEventListener("click", () => selectMode("resetLinks"));
+  $("checkConfirmationLinks").addEventListener("click", () => selectMode("confirmationLinks"));
+  $("checkPasswordResetLinks").addEventListener("click", () => selectMode("passwordResetLinks"));
   $("addAccountForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (addingAccount || removingAccount) return;

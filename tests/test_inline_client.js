@@ -33,7 +33,7 @@ test("inline check keeps its port open until the response arrives", async () => 
 
 test("inline check reports a disconnected service worker", async () => {
   const chromeRuntime = runtime();
-  const pending = requestInlineCheck(chromeRuntime, "links");
+  const pending = requestInlineCheck(chromeRuntime, "confirmationLinks");
   chromeRuntime.drop();
   await assert.rejects(pending, /disconnected/);
 });

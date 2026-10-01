@@ -1,3 +1,4 @@
+import { createFakeTimers } from "./fake_timers.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createPopupController } from "../extension/popup-controller.js";
@@ -50,8 +51,8 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
   const controls = Object.fromEntries(
     [
       "checkCodes",
-      "checkLinks",
-      "checkResetLinks",
+      "checkConfirmationLinks",
+      "checkPasswordResetLinks",
       "accounts",
       "addAccount",
       "results",
@@ -66,15 +67,16 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       "extensionId",
       "destination",
       "codeContext",
+      "linkGuidance",
     ].map((id) => [id, new FakeElement()]),
   );
-  const scheduled = new Map();
+  const timers = createFakeTimers();
   const state = {
     now: 1000,
     closes: 0,
     fetchCodes: async () => codes,
-    fetchLinks: async () => [],
-    fetchResetLinks: async () => [],
+    fetchConfirmationLinks: async () => [],
+    fetchPasswordResetLinks: async () => [],
     copied: [],
     failCopy: false,
     opened: [],
@@ -85,7 +87,6 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     sendOneOff: null,
   };
   const tab = { id: 1, url: tabUrl };
-  let nextTimer = 0;
   const client = {
     closeSession() {
       state.closes++;
@@ -93,8 +94,8 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     async sendSessionRequest(action) {
       return action === "status"
         ? { accountEmails: account ? [account] : [] }
-        : action === "resetLinks" ? { resetLinks: await state.fetchResetLinks() }
-        : action === "links" ? { links: await state.fetchLinks() } : { codes: await state.fetchCodes() };
+        : action === "passwordResetLinks" ? { passwordResetLinks: await state.fetchPasswordResetLinks() }
+        : action === "confirmationLinks" ? { confirmationLinks: await state.fetchConfirmationLinks() } : { codes: await state.fetchCodes() };
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);
@@ -126,23 +127,19 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     },
     client,
     clock: { now: () => state.now },
-    setTimeout: (callback, delay) => {
-      const id = ++nextTimer;
-      scheduled.set(id, { callback, delay });
-      return id;
-    },
-    clearTimeout: (id) => scheduled.delete(id),
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout,
   });
   await popup.initialize();
   await settle();
-  return { controls, scheduled, state };
+  return { controls, timers, state };
 }
 
 test("polls whether codes are present or absent", async () => {
   for (const codes of [[code], []]) {
-    const { scheduled } = await setup({ codes });
+    const { timers } = await setup({ codes });
     assert.equal(
-      scheduled.size,
+      timers.length,
       1,
       "keep checking with or without an existing code",
     );
@@ -150,53 +147,53 @@ test("polls whether codes are present or absent", async () => {
 });
 
 test("stops polling after the deadline", async () => {
-  const { controls, scheduled, state } = await setup();
+  const { controls, timers, state } = await setup();
   state.now += 120001;
-  await [...scheduled.values()][0].callback();
-  assert.equal(scheduled.size, 0, "stop after the polling deadline");
+  await timers.shift()();
+  assert.equal(timers.length, 0, "stop after the polling deadline");
   assert.equal(controls.status.textContent, "Automatic checking finished. Check again for newer codes.");
 });
 
 test("does not start a scheduled check after the deadline", async () => {
-  const { scheduled, state } = await setup();
+  const { timers, state } = await setup();
   let requests = 0;
   state.fetchCodes = async () => {
     requests++;
     return [];
   };
   state.now += 120001;
-  await [...scheduled.values()][0].callback();
+  await timers.shift()();
   assert.equal(requests, 0);
   assert.ok(state.closes >= 1);
 });
 
 test("retries temporary mail errors", async () => {
-  const { controls, scheduled, state } = await setup();
+  const { controls, timers, state } = await setup();
   state.fetchCodes = async () => {
     throw Error("Temporary mail error");
   };
   controls.checkCodes.trigger();
   await settle();
-  assert.equal(scheduled.size, 1, "retry after temporary errors");
+  assert.equal(timers.length, 1, "retry after temporary errors");
   assert.equal(controls.status.textContent, "Temporary mail error");
   assert.equal(controls.results.querySelectorAll("button").length, 0);
 });
 
 test("a failed link check clears earlier confirmation links", async () => {
   const { controls, state } = await setup();
-  state.fetchLinks = async () => [link];
-  controls.checkLinks.trigger();
+  state.fetchConfirmationLinks = async () => [link];
+  controls.checkConfirmationLinks.trigger();
   await settle();
   assert.equal(controls.results.querySelectorAll("button").length, 1);
-  state.fetchLinks = async () => { throw Error("Temporary mail error"); };
-  controls.checkLinks.trigger();
+  state.fetchConfirmationLinks = async () => { throw Error("Temporary mail error"); };
+  controls.checkConfirmationLinks.trigger();
   await settle();
   assert.equal(controls.results.querySelectorAll("button").length, 0);
 });
 
 test("ignores stale checks during a fill", async () => {
   for (const failFill of [false, true]) {
-    const { controls, scheduled, state } = await setup();
+    const { controls, timers, state } = await setup();
     let finishCheck;
     state.fetchCodes = () =>
       new Promise((resolve) => {
@@ -220,7 +217,7 @@ test("ignores stale checks during a fill", async () => {
         ? "Tab unavailable"
         : "Code filled. The website may continue automatically.",
     );
-    assert.equal(scheduled.size, failFill ? 1 : 0);
+    assert.equal(timers.length, failFill ? 1 : 0);
     assert.equal(button.disabled, !failFill);
     if (!failFill) assert.deepEqual(state.scriptArgs.args, [{ action: "fill", code: code.code }]);
   }
@@ -290,32 +287,32 @@ test("waits at least two seconds between checks", async () => {
     [3000, 5000],
     [10000, 2000],
   ]) {
-    const { controls, scheduled, state } = await setup();
+    const { controls, timers, state } = await setup();
     state.fetchCodes = async () => {
       state.now += duration;
       return [];
     };
     controls.checkCodes.trigger();
     await settle();
-    assert.equal([...scheduled.values()][0].delay, expected);
+    assert.equal([...timers.values()][0].delay, expected);
   }
 });
 
 test("removes an account and recovers from errors", async () => {
   for (const failRemove of [false, true]) {
-    const { controls, scheduled, state } = await setup();
+    const { controls, timers, state } = await setup();
     state.failRemove = failRemove;
     await controls.accounts.querySelectorAll("button")[0].trigger();
     assert.equal(state.requests[0].action, "removeAccount");
     assert.equal(state.requests[0].email, "test@yahoo.com");
-    assert.equal(scheduled.size, failRemove ? 1 : 0);
+    assert.equal(timers.length, failRemove ? 1 : 0);
     assert.equal(controls.connectedAccountPanel.hidden, !failRemove);
     assert.equal(controls.checkCodes.disabled, false);
   }
 });
 
 test("checks remaining accounts immediately after removal", async () => {
-  const { controls, scheduled, state } = await setup({
+  const { controls, timers, state } = await setup({
     remainingAccountEmails: ["other@yahoo.com"],
   });
   let checks = 0;
@@ -324,7 +321,7 @@ test("checks remaining accounts immediately after removal", async () => {
   await settle();
   assert.equal(checks, 1);
   assert.equal(controls.accounts.children[0].children[0].textContent, "other@yahoo.com");
-  assert.equal(scheduled.size, 1);
+  assert.equal(timers.length, 1);
 });
 
 test("does not remove an account while another account is being added", async () => {
@@ -374,18 +371,20 @@ test("shows multiple accounts and labels codes with their inbox", async () => {
 
 const link = { ...code, url: "https://example.com/confirm?token=secret" };
 test("finds links only on request and opens only the selected link", async () => {
-  const { controls, state, scheduled } = await setup();
-  state.fetchLinks = async () => [link];
+  const { controls, state, timers } = await setup();
+  state.fetchConfirmationLinks = async () => [link];
   assert.deepEqual(state.opened, []);
-  controls.checkLinks.trigger();
+  controls.checkConfirmationLinks.trigger();
   await settle();
   assert.equal(controls.codeContext.hidden, true);
   assert.deepEqual(state.opened, []);
+  assert.deepEqual(controls.results.children[0].children.slice(0, 4).map(line => line.textContent),
+    [link.accountEmail, link.sender, link.subject, "Destination: example.com"]);
   const button = controls.results.querySelectorAll("button")[0];
   assert.equal(button.textContent, "Open confirmation link ↗");
   await button.trigger();
   assert.deepEqual(state.opened, [{ url: link.url }]);
-  assert.equal(scheduled.size, 0);
+  assert.equal(timers.length, 0);
 });
 
 test("rejects codes with future or invalid arrival times before filling", async () => {
@@ -400,8 +399,8 @@ test("rejects codes with future or invalid arrival times before filling", async 
 test("rejects expired and unsafe links at click time", async () => {
   for (const item of [{ ...link, receivedAt: -700000 }, { ...link, url: "http://example.com/confirm" }]) {
     const { controls, state } = await setup();
-    state.fetchLinks = async () => [item];
-    controls.checkLinks.trigger();
+    state.fetchConfirmationLinks = async () => [item];
+    controls.checkConfirmationLinks.trigger();
     await settle();
     await controls.results.querySelectorAll("button")[0].trigger();
     assert.deepEqual(state.opened, []);
@@ -414,8 +413,8 @@ test("switching modes ignores a pending code response", async () => {
   let resolve;
   state.fetchCodes = () => new Promise((done) => { resolve = done; });
   controls.checkCodes.trigger();
-  state.fetchLinks = async () => [link];
-  controls.checkLinks.trigger();
+  state.fetchConfirmationLinks = async () => [link];
+  controls.checkConfirmationLinks.trigger();
   await settle();
   resolve([code]);
   await settle();
@@ -429,9 +428,9 @@ test("switching modes ignores a pending code response", async () => {
 
 
 test("password reset links are copied only on click without opening a tab", async () => {
-  const { controls, state, scheduled } = await setup();
-  state.fetchResetLinks = async () => [link];
-  controls.checkResetLinks.trigger();
+  const { controls, state, timers } = await setup();
+  state.fetchPasswordResetLinks = async () => [link];
+  controls.checkPasswordResetLinks.trigger();
   await settle();
   assert.deepEqual(state.copied, []);
   const button = controls.results.querySelectorAll("button")[0];
@@ -441,17 +440,17 @@ test("password reset links are copied only on click without opening a tab", asyn
   assert.deepEqual(state.opened, []);
   assert.equal(button.textContent, "Copied");
   assert.match(controls.status.textContent, /copied to clipboard/);
-  assert.equal(scheduled.size, 0);
+  assert.equal(timers.length, 0);
 });
 
 test("reset copy rejects expired links and reports clipboard failures", async () => {
   for (const scenario of ["expired", "unsafe", "denied"]) {
     const { controls, state } = await setup();
-    state.fetchResetLinks = async () => [{ ...link,
+    state.fetchPasswordResetLinks = async () => [{ ...link,
       receivedAt: scenario === "expired" ? -700000 : link.receivedAt,
       url: scenario === "unsafe" ? "http://example.com/reset" : link.url }];
     state.failCopy = scenario === "denied";
-    controls.checkResetLinks.trigger();
+    controls.checkPasswordResetLinks.trigger();
     await settle();
     const button = controls.results.querySelectorAll("button")[0];
     await button.trigger();
@@ -466,14 +465,14 @@ test("reset copy rejects expired links and reports clipboard failures", async ()
 test("reset links can be recopied and another account selected after an unchanged check", async () => {
   const { controls, state } = await setup();
   const second = { ...link, accountEmail: "second@yahoo.com", url: "https://example.com/reset?token=second" };
-  state.fetchResetLinks = async () => [link, second];
-  controls.checkResetLinks.trigger();
+  state.fetchPasswordResetLinks = async () => [link, second];
+  controls.checkPasswordResetLinks.trigger();
   await settle();
   const buttons = controls.results.querySelectorAll("button");
   await buttons[0].trigger();
   assert.ok(buttons.every(button => !button.disabled));
   await buttons[0].trigger();
-  controls.checkResetLinks.trigger();
+  controls.checkPasswordResetLinks.trigger();
   await settle();
   assert.deepEqual(controls.results.querySelectorAll("button"), buttons);
   assert.ok(buttons.every(button => !button.disabled));
@@ -486,16 +485,47 @@ test("reset copy locks results only while the clipboard write is pending", async
   const { controls, state } = await setup();
   let finishCopy;
   state.copyWait = new Promise(resolve => { finishCopy = resolve; });
-  state.fetchResetLinks = async () => [link];
-  controls.checkResetLinks.trigger();
+  state.fetchPasswordResetLinks = async () => [link];
+  controls.checkPasswordResetLinks.trigger();
   await settle();
   const button = controls.results.querySelectorAll("button")[0];
   const pending = button.trigger();
   await settle();
   assert.equal(button.disabled, true);
-  assert.equal(controls.checkResetLinks.disabled, true);
+  assert.equal(controls.checkPasswordResetLinks.disabled, true);
   finishCopy();
   await pending;
   assert.equal(button.disabled, false);
-  assert.equal(controls.checkResetLinks.disabled, false);
+  assert.equal(controls.checkPasswordResetLinks.disabled, false);
+});
+
+test("popup guidance follows the selected action and clears when returning to codes", async () => {
+  const { controls } = await setup();
+  assert.equal(controls.linkGuidance.hidden, true);
+  controls.checkConfirmationLinks.trigger();
+  await settle();
+  assert.equal(controls.linkGuidance.hidden, false);
+  assert.match(controls.linkGuidance.textContent, /Opening a link in a new tab/);
+  controls.checkPasswordResetLinks.trigger();
+  await settle();
+  assert.match(controls.linkGuidance.textContent, /copy your reset link and paste/);
+  assert.doesNotMatch(controls.linkGuidance.textContent, /open|confirm/i);
+  controls.checkCodes.trigger();
+  await settle();
+  assert.equal(controls.linkGuidance.hidden, true);
+  assert.equal(controls.linkGuidance.textContent, "");
+});
+
+test("finished link checks name the selected email purpose", async () => {
+  for (const [control, label] of [
+    ["checkConfirmationLinks", "confirmation links"],
+    ["checkPasswordResetLinks", "password reset links"],
+  ]) {
+    const { controls, state, timers } = await setup();
+    controls[control].trigger();
+    await settle();
+    state.now += 120001;
+    await timers.shift()();
+    assert.equal(controls.status.textContent, `Automatic checking finished. Check again for newer ${label}.`);
+  }
 });

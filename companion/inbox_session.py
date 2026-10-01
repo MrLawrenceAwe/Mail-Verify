@@ -6,7 +6,7 @@ import ssl
 import time
 
 from code_extraction import extract_code_details
-from link_extraction import extract_link_details, extract_password_reset_details
+from link_extraction import extract_confirmation_link_details, extract_password_reset_link_details
 from errors import UserError
 
 MAX_MESSAGE_AGE_SECONDS = 600
@@ -17,6 +17,12 @@ MAX_NEW_RESULTS_PER_SCAN = 5
 RECENT_RESULT_LIMIT = 5
 DISTINCT_SENDER_LIMIT = 5
 MAX_MESSAGE_BYTES = 1_000_000
+
+
+def message_uid(metadata):
+    """Read the UID from an IMAP metadata line or body-fetch header."""
+    match = re.search(rb"\bUID (\d+)\b", metadata)
+    return int(match.group(1)) if match else None
 
 
 def connect_imap(credentials):
@@ -36,8 +42,11 @@ def connect_imap(credentials):
 
 class InboxSession:
     def __init__(self, credentials, kind="codes"):
-        self.extract_details = {"codes": extract_code_details, "links": extract_link_details,
-                                "resetLinks": extract_password_reset_details}[kind]
+        self.extract_details = {
+            "codes": extract_code_details,
+            "confirmationLinks": extract_confirmation_link_details,
+            "passwordResetLinks": extract_password_reset_link_details,
+        }[kind]
         self.credentials = credentials
         self.conn = None
         self.last_seen_uid = None
@@ -72,10 +81,10 @@ class InboxSession:
             if status != "OK":
                 raise UserError("Yahoo could not inspect recent messages.")
             uids = {
-                int(match.group(1))
+                uid
                 for entry in metadata
                 if isinstance(entry, bytes)
-                if (match := re.search(rb"\bUID (\d+)\b", entry))
+                if (uid := message_uid(entry)) is not None
             }
             # A successful FETCH can still omit a message. Repeat the bounded
             # first scan on the next poll before advancing past its UID.
@@ -107,10 +116,10 @@ class InboxSession:
         if status != "OK":
             raise UserError("Yahoo could not inspect recent messages.")
         returned_uids = {
-            int(match.group(1))
+            uid
             for entry in metadata
             if isinstance(entry, bytes)
-            if (match := re.search(rb"\bUID (\d+)\b", entry))
+            if (uid := message_uid(entry)) is not None
         }
         self.pending_metadata_uids.difference_update(returned_uids)
         return metadata
@@ -120,14 +129,14 @@ class InboxSession:
         for entry in metadata:
             if not isinstance(entry, bytes):
                 continue
-            uid = re.search(rb"\bUID (\d+)\b", entry)
+            uid = message_uid(entry)
             date = imaplib.Internaldate2tuple(entry)
             size = re.search(rb"\bRFC822.SIZE (\d+)\b", entry)
-            if not uid or not date or not size or int(size.group(1)) > MAX_MESSAGE_BYTES:
+            if uid is None or not date or not size or int(size.group(1)) > MAX_MESSAGE_BYTES:
                 continue
             received = time.mktime(date)
             if -MAX_FUTURE_SKEW_SECONDS <= now - received <= MAX_MESSAGE_AGE_SECONDS:
-                eligible[int(uid.group(1))] = min(received, now)
+                eligible[uid] = min(received, now)
         return eligible
 
     def _fetch_items(self, candidates):
@@ -146,9 +155,9 @@ class InboxSession:
             for entry in body:
                 if not isinstance(entry, tuple):
                     continue
-                uid = re.search(rb"\bUID (\d+)\b", entry[0])
-                if uid:
-                    messages[int(uid.group(1))] = entry[1]
+                uid = message_uid(entry[0])
+                if uid is not None:
+                    messages[uid] = entry[1]
             for uid in batch:
                 received = self.pending_received_at_by_uid[uid]
                 if uid not in messages:
@@ -211,12 +220,15 @@ class InboxSession:
             self.close()
             raise
 
-    def _results(self):
-        newest = sorted(
+    def _newest_items(self):
+        return sorted(
             self.items_by_uid.values(),
             key=lambda item: (item["receivedAt"], item["uid"]),
             reverse=True,
         )
+
+    def _results(self):
+        newest = self._newest_items()
         newest_overall = newest[:RECENT_RESULT_LIMIT]
         newest_by_sender = self._newest_distinct_senders(newest)
         retained_uids = {item["uid"] for item in (*newest_overall, *newest_by_sender)}
@@ -226,11 +238,7 @@ class InboxSession:
 
     def _newest_distinct_senders(self, newest=None):
         if newest is None:
-            newest = sorted(
-                self.items_by_uid.values(),
-                key=lambda item: (item["receivedAt"], item["uid"]),
-                reverse=True,
-            )
+            newest = self._newest_items()
         senders = set()
         distinct = []
         for item in newest:

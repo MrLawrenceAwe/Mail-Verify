@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getConfirmationStepKey, isConfirmationRequestControl, isConfirmationScreen, isPasswordResetScreen, mutationAffectsConfirmation, selectConfirmationLinks, startConfirmationCard } from "../extension/confirmation-card.js";
+import { detectEmailLinkStep, isEmailLinkRequestControl, isConfirmationScreen, isPasswordResetScreen, mutationAffectsEmailLinkCard, selectEmailLinks, startEmailLinkCard } from "../extension/email-link-card.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createFakeTimers } from "./fake_timers.js";
 
@@ -8,20 +8,20 @@ const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const stepMutation = () => [{ type: "characterData", target: { nodeType: 3, textContent: "Check your email" } }];
 
-function setup(panel = null, kind = "links") {
+function setup(panel = null, kind = "confirmationLinks") {
   const timers = createFakeTimers(), events = {}, windowEvents = {};
   const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, stepReads: 0, views: [], respond: async () => ({ ok: true, [kind]: [item] }) };
   state.kind = kind;
   const document = { hidden: false, documentElement: { append() {} }, querySelector: () => ({}), addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
-  startConfirmationCard({
+  startEmailLinkCard({
     browser: { navigator: { clipboard: { async writeText(value) { state.copied = value; } } }, document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
       chrome: { runtime: inlineRuntime(async (kind) => { assert.equal(kind, state.kind); state.requests++; return state.respond(); }) },
       Date: { now: () => state.now },
       setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
-    }, getStepKey: () => { state.stepReads++; return state.detected
-      ? (state.panel ? getConfirmationStepKey({ querySelectorAll: () => [state.panel] }) : state.screenKey)
+    }, detectStep: () => { state.stepReads++; return state.detected
+      ? (state.panel ? detectEmailLinkStep({ querySelectorAll: () => [state.panel] }) : { key: state.screenKey, mode: state.kind })
       : null; }, detectCode: () => state.code,
     createView(_document, callbacks) {
       const view = { callbacks, removed: false, links: [], host: { remove() { view.removed = true; }, contains() { return false; } },
@@ -46,24 +46,24 @@ test("distinguishes replacement confirmation panels with identical text", () => 
   const panel = () => ({ innerText: "Check your email", getClientRects: () => [{}], checkVisibility: () => true });
   let current = panel();
   const document = { querySelectorAll: () => [current] };
-  const first = getConfirmationStepKey(document);
-  assert.equal(getConfirmationStepKey(document), first);
+  const first = detectEmailLinkStep(document);
+  assert.deepEqual(detectEmailLinkStep(document), first);
   current = panel();
-  assert.notEqual(getConfirmationStepKey(document), first);
+  assert.notDeepEqual(detectEmailLinkStep(document), first);
 });
 
 test("countdown changes keep the same confirmation step", () => {
   const panel = { innerText: "Check your email. Resend in 30 seconds", getClientRects: () => [{}], checkVisibility: () => true };
   const document = { querySelectorAll: () => [panel] };
-  const first = getConfirmationStepKey(document);
+  const first = detectEmailLinkStep(document);
   panel.innerText = "Check your email. Resend in 29 seconds";
-  assert.equal(getConfirmationStepKey(document), first);
+  assert.deepEqual(detectEmailLinkStep(document), first);
 });
 
 test("short-unit countdown ticks retain links and the polling deadline", async () => {
-  for (const kind of ["links", "resetLinks"]) {
+  for (const kind of ["confirmationLinks", "passwordResetLinks"]) {
     for (const unit of ["s", "m"]) {
-      const prompt = kind === "resetLinks" ? "Reset your password. Check your email." : "Check your email.";
+      const prompt = kind === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
       const panel = { innerText: `${prompt} Resend email in 30${unit}`, getClientRects: () => [{}], checkVisibility: () => true };
       const f = setup(panel, kind); await settle();
       const view = f.state.views[0];
@@ -83,9 +83,9 @@ test("short-unit countdown ticks retain links and the polling deadline", async (
 });
 
 test("countdown completion retains confirmation and reset links and the deadline", async () => {
-  for (const kind of ["links", "resetLinks"]) {
+  for (const kind of ["confirmationLinks", "passwordResetLinks"]) {
     for (const countdown of ["Resend in 30 seconds", "Resend email in 30s", "Resend in 00:30"]) {
-      const prompt = kind === "resetLinks" ? "Reset your password. Check your email." : "Check your email.";
+      const prompt = kind === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
       const panel = { innerText: `${prompt} ${countdown}`, getClientRects: () => [{}], checkVisibility: () => true };
       const f = setup(panel, kind); await settle();
       f.state.now = 40000;
@@ -105,8 +105,8 @@ test("countdown completion retains confirmation and reset links and the deadline
 test("recognises controls that request another confirmation message", () => {
   const control = (textContent) => ({ textContent, getAttribute: () => "" });
   for (const label of ["Resend email", "Send again", "Send confirmation email", "Request verification link"])
-    assert.equal(isConfirmationRequestControl(control(label)), true, label);
-  assert.equal(isConfirmationRequestControl(control("Contact support")), false);
+    assert.equal(isEmailLinkRequestControl(control(label)), true, label);
+  assert.equal(isEmailLinkRequestControl(control("Contact support")), false);
 });
 
 test("ignores unrelated page mutations but scans prompt and code-field changes", () => {
@@ -116,11 +116,11 @@ test("ignores unrelated page mutations but scans prompt and code-field changes",
   const input = { nodeType: 1, matches: (selector) => selector.includes("input") };
   const panel = { nodeType: 1, closest: () => ({}), matches: () => false };
   const mutation = (type, target, addedNodes = []) => ({ type, target, addedNodes, removedNodes: [] });
-  assert.equal(mutationAffectsConfirmation([mutation("attributes", outside)], null, document, true), false);
-  assert.equal(mutationAffectsConfirmation([mutation("childList", outside, [{ nodeType: 3, textContent: "Price changed" }])], null, document, true), false);
-  assert.equal(mutationAffectsConfirmation(stepMutation(), null, document, false), true);
-  assert.equal(mutationAffectsConfirmation([mutation("childList", outside, [input])], null, document, false), true);
-  assert.equal(mutationAffectsConfirmation([mutation("characterData", { nodeType: 3, textContent: "bob@example.com", parentElement: panel })], null, document, true), true);
+  assert.equal(mutationAffectsEmailLinkCard([mutation("attributes", outside)], null, document, true), false);
+  assert.equal(mutationAffectsEmailLinkCard([mutation("childList", outside, [{ nodeType: 3, textContent: "Price changed" }])], null, document, true), false);
+  assert.equal(mutationAffectsEmailLinkCard(stepMutation(), null, document, false), true);
+  assert.equal(mutationAffectsEmailLinkCard([mutation("childList", outside, [input])], null, document, false), true);
+  assert.equal(mutationAffectsEmailLinkCard([mutation("characterData", { nodeType: 3, textContent: "bob@example.com", parentElement: panel })], null, document, true), true);
 });
 
 test("unrelated mutations do not schedule a confirmation scan", async () => {
@@ -136,7 +136,7 @@ test("unrelated mutations do not schedule a confirmation scan", async () => {
 });
 
 test("selects fresh HTTPS links and omits older or unsafe candidates", () => {
-  assert.deepEqual(selectConfirmationLinks([item, { ...item, receivedAt: 1 }, { ...item, url: "javascript:alert(1)" }, { ...item, receivedAt: 20000 }], 5000, 10000), [item]);
+  assert.deepEqual(selectEmailLinks([item, { ...item, receivedAt: 1 }, { ...item, url: "javascript:alert(1)" }, { ...item, receivedAt: 20000 }], 5000, 10000), [item]);
 });
 
 test("renders matching mail, validates open and remains dismissed", async () => {
@@ -179,7 +179,7 @@ test("navigation discards a late response and code forms suppress the card", asy
   f.location.href = "https://example.com/done";
   f.state.detected = false;
   f.windowEvents.popstate(); await f.run(250);
-  finish({ ok: true, links: [{ ...item, uid: 2 }] }); await pending;
+  finish({ ok: true, confirmationLinks: [{ ...item, uid: 2 }] }); await pending;
   assert.equal(f.state.views[0].removed, true);
   assert.equal(f.state.views[0].links[0].uid, 1);
   f.state.detected = true; f.state.code = true;
@@ -197,8 +197,8 @@ test("resend clears old links and expiry prevents opening", async () => {
 });
 
 test("input-button resends invalidate old confirmation and reset links", async () => {
-  for (const kind of ["links", "resetLinks"]) {
-    const prompt = kind === "resetLinks" ? "Reset your password. Check your email." : "Check your email.";
+  for (const kind of ["confirmationLinks", "passwordResetLinks"]) {
+    const prompt = kind === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
     const panel = { innerText: prompt, getClientRects: () => [{}], checkVisibility: () => true };
     const f = setup(panel, kind); await settle();
     const oldView = f.state.views[0];
@@ -251,7 +251,7 @@ test("a new confirmation step on the same URL clears links from the previous ste
   assert.equal(oldView.callbacks.beforeUse(item), false);
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now = 21_000;
-  f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
+  f.state.respond = async () => ({ ok: true, confirmationLinks: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
   await f.run(8000);
   assert.deepEqual(f.state.views.at(-1).links.map(link => link.uid), [2]);
 });
@@ -280,7 +280,7 @@ test("a reused confirmation panel resets links when its signup changes", async (
   assert.equal(oldView.callbacks.beforeUse(item), false);
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now = 21_000;
-  f.state.respond = async () => ({ ok: true, links: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
+  f.state.respond = async () => ({ ok: true, confirmationLinks: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
   await f.run(8000);
   assert.deepEqual(f.state.views.at(-1).links.map(link => link.uid), [2]);
 });
@@ -294,8 +294,8 @@ test("retry during an active check ignores its response and immediately checks a
   const firstCount = f.state.requests;
   view.callbacks.onRetry();
   assert.equal(f.state.requests, firstCount, "the native client handles one request at a time");
-  f.state.respond = async () => ({ ok: true, links: [{ ...item, uid: 3 }] });
-  finishFirst({ ok: true, links: [{ ...item, uid: 2 }] });
+  f.state.respond = async () => ({ ok: true, confirmationLinks: [{ ...item, uid: 3 }] });
+  finishFirst({ ok: true, confirmationLinks: [{ ...item, uid: 2 }] });
   await pending;
   assert.equal(f.state.requests, firstCount + 1);
   assert.equal(view.links[0].uid, 3);
@@ -312,11 +312,11 @@ test("an old check cannot consume a retry queued on a new page", async () => {
   f.state.respond = () => new Promise(resolve => { finishNew = resolve; });
   await f.run(250);
   f.state.views.at(-1).callbacks.onRetry();
-  finishOld({ ok: true, links: [] });
+  finishOld({ ok: true, confirmationLinks: [] });
   await oldPending;
   assert.equal(f.state.requests, 3);
-  f.state.respond = async () => ({ ok: true, links: [{ ...item, uid: 4 }] });
-  finishNew({ ok: true, links: [] });
+  f.state.respond = async () => ({ ok: true, confirmationLinks: [{ ...item, uid: 4 }] });
+  finishNew({ ok: true, confirmationLinks: [] });
   await settle();
   assert.equal(f.state.requests, 4);
   assert.equal(f.state.views.at(-1).links[0].uid, 4);
@@ -332,9 +332,9 @@ test("detects reset email waiting screens while excluding request and new-passwo
 
 test("reset card requests reset mail, copies on selection, and clears results on resend", async () => {
   const panel = { innerText: "Reset your password. Check your email", getClientRects: () => [{}], checkVisibility: () => true };
-  const f = setup(panel, "resetLinks"); await settle();
+  const f = setup(panel, "passwordResetLinks"); await settle();
   const view = f.state.views[0];
-  assert.equal(view.callbacks.mode, "resetLinks");
+  assert.equal(view.callbacks.mode, "passwordResetLinks");
   assert.deepEqual(view.links, [item]);
   assert.equal(f.state.copied, undefined);
   assert.equal(view.callbacks.beforeUse(item), true);
@@ -357,7 +357,7 @@ test("an unrelated forgot-password prompt cannot override explicit confirmation 
     assert.equal(isPasswordResetScreen(innerText), false, innerText);
     const panel = { innerText, getClientRects: () => [{}], checkVisibility: () => true };
     const f = setup(panel); await settle();
-    assert.equal(f.state.views[0].callbacks.mode, "links");
+    assert.equal(f.state.views[0].callbacks.mode, "confirmationLinks");
     assert.deepEqual(f.state.views[0].links, [item]);
   }
 });
@@ -377,8 +377,8 @@ test("reset intent must belong to the email instruction or its heading", () => {
 
 test("line-separated reset headings retain reset mode after step text normalization", async () => {
   const panel = { innerText: "Forgot password?\nCheck your inbox\nSign in", getClientRects: () => [{}], checkVisibility: () => true };
-  const f = setup(panel, "resetLinks"); await settle();
-  assert.equal(f.state.views[0].callbacks.mode, "resetLinks");
+  const f = setup(panel, "passwordResetLinks"); await settle();
+  assert.equal(f.state.views[0].callbacks.mode, "passwordResetLinks");
   assert.deepEqual(f.state.views[0].links, [item]);
 });
 
@@ -392,8 +392,8 @@ test("reset instructions spanning continuation lines use reset mode", async () =
     assert.equal(isPasswordResetScreen(innerText), true, innerText);
     assert.equal(isConfirmationScreen(innerText), false, innerText);
     const panel = { innerText, getClientRects: () => [{}], checkVisibility: () => true };
-    const f = setup(panel, "resetLinks"); await settle();
-    assert.equal(f.state.views[0].callbacks.mode, "resetLinks");
+    const f = setup(panel, "passwordResetLinks"); await settle();
+    assert.equal(f.state.views[0].callbacks.mode, "passwordResetLinks");
     assert.deepEqual(f.state.views[0].links, [item]);
   }
 });
@@ -407,4 +407,32 @@ test("line-separated navigation still cannot select reset mode", () => {
     assert.equal(isPasswordResetScreen(text), false, text);
     assert.equal(isConfirmationScreen(text), true, text);
   }
+});
+
+test("step detection reads each visible panel once and returns its purpose separately", () => {
+  let reads = 0;
+  const panel = {
+    get innerText() { reads++; return "Reset your password. Check your email."; },
+    getClientRects: () => [{}], checkVisibility: () => true,
+  };
+  const step = detectEmailLinkStep({ querySelectorAll: () => [panel] });
+  assert.equal(reads, 1);
+  assert.equal(step.mode, "passwordResetLinks");
+  assert.doesNotMatch(step.key, /^passwordResetLinks:/);
+});
+
+test("a purpose change with the same step key discards old results and switches requests", async () => {
+  const f = setup(); await settle();
+  const oldView = f.state.views.at(-1);
+  f.state.kind = "passwordResetLinks";
+  const newer = { ...item, uid: 2, receivedAt: 11000 };
+  f.state.respond = async () => ({ ok: true, passwordResetLinks: [newer] });
+  f.state.mutate(stepMutation());
+  await f.run(250);
+  assert.equal(oldView.removed, true);
+  assert.equal(f.state.views.at(-1).callbacks.mode, "passwordResetLinks");
+  assert.deepEqual(f.state.views.at(-1).links, []);
+  f.state.now = 11000;
+  await f.run(8000);
+  assert.deepEqual(f.state.views.at(-1).links, [newer]);
 });

@@ -1,4 +1,4 @@
-export function isSupportedConfirmationUrl(value) {
+export function isSupportedEmailLinkUrl(value) {
   if (typeof value !== "string" || value.length > 4096 ||
       !/^https:\/\//i.test(value) || /[\s\x00-\x1f\x7f\\]/.test(value))
     return false;

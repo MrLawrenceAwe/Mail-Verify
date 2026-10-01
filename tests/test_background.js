@@ -71,16 +71,16 @@ test("automatic checks pass partial account warnings to the picker", async () =>
 
 
 test("link requests use their own result type and enforce active tab access", async () => {
-  const links = [{ url: "https://example.com/confirm", receivedAt: 1000 }];
-  const fixture = setup({ ok: true, links });
-  assert.deepEqual(await fixture.request({}, "links"), { ok: true, links, warnings: [] });
-  assert.equal((await fixture.request({ tab: { id: 2 } }, "links")).ok, false);
+  const confirmationLinks = [{ url: "https://example.com/confirm", receivedAt: 1000 }];
+  const fixture = setup({ ok: true, confirmationLinks });
+  assert.deepEqual(await fixture.request({}, "confirmationLinks"), { ok: true, confirmationLinks, warnings: [] });
+  assert.equal((await fixture.request({ tab: { id: 2 } }, "confirmationLinks")).ok, false);
 });
 
 
 test("password reset requests return reset links and enforce active tab access", async () => {
-  const resetLinks = [{ url: "https://example.com/reset", receivedAt: 1000 }];
-  const fixture = setup({ ok: true, resetLinks });
-  assert.deepEqual(await fixture.request({}, "resetLinks"), { ok: true, resetLinks, warnings: [] });
-  assert.equal((await fixture.request({ tab: { id: 2 } }, "resetLinks")).ok, false);
+  const passwordResetLinks = [{ url: "https://example.com/reset", receivedAt: 1000 }];
+  const fixture = setup({ ok: true, passwordResetLinks });
+  assert.deepEqual(await fixture.request({}, "passwordResetLinks"), { ok: true, passwordResetLinks, warnings: [] });
+  assert.equal((await fixture.request({ tab: { id: 2 } }, "passwordResetLinks")).ok, false);
 });

@@ -33,22 +33,22 @@ class AccountSessionsTests(unittest.TestCase):
             sessions.fetch_recent_items(accounts)
             old = sessions.sessions["one@yahoo.com"]
             with patch.object(old, "close") as close:
-                self.assertEqual(sessions.fetch_recent_items(accounts, "links"), {"links": [], "warnings": []})
+                self.assertEqual(sessions.fetch_recent_items(accounts, "confirmationLinks"), {"confirmationLinks": [], "warnings": []})
                 close.assert_called_once()
-            from link_extraction import extract_link_details
-            self.assertIs(sessions.sessions["one@yahoo.com"].extract_details, extract_link_details)
+            from link_extraction import extract_confirmation_link_details
+            self.assertIs(sessions.sessions["one@yahoo.com"].extract_details, extract_confirmation_link_details)
 
     def test_reset_mode_discards_confirmation_scan_state(self):
         accounts = [{"email": "one@yahoo.com", "password": "unused"}]
         sessions = account_sessions.AccountSessions()
         with patch.object(account_sessions, "check_with_timeout", return_value=[]):
-            sessions.fetch_recent_items(accounts, "links")
+            sessions.fetch_recent_items(accounts, "confirmationLinks")
             old = sessions.sessions["one@yahoo.com"]
             with patch.object(old, "close") as close:
-                self.assertEqual(sessions.fetch_recent_items(accounts, "resetLinks"), {"resetLinks": [], "warnings": []})
+                self.assertEqual(sessions.fetch_recent_items(accounts, "passwordResetLinks"), {"passwordResetLinks": [], "warnings": []})
                 close.assert_called_once()
-            from link_extraction import extract_password_reset_details
-            self.assertIs(sessions.sessions["one@yahoo.com"].extract_details, extract_password_reset_details)
+            from link_extraction import extract_password_reset_link_details
+            self.assertIs(sessions.sessions["one@yahoo.com"].extract_details, extract_password_reset_link_details)
 
     def test_whole_check_times_out(self):
         with patch.object(account_sessions, "CHECK_TIMEOUT_SECONDS", 0.01), patch.object(

@@ -1,17 +1,22 @@
-import { createConfirmationView } from "./confirmation-card-view.js";
-import { isSupportedConfirmationUrl } from "./confirmation-url.js";
+import { MAIL_MODES } from "./mail-modes.js";
+import { createEmailLinkCardView } from "./email-link-card-view.js";
+import { isSupportedEmailLinkUrl } from "./email-link-url.js";
 import { normalizeStepText } from "./step-text.js";
 import { initialStepCutoff, isFreshMessage, resendCutoff } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createPollingLifecycle, createRetryGate } from "./polling-lifecycle.js";
 
-const confirmationPanelIds = new WeakMap();
-let nextConfirmationPanelId = 1;
+const emailLinkPanelIds = new WeakMap();
+let nextEmailLinkPanelId = 1;
 
 export function isConfirmationScreen(text) {
+  return !isPasswordResetScreen(text) && matchesConfirmationPrompt(text);
+}
+
+function matchesConfirmationPrompt(text) {
   const value = text.replace(/\s+/g, " ").trim();
-  if (!value || value.length > 2500 || /\b(?:newsletter|unsubscribe)\b/i.test(value) || isPasswordResetScreen(text)) return false;
+  if (!value || value.length > 2500 || /\b(?:newsletter|unsubscribe)\b/i.test(value)) return false;
   return /\bcheck\s+(?:your\s+)?(?:e-?mail|inbox)\b/i.test(value) ||
     /\b(?:we(?:'ve| have)?\s+)?sent\b.{0,65}\b(?:confirmation|verification|activation)\s+(?:e-?mail|link)\b/i.test(value) ||
     /\b(?:click|follow|open)\b.{0,45}\blink\b.{0,70}\b(?:confirm|verify|activate)\b.{0,30}\b(?:e-?mail|account)\b/i.test(value);
@@ -37,29 +42,32 @@ export function isPasswordResetScreen(text) {
     (passwordReset.test(phrase) || resetHeading.test(phrases[index - 1] || "")));
 }
 
-export function getConfirmationStepKey(document) {
+export function detectEmailLinkStep(document) {
   // Inspect short visible task panels, never hidden templates or the extension card.
   const panels = [...document.querySelectorAll("main, [role=main], form, [role=dialog]")];
   if (!panels.length) panels.push(document.body);
-  const panel = panels.find((panel) => panel && panel.getClientRects().length &&
-    panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
-    (isPasswordResetScreen(panel.innerText || "") || isConfirmationScreen(panel.innerText || "")));
-  if (!panel) return null;
-  if (!confirmationPanelIds.has(panel)) confirmationPanelIds.set(panel, nextConfirmationPanelId++);
-  // Keep countdown updates within one step, but distinguish a new signup
-  // shown inside the same panel element.
-  const text = normalizeStepText(panel.innerText || "");
-  return `${isPasswordResetScreen(panel.innerText || "") ? "resetLinks:" : ""}${confirmationPanelIds.get(panel)}:${text}`;
+  for (const panel of panels) {
+    if (!panel?.getClientRects().length ||
+        !panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
+    const text = panel.innerText || "";
+    const mode = isPasswordResetScreen(text) ? "passwordResetLinks"
+      : matchesConfirmationPrompt(text) ? "confirmationLinks" : null;
+    if (!mode) continue;
+    if (!emailLinkPanelIds.has(panel)) emailLinkPanelIds.set(panel, nextEmailLinkPanelId++);
+    // Countdown changes retain the step; a new task in the same panel changes it.
+    return { key: `${emailLinkPanelIds.get(panel)}:${normalizeStepText(text)}`, mode };
+  }
+  return null;
 }
 
-export function selectConfirmationLinks(items, minReceivedAtMs, now) {
+export function selectEmailLinks(items, minReceivedAtMs, now) {
   return items.filter((item) => {
     if (!isFreshMessage(item.receivedAt, now, minReceivedAtMs)) return false;
-    return isSupportedConfirmationUrl(item.url);
+    return isSupportedEmailLinkUrl(item.url);
   }).sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 5);
 }
 
-export function isConfirmationRequestControl(control) {
+export function isEmailLinkRequestControl(control) {
   const label = (control?.getAttribute?.("aria-label") ||
     (control?.tagName === "INPUT" ? control.value : control?.textContent) || "")
     .replace(/\s+/g, " ").trim();
@@ -69,7 +77,7 @@ export function isConfirmationRequestControl(control) {
     /\b(?:e-?mail|link)\b/i.test(label);
 }
 
-export function mutationAffectsConfirmation(records, host, document, screenActive) {
+export function mutationAffectsEmailLinkCard(records, host, document, screenActive) {
   const panels = "main, [role=main], form, [role=dialog]";
   const relevantElements = `${panels}, input`;
   const relevantText = (value) => /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(value || "");
@@ -91,16 +99,20 @@ export function mutationAffectsConfirmation(records, host, document, screenActiv
   });
 }
 
-export function startConfirmationCard({ browser = globalThis, getStepKey = getConfirmationStepKey,
-  page = getPageCoordinator(browser), detectCode = () => page.detectCodeField().ok, createView = createConfirmationView } = {}) {
+export function startEmailLinkCard({ browser = globalThis, detectStep = detectEmailLinkStep,
+  page = getPageCoordinator(browser), detectCode = () => page.detectCodeField().ok, createView = createEmailLinkCardView } = {}) {
   const { document, location, chrome, setTimeout, clearTimeout, Date: clock = Date } = browser;
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 8000 });
   const checks = createRetryGate();
   let view, scanTimer;
   let lastURL = location.href, dismissed = false, minReceivedAtMs, screenActive = false, stepKey;
   let currentItems = [];
-  let mode = "links";
-  const waitingText = () => mode === "resetLinks" ? "Waiting for your password reset email…" : "Waiting for your confirmation email…";
+  let mode = "confirmationLinks";
+  const waitingText = () => MAIL_MODES[mode].waitingStatus;
+  function isCurrentStep() {
+    const step = detectStep(document);
+    return step?.key === stepKey && step?.mode === mode;
+  }
   function unmount() {
     polling.invalidate();
     checks.invalidate();
@@ -121,7 +133,7 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
   async function check() {
     polling.clear();
     if (!view || document.hidden || checks.busy) return;
-    if (lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey) { sync(); return; }
+    if (lastURL !== location.href || detectCode() || !isCurrentStep()) { sync(); return; }
     if (polling.expired()) {
       view.setStatus("Checking finished. Click ↻ to check again.");
       return;
@@ -131,12 +143,12 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
     try {
       const response = await requestInlineCheck(chrome.runtime, mode);
       if (!polling.isCurrent(attempt) || !view || document.hidden) return;
-      if (lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey) { sync(); return; }
+      if (lastURL !== location.href || detectCode() || !isCurrentStep()) { sync(); return; }
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
-      currentItems = selectConfirmationLinks(response[mode] || [], minReceivedAtMs, clock.now());
+      currentItems = selectEmailLinks(response[mode] || [], minReceivedAtMs, clock.now());
       view.renderLinks(currentItems);
       view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
-        currentItems.length ? "Check the sender and destination, then choose your email." : waitingText());
+        currentItems.length ? MAIL_MODES[mode].foundStatus : waitingText());
     } catch (error) {
       if (polling.isCurrent(attempt) && view) {
         currentItems = [];
@@ -159,8 +171,8 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
       minReceivedAtMs = undefined;
     }
     if (document.hidden) { unmount(); return; }
-    const nextStepKey = detectCode() ? null : getStepKey(document);
-    const matches = nextStepKey !== null;
+    const nextStep = detectCode() ? null : detectStep(document);
+    const matches = nextStep !== null;
     if (!matches) {
       unmount();
       screenActive = false;
@@ -169,7 +181,7 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
       polling.reset();
       return;
     }
-    if (screenActive && nextStepKey !== stepKey) {
+    if (screenActive && (nextStep.key !== stepKey || nextStep.mode !== mode)) {
       unmount();
       dismissed = false;
       screenActive = false;
@@ -182,8 +194,8 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
     if (dismissed) return;
     if (!screenActive) {
       screenActive = true;
-      stepKey = nextStepKey;
-      mode = stepKey.startsWith("resetLinks:") ? "resetLinks" : "links";
+      stepKey = nextStep.key;
+      mode = nextStep.mode;
       minReceivedAtMs ??= initialStepCutoff(clock.now());
       polling.restart();
     }
@@ -196,14 +208,14 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
         await browser.navigator.clipboard.writeText(item.url);
       },
       beforeUse(item) {
-        if (document.hidden || lastURL !== location.href || detectCode() || getStepKey(document) !== stepKey ||
+        if (document.hidden || lastURL !== location.href || detectCode() || !isCurrentStep() ||
             !currentItems.some((current) => current.accountEmail === item.accountEmail &&
               current.uid === item.uid && current.url === item.url) ||
-            !selectConfirmationLinks([item], minReceivedAtMs, clock.now()).length) {
+            !selectEmailLinks([item], minReceivedAtMs, clock.now()).length) {
           view?.setStatus("This link is no longer current. Request a new email or check again.");
           return false;
         }
-        if (mode !== "resetLinks") dismiss();
+        if (mode !== "passwordResetLinks") dismiss();
         return true;
       },
     });
@@ -216,12 +228,12 @@ export function startConfirmationCard({ browser = globalThis, getStepKey = getCo
     scanTimer = setTimeout(() => { scanTimer = undefined; sync(); }, 250);
   }
   page.onMutation((records) => {
-    if (mutationAffectsConfirmation(records, view?.host, document, screenActive)) scheduleScan();
+    if (mutationAffectsEmailLinkCard(records, view?.host, document, screenActive)) scheduleScan();
   });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismiss(); });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.("button, a, [role=button], input[type=button], input[type=submit]");
-    if (!screenActive || !isConfirmationRequestControl(control)) return;
+    if (!screenActive || !isEmailLinkRequestControl(control)) return;
     minReceivedAtMs = resendCutoff(clock.now());
     dismissed = false;
     unmount();
