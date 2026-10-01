@@ -16,7 +16,7 @@ class AccountSessionsTests(unittest.TestCase):
             {"email": "one@yahoo.com", "password": "old-password"},
             {"email": "two@yahoo.com", "password": "new-password"},
         ]
-        with patch.object(account_sessions, "check_with_timeout", side_effect=[
+        with patch.object(account_sessions, "fetch_with_timeout", side_effect=[
             [{"code": "111111", "receivedAt": 1000, "uid": 1}],
             [{"code": "222222", "receivedAt": 2000, "uid": 1}],
         ]):
@@ -29,33 +29,33 @@ class AccountSessionsTests(unittest.TestCase):
     def test_switching_to_links_discards_code_scan_state(self):
         accounts = [{"email": "one@yahoo.com", "password": "unused"}]
         sessions = account_sessions.AccountSessions()
-        with patch.object(account_sessions, "check_with_timeout", return_value=[]):
+        with patch.object(account_sessions, "fetch_with_timeout", return_value=[]):
             sessions.fetch_recent_items(accounts)
             old = sessions.sessions["one@yahoo.com"]
             with patch.object(old, "close") as close:
                 self.assertEqual(sessions.fetch_recent_items(accounts, "confirmationLinks"), {"confirmationLinks": [], "warnings": []})
                 close.assert_called_once()
             from link_extraction import extract_confirmation_link_details
-            self.assertIs(sessions.sessions["one@yahoo.com"].extract_details, extract_confirmation_link_details)
+            self.assertIs(sessions.sessions["one@yahoo.com"].extract_item, extract_confirmation_link_details)
 
-    def test_reset_mode_discards_confirmation_scan_state(self):
+    def test_reset_mail_type_discards_confirmation_scan_state(self):
         accounts = [{"email": "one@yahoo.com", "password": "unused"}]
         sessions = account_sessions.AccountSessions()
-        with patch.object(account_sessions, "check_with_timeout", return_value=[]):
+        with patch.object(account_sessions, "fetch_with_timeout", return_value=[]):
             sessions.fetch_recent_items(accounts, "confirmationLinks")
             old = sessions.sessions["one@yahoo.com"]
             with patch.object(old, "close") as close:
                 self.assertEqual(sessions.fetch_recent_items(accounts, "passwordResetLinks"), {"passwordResetLinks": [], "warnings": []})
                 close.assert_called_once()
             from link_extraction import extract_password_reset_link_details
-            self.assertIs(sessions.sessions["one@yahoo.com"].extract_details, extract_password_reset_link_details)
+            self.assertIs(sessions.sessions["one@yahoo.com"].extract_item, extract_password_reset_link_details)
 
-    def test_whole_check_times_out(self):
-        with patch.object(account_sessions, "CHECK_TIMEOUT_SECONDS", 0.01), patch.object(
+    def test_account_fetch_times_out(self):
+        with patch.object(account_sessions, "ACCOUNT_CHECK_TIMEOUT_SECONDS", 0.01), patch.object(
             account_sessions.InboxSession, "recent_items", side_effect=lambda: time.sleep(0.2)
         ):
             with self.assertRaisesRegex(account_sessions.UserError, "too long"):
-                account_sessions.check_with_timeout(account_sessions.InboxSession({}))
+                account_sessions.fetch_with_timeout(account_sessions.InboxSession({}))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getPageCoordinator } from "../extension/page-coordinator.js";
+import { getPageCoordinator } from "../extension/inline/page-coordinator.js";
 
 test("page interfaces share one observer, navigation listener and code-field cache", () => {
   const events = new Map();

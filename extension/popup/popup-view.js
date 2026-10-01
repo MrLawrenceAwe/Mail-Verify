@@ -1,9 +1,9 @@
-import { MAIL_MODES } from "./mail-modes.js";
-import { appendEmailLinkDetails } from "./email-link-details.js";
+import { MAIL_TYPES } from "../shared/mail-types.js";
+import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
-export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink, onSelectMode, onAddAccount }) {
+export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink, onSelectMailType, onAddAccount }) {
   const getElement = (id) => document.getElementById(id);
-  const checkButtonModes = [
+  const checkButtonMailTypes = [
     ["checkCodes", "codes"],
     ["checkConfirmationLinks", "confirmationLinks"],
     ["checkPasswordResetLinks", "passwordResetLinks"],
@@ -24,10 +24,10 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     getElement("companionSetup").hidden = false;
   }
 
-  function setMode(mode) {
-    getElement("codeContext").hidden = mode !== "codes";
-    getElement("linkGuidance").hidden = mode === "codes";
-    getElement("linkGuidance").textContent = MAIL_MODES[mode].guidance || "";
+  function setMailType(mailType) {
+    getElement("codeContext").hidden = mailType !== "codes";
+    getElement("linkGuidance").hidden = mailType === "codes";
+    getElement("linkGuidance").textContent = MAIL_TYPES[mailType].guidance || "";
   }
 
   function setDestination(text) {
@@ -49,8 +49,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     getElement("email").value = "";
   }
 
-  function setRemoveAndCheckDisabled(disabled) {
-    for (const [id] of checkButtonModes) getElement(id).disabled = disabled;
+  function setAccountAndCheckButtonsDisabled(disabled) {
+    for (const [id] of checkButtonMailTypes) getElement(id).disabled = disabled;
     for (const button of getElement("accounts").querySelectorAll("button")) button.disabled = disabled;
   }
 
@@ -67,7 +67,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
   }
 
   function markLinkCopied(button) {
-    button.textContent = MAIL_MODES.passwordResetLinks.copiedLabel;
+    button.textContent = MAIL_TYPES.passwordResetLinks.copiedLabel;
   }
 
   function renderAccounts(accounts) {
@@ -125,8 +125,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     }
   }
 
-  function renderLinks(links, mode) {
-    const key = mode + ":" + JSON.stringify(links);
+  function renderLinks(links, mailType) {
+    const key = mailType + ":" + JSON.stringify(links);
     if (key === renderedResultsKey) return;
     renderedResultsKey = key;
     getElement("results").replaceChildren();
@@ -135,14 +135,14 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
       card.className = "card";
       appendEmailLinkDetails(document, card, item, "result-detail");
       const button = document.createElement("button");
-      button.textContent = MAIL_MODES[mode].actionLabel;
+      button.textContent = MAIL_TYPES[mailType].actionLabel;
       button.addEventListener("click", () => onUseLink(item, button));
       card.append(button);
       getElement("results").append(card);
     }
   }
 
-  for (const [id, mode] of checkButtonModes) getElement(id).addEventListener("click", () => onSelectMode(mode));
+  for (const [id, mailType] of checkButtonMailTypes) getElement(id).addEventListener("click", () => onSelectMailType(mailType));
   getElement("addAccountForm").addEventListener("submit", (event) => {
     event.preventDefault();
     return onAddAccount();
@@ -150,7 +150,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
   getElement("addAccount").addEventListener("click", showAccountSetup);
 
   return { setStatus, showAccountSetup, showCompanionSetup,
-    setMode, setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
-    clearAccountEmail, setRemoveAndCheckDisabled, setResultButtonsDisabled,
+    setMailType, setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
+    clearAccountEmail, setAccountAndCheckButtonsDisabled, setResultButtonsDisabled,
     markCodeFilled, markLinkOpened, markLinkCopied, renderAccounts, clearResults, renderCodes, renderLinks };
 }

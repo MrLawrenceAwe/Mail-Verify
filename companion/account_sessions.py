@@ -6,15 +6,15 @@ import signal
 from errors import UserError
 from inbox_session import InboxSession
 
-CHECK_TIMEOUT_SECONDS = 25
+ACCOUNT_CHECK_TIMEOUT_SECONDS = 25
 
 
-def check_with_timeout(session):
+def fetch_with_timeout(session):
     def timeout(_signum, _frame):
         raise UserError("Yahoo took too long to respond. Try checking again.")
 
     previous = signal.signal(signal.SIGALRM, timeout)
-    signal.setitimer(signal.ITIMER_REAL, CHECK_TIMEOUT_SECONDS)
+    signal.setitimer(signal.ITIMER_REAL, ACCOUNT_CHECK_TIMEOUT_SECONDS)
     try:
         return session.recent_items()
     finally:
@@ -25,7 +25,7 @@ def check_with_timeout(session):
 class AccountSessions:
     def __init__(self):
         self.sessions = {}
-        self.kind = "codes"
+        self.mail_type = "codes"
 
     def close(self):
         for session in self.sessions.values():
@@ -37,10 +37,10 @@ class AccountSessions:
         if session:
             session.close()
 
-    def fetch_recent_items(self, account_credentials, kind="codes"):
-        if kind != self.kind:
+    def fetch_recent_items(self, account_credentials, mail_type="codes"):
+        if mail_type != self.mail_type:
             self.close()
-            self.kind = kind
+            self.mail_type = mail_type
         active = {account["email"].lower() for account in account_credentials}
         for email in list(self.sessions):
             if email not in active:
@@ -54,14 +54,14 @@ class AccountSessions:
                 self.remove(email)
                 session = None
             if not session:
-                session = self.sessions[key] = InboxSession(account, kind)
+                session = self.sessions[key] = InboxSession(account, mail_type)
             try:
-                items.extend({**item, "accountEmail": email} for item in check_with_timeout(session))
+                items.extend({**item, "accountEmail": email} for item in fetch_with_timeout(session))
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
                 self.remove(email)
                 warnings.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
         if warnings and not items and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
         items.sort(key=lambda item: item["receivedAt"], reverse=True)
-        return {kind: items, "warnings": warnings}
+        return {mail_type: items, "warnings": warnings}
 

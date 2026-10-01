@@ -1,4 +1,4 @@
-export const MAIL_MODES = {
+export const MAIL_TYPES = {
   codes: {
     resultLabel: "codes",
     foundStatus: "Choose the code for this website. Checking for newer codes…",
@@ -20,6 +20,6 @@ export const MAIL_MODES = {
     foundStatus: "Choose a password reset email to copy its link.",
     emptyStatus: "No recent password reset link yet. Request one and keep this popup open.",
     waitingStatus: "Waiting for your password reset email…",
-    guidance: "Check the sender and destination, then copy your reset link and paste it where you want to use it.",
+    guidance: "Check the sender and destination before copying.",
   },
 };

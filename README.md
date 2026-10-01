@@ -18,11 +18,11 @@ If suggestions do not appear after refreshing a website, open Mail Verify’s **
 
 | Email type | On-page suggestion | Selected action | Manual popup check |
 | --- | --- | --- | --- |
-| Verification code | Beside a supported code field | **Fill code**, without clicking Submit | **Check for a code** |
+| Verification code | Beside a supported code field | **Fill code**, without clicking Submit | **Find verification codes** |
 | Account confirmation | Bottom-right card on a recognised “Check your email” screen | **Open confirmation link** in a new tab; this may immediately confirm the account | **Find confirmation links** |
 | Password reset | Bottom-right card on a recognised reset-email waiting screen | **Copy password reset link**, then paste it where you want to use it | **Find password reset links** |
 
-Request the email on the website, then choose its matching result. Review the account, sender, subject, and destination before using it. Hover over a code to see its sender and subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised. Suggestions are extension controls, styled like Mail autofill, rather than macOS system controls.
+Request the email on the website, then choose its matching result. Review the account, sender, subject, and destination before using it. Hover over a code to see its sender and subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.
 
 Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion for that page. The toolbar popup handles account setup and manual checks. A **Copied** message confirms a successful reset-link copy; links can be copied again. If a website blocks clipboard access, use the popup.
 
@@ -32,16 +32,16 @@ Automatic checking lasts up to two minutes while the tab is active. Code suggest
 
 Each account scans its inbox only, starting with the latest 30 messages and limiting results to the last ten minutes. Spam and other folders are excluded. Multiple inboxes are scanned in turn, so checks may take longer.
 
-On-page results must also have arrived since the current verification step began, allowing five seconds for mail delivered just before the step appeared. The code picker keeps the newest code per sender and account. Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. Use the popup to manually choose a recent email excluded by that rule.
+On-page suggestions show emails received since the current verification step began. Resending clears older suggestions; the popup lets you choose other recent emails manually.
 
 ## Supported content and limits
 
-- Codes are numeric, 4–8 digits, directly labelled by common English instructions such as “Your code is”, “Security code:”, or “Sign in to Indeed with code:”. Emails with multiple candidate codes are omitted.
-- Code fields must be ordinary inputs or common split-digit forms on HTTPS pages with verification-related labels or attributes. A generic “code” label needs nearby email/sign-in instructions. Coupon and promo fields are excluded; unlabelled fields, cross-origin embedded forms, and unusual widgets may not work.
-- Link cards recognise common English waiting prompts in short visible panels. Newsletter screens are excluded.
-- Confirmation links require instructions such as “Verify email”, “Confirm account”, or “Activate account”; password-reset subjects are excluded. Reset links require instructions such as “Reset your password”, “Change your password”, or “Password reset”; help/support links and negated reset instructions are excluded.
-- Both link types require a visible HTML link or instructions immediately before a plain-text URL. Qualifying HTML takes precedence over plain text. Only supported HTTPS URLs are accepted; attachments, hidden links, and emails with multiple distinct qualifying links are omitted.
-- Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Tracking links show their initial destination; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
+- Supports clearly labelled numeric codes of 4–8 digits and common verification inputs on HTTPS pages.
+- Recognises common English confirmation and password-reset email prompts and instructions.
+- Omits ambiguous results, hidden content, attachments, and unsupported links. Other languages and unusual forms may not work.
+- Does not authenticate senders or match results to the current website. Check the sender and destination before using a result; tracking links may redirect.
+
+See [detection and freshness rules](docs/development.md#detection-and-freshness-rules) for exact matching and timestamp behaviour.
 
 ## Privacy and permissions
 

@@ -1,32 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectEmailLinkStep, isEmailLinkRequestControl, isPasswordResetScreen, mutationAffectsEmailLinkCard, selectEmailLinks, startEmailLinkCard } from "../extension/email-link-card.js";
+import { detectEmailLinkStep, isEmailLinkRequestControl, isPasswordResetScreen, mutationAffectsEmailLinkCard, selectEmailLinks, startEmailLinkCard } from "../extension/inline/email-link-card-controller.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createFakeTimers } from "./fake_timers.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
-function detectedMode(text) {
+function detectedMailType(text) {
   const panel = { innerText: text, getClientRects: () => [{}], checkVisibility: () => true };
-  return detectEmailLinkStep({ querySelectorAll: () => [panel] })?.mode;
+  return detectEmailLinkStep({ querySelectorAll: () => [panel] })?.mailType;
 }
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const stepMutation = () => [{ type: "characterData", target: { nodeType: 3, textContent: "Check your email" } }];
 
-function setup(panel = null, kind = "confirmationLinks") {
+function setup(panel = null, mailType = "confirmationLinks") {
   const timers = createFakeTimers(), events = {}, windowEvents = {};
-  const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, stepReads: 0, views: [], respond: async () => ({ ok: true, [kind]: [item] }) };
-  state.kind = kind;
+  const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, stepReads: 0, views: [], respond: async () => ({ ok: true, [mailType]: [item] }) };
+  state.mailType = mailType;
   const document = { hidden: false, documentElement: { append() {} }, querySelector: () => ({}), addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
   startEmailLinkCard({
     browser: { navigator: { clipboard: { async writeText(value) { state.copied = value; } } }, document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
-      chrome: { runtime: inlineRuntime(async (kind) => { assert.equal(kind, state.kind); state.requests++; return state.respond(); }) },
+      chrome: { runtime: inlineRuntime(async (mailType) => { assert.equal(mailType, state.mailType); state.requests++; return state.respond(); }) },
       Date: { now: () => state.now },
       setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
     }, detectStep: () => { state.stepReads++; return state.detected
-      ? (state.panel ? detectEmailLinkStep({ querySelectorAll: () => [state.panel] }) : { key: state.screenKey, mode: state.kind })
+      ? (state.panel ? detectEmailLinkStep({ querySelectorAll: () => [state.panel] }) : { key: state.screenKey, mailType: state.mailType })
       : null; }, detectCode: () => state.code,
     createView(_document, callbacks) {
       const view = { callbacks, removed: false, links: [], host: { remove() { view.removed = true; }, contains() { return false; } },
@@ -42,9 +42,9 @@ function setup(panel = null, kind = "confirmationLinks") {
 
 test("recognises confirmation prompts but rejects resets, newsletters and long pages", () => {
   for (const text of ["Check your inbox", "We've sent a verification email", "Follow the link in your email to confirm your account"])
-    assert.equal(detectedMode(text), "confirmationLinks", text);
+    assert.equal(detectedMailType(text), "confirmationLinks", text);
   for (const text of ["Reset your password. Check your email", "Check your email for our newsletter", "Welcome to our website", "x".repeat(2501) + " Check your email"])
-    assert.notEqual(detectedMode(text), "confirmationLinks", text);
+    assert.notEqual(detectedMailType(text), "confirmationLinks", text);
 });
 
 test("distinguishes replacement confirmation panels with identical text", () => {
@@ -66,17 +66,17 @@ test("countdown changes keep the same confirmation step", () => {
 });
 
 test("short-unit countdown ticks retain links and the polling deadline", async () => {
-  for (const kind of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     for (const unit of ["s", "m"]) {
-      const prompt = kind === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
+      const prompt = mailType === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
       const panel = { innerText: `${prompt} Resend email in 30${unit}`, getClientRects: () => [{}], checkVisibility: () => true };
-      const f = setup(panel, kind); await settle();
+      const f = setup(panel, mailType); await settle();
       const view = f.state.views[0];
       assert.deepEqual(view.links, [item]);
       f.state.now = 11000;
       panel.innerText = `${prompt} Resend email in 29${unit}`;
       f.state.mutate(stepMutation()); await f.run(250);
-      assert.equal(f.state.views.length, 1, `${kind}: ${unit} countdown must keep the card`);
+      assert.equal(f.state.views.length, 1, `${mailType}: ${unit} countdown must keep the card`);
       assert.deepEqual(view.links, [item]);
       assert.equal(f.state.requests, 1);
       f.state.now = 130000;
@@ -88,15 +88,15 @@ test("short-unit countdown ticks retain links and the polling deadline", async (
 });
 
 test("countdown completion retains confirmation and reset links and the deadline", async () => {
-  for (const kind of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     for (const countdown of ["Resend in 30 seconds", "Resend email in 30s", "Resend in 00:30"]) {
-      const prompt = kind === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
+      const prompt = mailType === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
       const panel = { innerText: `${prompt} ${countdown}`, getClientRects: () => [{}], checkVisibility: () => true };
-      const f = setup(panel, kind); await settle();
+      const f = setup(panel, mailType); await settle();
       f.state.now = 40000;
       panel.innerText = `${prompt} Resend email`;
       f.state.mutate(stepMutation()); await f.run(250);
-      assert.deepEqual(f.state.views.at(-1).links, [item], `${kind}: ${countdown}`);
+      assert.deepEqual(f.state.views.at(-1).links, [item], `${mailType}: ${countdown}`);
       assert.equal(f.state.requests, 1);
       f.state.now = 130000;
       await f.run(8000);
@@ -202,10 +202,10 @@ test("resend clears old links and expiry prevents opening", async () => {
 });
 
 test("input-button resends invalidate old confirmation and reset links", async () => {
-  for (const kind of ["confirmationLinks", "passwordResetLinks"]) {
-    const prompt = kind === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const prompt = mailType === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
     const panel = { innerText: prompt, getClientRects: () => [{}], checkVisibility: () => true };
-    const f = setup(panel, kind); await settle();
+    const f = setup(panel, mailType); await settle();
     const oldView = f.state.views[0];
     assert.deepEqual(oldView.links, [item]);
     f.state.now = 11000;
@@ -219,7 +219,7 @@ test("input-button resends invalidate old confirmation and reset links", async (
     assert.equal(oldView.callbacks.beforeUse(item), false);
     f.state.now = 12000;
     const newer = { ...item, uid: 2, receivedAt: 12000 };
-    f.state.respond = async () => ({ ok: true, [kind]: [item, newer] });
+    f.state.respond = async () => ({ ok: true, [mailType]: [item, newer] });
     await f.run(8000);
     assert.deepEqual(f.state.views.at(-1).links, [newer]);
   }
@@ -339,7 +339,7 @@ test("reset card requests reset mail, copies on selection, and clears results on
   const panel = { innerText: "Reset your password. Check your email", getClientRects: () => [{}], checkVisibility: () => true };
   const f = setup(panel, "passwordResetLinks"); await settle();
   const view = f.state.views[0];
-  assert.equal(view.callbacks.mode, "passwordResetLinks");
+  assert.equal(view.callbacks.mailType, "passwordResetLinks");
   assert.deepEqual(view.links, [item]);
   assert.equal(f.state.copied, undefined);
   assert.equal(view.callbacks.beforeUse(item), true);
@@ -362,7 +362,7 @@ test("an unrelated forgot-password prompt cannot override explicit confirmation 
     assert.equal(isPasswordResetScreen(innerText), false, innerText);
     const panel = { innerText, getClientRects: () => [{}], checkVisibility: () => true };
     const f = setup(panel); await settle();
-    assert.equal(f.state.views[0].callbacks.mode, "confirmationLinks");
+    assert.equal(f.state.views[0].callbacks.mailType, "confirmationLinks");
     assert.deepEqual(f.state.views[0].links, [item]);
   }
 });
@@ -380,37 +380,37 @@ test("reset intent must belong to the email instruction or its heading", () => {
 });
 
 
-test("line-separated reset headings retain reset mode after step text normalization", async () => {
+test("line-separated reset headings retain reset mail type after step text normalization", async () => {
   const panel = { innerText: "Forgot password?\nCheck your inbox\nSign in", getClientRects: () => [{}], checkVisibility: () => true };
   const f = setup(panel, "passwordResetLinks"); await settle();
-  assert.equal(f.state.views[0].callbacks.mode, "passwordResetLinks");
+  assert.equal(f.state.views[0].callbacks.mailType, "passwordResetLinks");
   assert.deepEqual(f.state.views[0].links, [item]);
 });
 
 
-test("reset instructions spanning continuation lines use reset mode", async () => {
+test("reset instructions spanning continuation lines use reset mail type", async () => {
   for (const innerText of [
     "Check your email\nWe have sent you a link to\nreset your password",
     "Check your inbox\nWe sent you a\nlink to\nreset your\npassword",
     "Check your email\nWe sent you a link\nto reset your password",
   ]) {
     assert.equal(isPasswordResetScreen(innerText), true, innerText);
-    assert.equal(detectedMode(innerText), "passwordResetLinks", innerText);
+    assert.equal(detectedMailType(innerText), "passwordResetLinks", innerText);
     const panel = { innerText, getClientRects: () => [{}], checkVisibility: () => true };
     const f = setup(panel, "passwordResetLinks"); await settle();
-    assert.equal(f.state.views[0].callbacks.mode, "passwordResetLinks");
+    assert.equal(f.state.views[0].callbacks.mailType, "passwordResetLinks");
     assert.deepEqual(f.state.views[0].links, [item]);
   }
 });
 
-test("line-separated navigation still cannot select reset mode", () => {
+test("line-separated navigation still cannot select reset mail type", () => {
   for (const text of [
     "Check your email\nForgot password?",
     "Check your email\nSign in\nReset password",
     "Check your email to confirm your account\nForgot password?",
   ]) {
     assert.equal(isPasswordResetScreen(text), false, text);
-    assert.equal(detectedMode(text), "confirmationLinks", text);
+    assert.equal(detectedMailType(text), "confirmationLinks", text);
   }
 });
 
@@ -422,20 +422,20 @@ test("step detection reads each visible panel once and returns its purpose separ
   };
   const step = detectEmailLinkStep({ querySelectorAll: () => [panel] });
   assert.equal(reads, 1);
-  assert.equal(step.mode, "passwordResetLinks");
+  assert.equal(step.mailType, "passwordResetLinks");
   assert.doesNotMatch(step.key, /^passwordResetLinks:/);
 });
 
 test("a purpose change with the same step key discards old results and switches requests", async () => {
   const f = setup(); await settle();
   const oldView = f.state.views.at(-1);
-  f.state.kind = "passwordResetLinks";
+  f.state.mailType = "passwordResetLinks";
   const newer = { ...item, uid: 2, receivedAt: 11000 };
   f.state.respond = async () => ({ ok: true, passwordResetLinks: [newer] });
   f.state.mutate(stepMutation());
   await f.run(250);
   assert.equal(oldView.removed, true);
-  assert.equal(f.state.views.at(-1).callbacks.mode, "passwordResetLinks");
+  assert.equal(f.state.views.at(-1).callbacks.mailType, "passwordResetLinks");
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now = 11000;
   await f.run(8000);

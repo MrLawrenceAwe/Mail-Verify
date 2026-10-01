@@ -22,7 +22,7 @@ function setup(nativeResponse = { ok: true, codes: [] }) {
   };
   registerInlineRequests(chrome, { setTimeout(fn) { idle = fn; return 1; }, clearTimeout() { idle = undefined; } });
   const sender = { id: "extension", frameId: 0, url: "https://secure.indeed.com/auth", tab: { id: 1 } };
-  const request = (overrides = {}, kind = "codes") => new Promise(resolve => {
+  const request = (overrides = {}, mailType = "codes") => new Promise(resolve => {
     let handleMessage;
     listener({
       name: "mail-verify-inline",
@@ -30,7 +30,7 @@ function setup(nativeResponse = { ok: true, codes: [] }) {
       onMessage: { addListener(fn) { handleMessage = fn; } },
       postMessage: resolve,
     });
-    handleMessage({ kind });
+    handleMessage({ mailType });
   });
   return { request, expire() { idle(); }, get checks() { return checks; }, get closed() { return closed; } };
 }

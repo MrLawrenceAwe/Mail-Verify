@@ -47,8 +47,8 @@ def connect_imap(credentials):
 
 
 class InboxSession:
-    def __init__(self, credentials, kind="codes"):
-        self.extract_details = MAIL_EXTRACTORS[kind]
+    def __init__(self, credentials, mail_type="codes"):
+        self.extract_item = MAIL_EXTRACTORS[mail_type]
         self.credentials = credentials
         self.connection = None
         self.last_seen_uid = None
@@ -166,7 +166,7 @@ class InboxSession:
                     # An OK fetch can omit a body. Try this UID again on the next poll.
                     continue
                 self.pending_received_at_by_uid.pop(uid, None)
-                found = self.extract_details(messages[uid])
+                found = self.extract_item(messages[uid])
                 if found:
                     found["receivedAt"] = int(received * 1000)
                     found["uid"] = uid

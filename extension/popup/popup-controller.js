@@ -1,10 +1,10 @@
-import { MAIL_MODES } from "./mail-modes.js";
-import { isSupportedEmailLinkUrl } from "./email-link-url.js";
-import { handleCodeField } from "./code-fields.js";
-import { isFreshMessage } from "./mail-timing.js";
+import { MAIL_TYPES } from "../shared/mail-types.js";
+import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
+import { handleCodeField } from "../shared/code-fields.js";
+import { isFreshMessage } from "../shared/mail-timing.js";
 import { createPopupView } from "./popup-view.js";
-import { copyPasswordResetLink } from "./reset-link-copy.js";
-import { createPollingLifecycle } from "./polling-lifecycle.js";
+import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
+import { createPollingLifecycle } from "../shared/polling-lifecycle.js";
 
 const POLL_INTERVAL_MS = 8_000;
 const MIN_POLL_PAUSE_MS = 2_000;
@@ -21,7 +21,7 @@ export function createPopupController({
   const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: POLL_INTERVAL_MS });
   let targetTab;
-  let mode = "codes";
+  let mailType = "codes";
   let checking = false,
     usingResult = false,
     removingAccount = false,
@@ -30,7 +30,7 @@ export function createPopupController({
     onRemoveAccount: removeAccount,
     onFillCode: fillSelectedCode,
     onUseLink: useSelectedLink,
-    onSelectMode: selectMode,
+    onSelectMailType: selectMailType,
     onAddAccount: addAccount,
   });
   function applyConnectedAccounts(accountEmails) {
@@ -45,12 +45,12 @@ export function createPopupController({
     startPolling();
   }
   function startPolling() {
-    polling.restart();
+    polling.renewDeadline();
     checkInbox();
   }
   function abortCheck() {
-    polling.clear();
-    polling.invalidate();
+    polling.cancelScheduledCheck();
+    polling.invalidateResponses();
     checking = false;
     closeSession();
   }
@@ -58,7 +58,7 @@ export function createPopupController({
     if (usingResult || removingAccount || addingAccount) return;
     usingResult = true;
     abortCheck();
-    view.setRemoveAndCheckDisabled(true);
+    view.setAccountAndCheckButtonsDisabled(true);
     view.setResultButtonsDisabled(true);
     try {
       await action();
@@ -69,7 +69,7 @@ export function createPopupController({
     } finally {
       usingResult = false;
       if (reusable) view.setResultButtonsDisabled(false);
-      view.setRemoveAndCheckDisabled(addingAccount);
+      view.setAccountAndCheckButtonsDisabled(addingAccount);
       if (polling.deadline) scheduleCheck();
       else closeSession();
     }
@@ -104,56 +104,56 @@ export function createPopupController({
         throw new Error("This link is too old. Request a new email.");
       if (!isSupportedEmailLinkUrl(item.url))
         throw new Error("This link is not supported.");
-      if (mode === "passwordResetLinks") {
+      if (mailType === "passwordResetLinks") {
         await copyPasswordResetLink(clipboard, item.url,
           "Clipboard unavailable. Close and reopen this popup, then try again.");
         view.markLinkCopied(button);
-        view.setStatus(MAIL_MODES.passwordResetLinks.copySuccessStatus);
+        view.setStatus(MAIL_TYPES.passwordResetLinks.copySuccessStatus);
         return;
       }
       await chrome.tabs.create({ url: item.url });
       view.markLinkOpened(button);
       view.setStatus("Confirmation link opened in a new tab.");
-    }, { reusable: mode === "passwordResetLinks" });
+    }, { reusable: mailType === "passwordResetLinks" });
   }
   function scheduleCheck(delay = POLL_INTERVAL_MS) {
-    if (polling.expired()) {
+    if (polling.hasExpired()) {
       finishPolling();
       return;
     }
     if (!usingResult && !removingAccount)
       polling.schedule(checkInbox, delay);
-    else polling.clear();
+    else polling.cancelScheduledCheck();
   }
   function finishPolling() {
-    polling.clear();
+    polling.cancelScheduledCheck();
     closeSession();
     if (!usingResult && !removingAccount)
-      view.setStatus(`Automatic checking finished. Check again for newer ${MAIL_MODES[mode].resultLabel}.`);
+      view.setStatus(`Automatic checking finished. Check again for newer ${MAIL_TYPES[mailType].resultLabel}.`);
   }
   async function checkInbox() {
     if (usingResult || removingAccount) return;
-    if (polling.expired()) {
+    if (polling.hasExpired()) {
       finishPolling();
       return;
     }
     if (checking) abortCheck();
-    polling.clear();
+    polling.cancelScheduledCheck();
     checking = true;
     const requestGeneration = polling.generation;
     const startedAt = clock.now();
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
-      const response = await sendSessionRequest(mode);
-      const results = response[mode];
+      const response = await sendSessionRequest(mailType);
+      const results = response[mailType];
       if (!usingResult && polling.isCurrent(requestGeneration)) {
-        if (mode !== "codes") view.renderLinks(results, mode);
+        if (mailType !== "codes") view.renderLinks(results, mailType);
         else view.renderCodes(results, targetTab);
         view.setStatus(
           response.warnings?.length
             ? `Some accounts could not be checked: ${response.warnings.join("; ")}`
-            : results.length ? MAIL_MODES[mode].foundStatus : MAIL_MODES[mode].emptyStatus,
+            : results.length ? MAIL_TYPES[mailType].foundStatus : MAIL_TYPES[mailType].emptyStatus,
         );
       }
     } catch (error) {
@@ -165,7 +165,7 @@ export function createPopupController({
     } finally {
       if (polling.isCurrent(requestGeneration)) {
         checking = false;
-        view.setRemoveAndCheckDisabled(usingResult || removingAccount || addingAccount);
+        view.setAccountAndCheckButtonsDisabled(usingResult || removingAccount || addingAccount);
         scheduleCheck(
           failed
             ? POLL_INTERVAL_MS
@@ -177,22 +177,22 @@ export function createPopupController({
       }
     }
   }
-  function selectMode(nextMode) {
+  function selectMailType(nextMailType) {
     if (usingResult || removingAccount || addingAccount) return;
     abortCheck();
-    if (mode !== nextMode) view.clearResults();
-    mode = nextMode;
+    if (mailType !== nextMailType) view.clearResults();
+    mailType = nextMailType;
     // Unchanged results retain their buttons, including the disabled state
     // left by a successful fill. A manual check starts a new selection.
-    view.setResultButtonsDisabled(mode === "codes" && !targetTab);
-    view.setMode(mode);
+    view.setResultButtonsDisabled(mailType === "codes" && !targetTab);
+    view.setMailType(mailType);
     startPolling();
   }
   async function addAccount() {
     if (addingAccount || removingAccount) return;
     addingAccount = true;
     view.setAddAccountDisabled(true);
-    view.setRemoveAndCheckDisabled(true);
+    view.setAccountAndCheckButtonsDisabled(true);
     view.setStatus("Checking your Yahoo connection…");
     const { email, password } = view.readCredentialsAndClearPassword();
     try {
@@ -208,7 +208,7 @@ export function createPopupController({
     } finally {
       addingAccount = false;
       view.setAddAccountDisabled(false);
-      view.setRemoveAndCheckDisabled(usingResult || removingAccount);
+      view.setAccountAndCheckButtonsDisabled(usingResult || removingAccount);
     }
   }
   async function removeAccount(email) {
@@ -216,22 +216,22 @@ export function createPopupController({
     polling.reset();
     removingAccount = true;
     abortCheck();
-    view.setRemoveAndCheckDisabled(true);
+    view.setAccountAndCheckButtonsDisabled(true);
     try {
       const result = await sendOneOffRequest({ action: "removeAccount", email });
       removingAccount = false;
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
       view.setStatus(error.message, true);
-      polling.restart();
+      polling.renewDeadline();
     } finally {
       removingAccount = false;
-      view.setRemoveAndCheckDisabled(false);
+      view.setAccountAndCheckButtonsDisabled(false);
       if (polling.deadline && !checking) scheduleCheck();
     }
   }
   async function initialize() {
-    view.setMode(mode);
+    view.setMailType(mailType);
     const [tab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,

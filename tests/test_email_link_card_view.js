@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createEmailLinkCardView } from "../extension/email-link-card-view.js";
+import { createEmailLinkCardView } from "../extension/inline/email-link-card-view.js";
 
-function setup(mode, callbacks = {}) {
+function setup(mailType, callbacks = {}) {
   const element = (tag) => ({
     tag, children: [], listeners: {}, dataset: {}, style: {},
     append(child) { this.children.push(child); },
@@ -16,19 +16,19 @@ function setup(mode, callbacks = {}) {
     node.attachShadow = () => root;
     return node;
   } };
-  const view = createEmailLinkCardView(document, { mode, beforeUse: () => true, ...callbacks });
+  const view = createEmailLinkCardView(document, { mailType, beforeUse: () => true, ...callbacks });
   const item = { accountEmail: "me@yahoo.com", sender: "sender@example.com", subject: "Your email", url: "https://example.com/action" };
   view.renderLinks([item]);
   const card = controls["#results"].children[0];
   return { root, controls, view, item, card, action: card.children.at(-1) };
 }
 
-test("both link-card modes show email details and their own action and guidance", () => {
-  for (const mode of ["confirmationLinks", "passwordResetLinks"]) {
-    const { card, action, root, item } = setup(mode);
+test("both link-card mail types show email details and their own action and guidance", () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const { card, action, root, item } = setup(mailType);
     assert.deepEqual(card.children.slice(0, 4).map(line => line.textContent),
       [item.accountEmail, item.sender, item.subject, "Destination: example.com"]);
-    if (mode === "confirmationLinks") {
+    if (mailType === "confirmationLinks") {
       assert.equal(action.tag, "a");
       assert.equal(action.href, item.url);
       assert.equal(action.target, "_blank");
@@ -36,7 +36,7 @@ test("both link-card modes show email details and their own action and guidance"
     } else {
       assert.equal(action.tag, "button");
       assert.equal(action.href, undefined);
-      assert.match(root.innerHTML, /copy your reset link and paste/);
+      assert.match(root.innerHTML, /sender and destination before copying/);
       assert.doesNotMatch(root.innerHTML, /Opening a link/);
     }
   }

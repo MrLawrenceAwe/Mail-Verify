@@ -1,7 +1,7 @@
 import { createFakeTimers } from "./fake_timers.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPopupController } from "../extension/popup-controller.js";
+import { createPopupController } from "../extension/popup/popup-controller.js";
 
 class FakeElement {
   constructor(tag = "div") {
@@ -407,7 +407,7 @@ test("rejects expired and unsafe links at click time", async () => {
   }
 });
 
-test("switching modes ignores a pending code response", async () => {
+test("switching mail types ignores a pending code response", async () => {
   const { controls, state } = await setup();
   let resolve;
   state.fetchCodes = () => new Promise((done) => { resolve = done; });
@@ -507,7 +507,7 @@ test("popup guidance follows the selected action and clears when returning to co
   assert.match(controls.linkGuidance.textContent, /Opening a link in a new tab/);
   controls.checkPasswordResetLinks.trigger();
   await settle();
-  assert.match(controls.linkGuidance.textContent, /copy your reset link and paste/);
+  assert.match(controls.linkGuidance.textContent, /sender and destination before copying/);
   assert.doesNotMatch(controls.linkGuidance.textContent, /open|confirm/i);
   controls.checkCodes.trigger();
   await settle();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { handleCodeField } from "../extension/code-fields.js";
+import { handleCodeField } from "../extension/shared/code-fields.js";
 
 // Chrome serializes this function into the page; evaluate the exported function
 // in an isolated DOM context to verify it has no module-scope dependencies.

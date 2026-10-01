@@ -1,9 +1,9 @@
-import { MAIL_MODES } from "./mail-modes.js";
-import { appendEmailLinkDetails } from "./email-link-details.js";
+import { MAIL_TYPES } from "../shared/mail-types.js";
+import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
-export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse, copyLink, mode }) {
-  const isPasswordReset = mode === "passwordResetLinks";
-  const { resultLabel, actionLabel, guidance, copiedLabel, copySuccessStatus } = MAIL_MODES[mode];
+export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse, copyLink, mailType }) {
+  const isPasswordReset = mailType === "passwordResetLinks";
+  const { resultLabel, actionLabel, guidance, copiedLabel, copySuccessStatus } = MAIL_TYPES[mailType];
   const title = `Mail Verify ${resultLabel}`;
   const host = document.createElement("div");
   host.dataset.mailVerify = "email-links";

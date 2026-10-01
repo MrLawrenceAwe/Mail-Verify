@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Mail Verify</title>
-    <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="popup/popup.css" />
   </head>
   <body>
     <header>
       <span class="mark">M<span>✓</span></span>
       <div>
         <h1>Mail Verify</h1>
-        <p>Email codes, confirmation and password reset links.</p>
+        <p>Verification codes and account links.</p>
       </div>
     </header>
     <main>
@@ -57,13 +57,13 @@
           </p>
         </div>
         <div id="results"></div>
-        <button id="checkCodes">Check for a code</button>
+        <button id="checkCodes">Find verification codes</button>
         <button id="checkConfirmationLinks" class="quiet">Find confirmation links</button>
         <button id="checkPasswordResetLinks" class="quiet">Find password reset links</button>
         <p id="linkGuidance" class="hint" hidden></p>
         <p class="hint">
-          Keep this popup open to check every 8 seconds for up to 2 minutes.
-          Only inbox messages from the last 10 minutes are included.
+          Checks for 2 minutes while open.
+          Shows inbox emails from the last 10 minutes.
         </p>
       </section>
       <section id="companionSetup" hidden>
