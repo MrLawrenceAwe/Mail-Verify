@@ -82,6 +82,26 @@ test("short-unit countdown ticks retain links and the polling deadline", async (
   }
 });
 
+test("countdown completion retains confirmation and reset links and the deadline", async () => {
+  for (const kind of ["links", "resetLinks"]) {
+    for (const countdown of ["Resend in 30 seconds", "Resend email in 30s", "Resend in 00:30"]) {
+      const prompt = kind === "resetLinks" ? "Reset your password. Check your email." : "Check your email.";
+      const panel = { innerText: `${prompt} ${countdown}`, getClientRects: () => [{}], checkVisibility: () => true };
+      const f = setup(panel, kind); await settle();
+      f.state.now = 40000;
+      panel.innerText = `${prompt} Resend email`;
+      f.state.mutate(stepMutation()); await f.run(250);
+      assert.deepEqual(f.state.views.at(-1).links, [item], `${kind}: ${countdown}`);
+      assert.equal(f.state.requests, 1);
+      f.state.now = 130000;
+      await f.run(8000);
+      assert.equal(f.state.requests, 1, "countdown completion must not extend polling");
+      f.state.views.at(-1).callbacks.onRetry(); await settle();
+      assert.deepEqual(f.state.views.at(-1).links, [item], "retry retains the current link");
+    }
+  }
+});
+
 test("recognises controls that request another confirmation message", () => {
   const control = (textContent) => ({ textContent, getAttribute: () => "" });
   for (const label of ["Resend email", "Send again", "Send confirmation email", "Request verification link"])
