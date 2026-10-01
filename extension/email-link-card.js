@@ -2,7 +2,7 @@ import { copyPasswordResetLink } from "./reset-link-copy.js";
 import { MAIL_MODES } from "./mail-modes.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
 import { isSupportedEmailLinkUrl } from "./email-link-url.js";
-import { normalizeStepText } from "./step-text.js";
+import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "./step-text.js";
 import { initialStepCutoff, isFreshMessage, resendCutoff } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
@@ -65,9 +65,7 @@ export function selectEmailLinks(items, minReceivedAtMs, now) {
 }
 
 export function isEmailLinkRequestControl(control) {
-  const label = (control?.getAttribute?.("aria-label") ||
-    (control?.tagName === "INPUT" ? control.value : control?.textContent) || "")
-    .replace(/\s+/g, " ").trim();
+  const label = getRequestControlLabel(control);
   if (/^(?:re-?send|send again)\b/i.test(label)) return true;
   return /^(?:send|request|get|email)\b/i.test(label) &&
     /\b(?:confirm(?:ation)?|verif(?:y|ication)|activat(?:e|ion)|reset|password)\b/i.test(label) &&
@@ -103,75 +101,73 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
   const checks = createRetryGate();
   let view, scanTimer;
   let lastURL = location.href, dismissed = false, minReceivedAtMs, screenActive = false, stepKey;
-  let currentItems = [];
+  let currentLinks = [];
   let mode = "confirmationLinks";
-  const waitingText = () => MAIL_MODES[mode].waitingStatus;
   function isCurrentStep() {
     const step = detectStep(document);
     return step?.key === stepKey && step?.mode === mode;
   }
-  function unmount() {
+  function unmountCard() {
     polling.invalidate();
     checks.invalidate();
     polling.clear();
     view?.host.remove();
     view = undefined;
   }
-  function dismiss() { dismissed = true; unmount(); }
-  function restart() {
+  function dismissCard() { dismissed = true; unmountCard(); }
+  function restartPolling() {
     polling.restart();
     if (checks.requestRetry()) {
       // Ignore the current response and run one new check as soon as it ends.
       polling.invalidate();
       return;
     }
-    check();
+    checkForLinks();
   }
-  async function check() {
+  async function checkForLinks() {
     polling.clear();
     if (!view || document.hidden || checks.busy) return;
-    if (lastURL !== location.href || detectCode() || !isCurrentStep()) { sync(); return; }
+    if (lastURL !== location.href || detectCode() || !isCurrentStep()) { syncLinkCard(); return; }
     if (polling.expired()) {
       view.setStatus("Checking finished. Click ↻ to check again.");
       return;
     }
-    const attempt = polling.generation;
+    const requestGeneration = polling.generation;
     const checkToken = checks.start();
     try {
       const response = await requestInlineCheck(chrome.runtime, mode);
-      if (!polling.isCurrent(attempt) || !view || document.hidden) return;
-      if (lastURL !== location.href || detectCode() || !isCurrentStep()) { sync(); return; }
+      if (!polling.isCurrent(requestGeneration) || !view || document.hidden) return;
+      if (lastURL !== location.href || detectCode() || !isCurrentStep()) { syncLinkCard(); return; }
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
-      currentItems = selectEmailLinks(response[mode] || [], minReceivedAtMs, clock.now());
-      view.renderLinks(currentItems);
+      currentLinks = selectEmailLinks(response[mode] || [], minReceivedAtMs, clock.now());
+      view.renderLinks(currentLinks);
       view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
-        currentItems.length ? MAIL_MODES[mode].foundStatus : waitingText());
+        currentLinks.length ? MAIL_MODES[mode].foundStatus : MAIL_MODES[mode].waitingStatus);
     } catch (error) {
-      if (polling.isCurrent(attempt) && view) {
-        currentItems = [];
-        view.renderLinks(currentItems);
+      if (polling.isCurrent(requestGeneration) && view) {
+        currentLinks = [];
+        view.renderLinks(currentLinks);
         view.setStatus(error.message);
       }
     } finally {
       const retry = checks.finish(checkToken);
       if (retry === null) return;
-      if (retry && view && !document.hidden) check();
-      else if (polling.isCurrent(attempt) && view && !document.hidden) polling.schedule(check);
+      if (retry && view && !document.hidden) checkForLinks();
+      else if (polling.isCurrent(requestGeneration) && view && !document.hidden) polling.schedule(checkForLinks);
     }
   }
-  function sync() {
+  function syncLinkCard() {
     if (lastURL !== location.href) {
-      unmount();
+      unmountCard();
       lastURL = location.href;
       dismissed = false;
       screenActive = false;
       minReceivedAtMs = undefined;
     }
-    if (document.hidden) { unmount(); return; }
+    if (document.hidden) { unmountCard(); return; }
     const nextStep = detectCode() ? null : detectStep(document);
-    const matches = nextStep !== null;
-    if (!matches) {
-      unmount();
+    if (nextStep === null) {
+      unmountCard();
       screenActive = false;
       stepKey = undefined;
       minReceivedAtMs = undefined;
@@ -179,7 +175,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       return;
     }
     if (screenActive && (nextStep.key !== stepKey || nextStep.mode !== mode)) {
-      unmount();
+      unmountCard();
       dismissed = false;
       screenActive = false;
       // A changed panel can represent a different signup. IMAP arrival times
@@ -197,46 +193,46 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       polling.restart();
     }
     if (view) return;
-    currentItems = [];
+    currentLinks = [];
     view = createView(document, {
-      onClose: dismiss, onRetry: restart, mode,
+      onClose: dismissCard, onRetry: restartPolling, mode,
       async copyLink(item) {
         await copyPasswordResetLink(browser.navigator?.clipboard, item.url,
           "Clipboard unavailable. Use Find password reset links in the toolbar popup.");
       },
       beforeUse(item) {
         if (document.hidden || lastURL !== location.href || detectCode() || !isCurrentStep() ||
-            !currentItems.some((current) => current.accountEmail === item.accountEmail &&
+            !currentLinks.some((current) => current.accountEmail === item.accountEmail &&
               current.uid === item.uid && current.url === item.url) ||
             !selectEmailLinks([item], minReceivedAtMs, clock.now()).length) {
           view?.setStatus("This link is no longer current. Request a new email or check again.");
           return false;
         }
-        if (mode !== "passwordResetLinks") dismiss();
+        if (mode !== "passwordResetLinks") dismissCard();
         return true;
       },
     });
     document.documentElement.append(view.host);
-    view.setStatus(waitingText());
-    check();
+    view.setStatus(MAIL_MODES[mode].waitingStatus);
+    checkForLinks();
   }
   function scheduleScan() {
     if (scanTimer) return;
-    scanTimer = setTimeout(() => { scanTimer = undefined; sync(); }, 250);
+    scanTimer = setTimeout(() => { scanTimer = undefined; syncLinkCard(); }, 250);
   }
   page.onMutation((records) => {
     if (mutationAffectsEmailLinkCard(records, view?.host, document, screenActive)) scheduleScan();
   });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismiss(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismissCard(); });
   document.addEventListener("click", (event) => {
-    const control = event.target.closest?.("button, a, [role=button], input[type=button], input[type=submit]");
+    const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
     if (!screenActive || !isEmailLinkRequestControl(control)) return;
     minReceivedAtMs = resendCutoff(clock.now());
     dismissed = false;
-    unmount();
+    unmountCard();
     polling.restart();
-    sync();
+    syncLinkCard();
   }, true);
   page.onPageChange(scheduleScan);
-  sync();
+  syncLinkCard();
 }

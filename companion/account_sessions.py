@@ -45,7 +45,7 @@ class AccountSessions:
         for email in list(self.sessions):
             if email not in active:
                 self.remove(email)
-        items, errors = [], []
+        items, warnings = [], []
         for account in account_credentials:
             email = account["email"]
             key = email.lower()
@@ -59,9 +59,9 @@ class AccountSessions:
                 items.extend({**item, "accountEmail": email} for item in check_with_timeout(session))
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
                 self.remove(email)
-                errors.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
-        if errors and not items and len(errors) == len(account_credentials):
-            raise UserError("Could not check connected accounts: " + "; ".join(errors))
+                warnings.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
+        if warnings and not items and len(warnings) == len(account_credentials):
+            raise UserError("Could not check connected accounts: " + "; ".join(warnings))
         items.sort(key=lambda item: item["receivedAt"], reverse=True)
-        return {kind: items, "warnings": errors}
+        return {kind: items, "warnings": warnings}
 

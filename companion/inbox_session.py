@@ -32,15 +32,15 @@ def message_uid(metadata):
 
 
 def connect_imap(credentials):
-    conn = imaplib.IMAP4_SSL(
+    connection = imaplib.IMAP4_SSL(
         "imap.mail.yahoo.com", 993, ssl_context=ssl.create_default_context(), timeout=15
     )
     try:
-        conn.login(credentials["email"], credentials["password"])
-        return conn
+        connection.login(credentials["email"], credentials["password"])
+        return connection
     except Exception:
         try:
-            conn.shutdown()
+            connection.shutdown()
         except Exception:
             pass
         raise
@@ -50,7 +50,7 @@ class InboxSession:
     def __init__(self, credentials, kind="codes"):
         self.extract_details = MAIL_EXTRACTORS[kind]
         self.credentials = credentials
-        self.conn = None
+        self.connection = None
         self.last_seen_uid = None
         self.message_count = 0
         self.items_by_uid = {}
@@ -58,15 +58,15 @@ class InboxSession:
         self.pending_received_at_by_uid = {}
 
     def close(self):
-        conn, self.conn = self.conn, None
+        connection, self.connection = self.connection, None
         self.last_seen_uid = None
         self.message_count = 0
         self.items_by_uid.clear()
         self.pending_metadata_uids.clear()
         self.pending_received_at_by_uid.clear()
-        if conn:
+        if connection:
             try:
-                conn.shutdown()
+                connection.shutdown()
             except (OSError, imaplib.IMAP4.error):
                 pass
 
@@ -77,7 +77,7 @@ class InboxSession:
                 self.last_seen_uid = 0
                 return []
             first = max(1, self.message_count - MAX_MESSAGES + 1)
-            status, metadata = self.conn.fetch(
+            status, metadata = self.connection.fetch(
                 f"{first}:{self.message_count}", "(UID INTERNALDATE RFC822.SIZE)"
             )
             if status != "OK":
@@ -94,7 +94,7 @@ class InboxSession:
                 self.last_seen_uid = max(uids)
             return metadata
 
-        status, data = self.conn.uid(
+        status, data = self.connection.uid(
             "search", None, "UID", f"{self.last_seen_uid + 1}:*"
         )
         if status != "OK":
@@ -112,7 +112,7 @@ class InboxSession:
         if not self.pending_metadata_uids:
             return []
         uids = sorted(self.pending_metadata_uids, reverse=True)
-        status, metadata = self.conn.uid(
+        status, metadata = self.connection.uid(
             "fetch", b",".join(str(uid).encode() for uid in uids), "(UID INTERNALDATE RFC822.SIZE)"
         )
         if status != "OK":
@@ -143,12 +143,12 @@ class InboxSession:
 
     def _fetch_items(self, candidates):
         new_item_count = 0
-        # Return codes from the newest batch immediately. Older candidates stay
-        # queued for the next poll; if no code is found, continue this check.
+        # Return results from the newest batch immediately. Older candidates stay
+        # queued for the next poll; if no result is found, continue this check.
         for batch in (candidates[:FIRST_BATCH_SIZE], candidates[FIRST_BATCH_SIZE:]):
             if not batch:
                 continue
-            status, body = self.conn.uid(
+            status, body = self.connection.uid(
                 "fetch", b",".join(str(uid).encode() for uid in batch), "(UID BODY.PEEK[])"
             )
             if status != "OK":
@@ -198,12 +198,12 @@ class InboxSession:
 
     def recent_items(self):
         try:
-            if self.conn is None:
-                self.conn = connect_imap(self.credentials)
+            if self.connection is None:
+                self.connection = connect_imap(self.credentials)
             if self.last_seen_uid is None:
                 # Refresh the count on retries: a message may have been deleted
                 # between SELECT and the previous sequence-number FETCH.
-                status, count = self.conn.select("INBOX", readonly=True)
+                status, count = self.connection.select("INBOX", readonly=True)
                 if status != "OK":
                     raise UserError("Yahoo could not open your inbox.")
                 self.message_count = int(count[0])
