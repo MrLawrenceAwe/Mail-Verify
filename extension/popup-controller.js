@@ -184,6 +184,9 @@ export function createPopupController({
     abortCheck();
     if (mode !== nextMode) clearResults();
     mode = nextMode;
+    // Unchanged results retain their buttons, including the disabled state
+    // left by a successful fill. A manual check starts a new selection.
+    setResultButtonsDisabled(mode === "codes" && !targetTab);
     setMode(mode);
     startPolling();
   }

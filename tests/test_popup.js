@@ -46,7 +46,7 @@ const code = {
   receivedAt: 1000,
 };
 
-async function setup({ codes = [code], account = "test@yahoo.com", remainingAccountEmails = [] } = {}) {
+async function setup({ codes = [code], account = "test@yahoo.com", remainingAccountEmails = [], tabUrl = "https://example.com/login" } = {}) {
   const controls = Object.fromEntries(
     [
       "checkCodes",
@@ -84,7 +84,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     requests: [],
     sendOneOff: null,
   };
-  const tab = { id: 1, url: "https://example.com/login" };
+  const tab = { id: 1, url: tabUrl };
   let nextTimer = 0;
   const client = {
     closeSession() {
@@ -241,6 +241,32 @@ test("keeps unchanged code cards and updates changed ones", async () => {
   controls.checkCodes.trigger();
   await settle();
   assert.equal(controls.results.replacements, initial + 1);
+});
+
+test("checking again after a fill makes unchanged codes selectable", async () => {
+  const second = { ...code, code: "654321", sender: "other@example.com" };
+  const { controls, state } = await setup({ codes: [code, second] });
+  const buttons = controls.results.querySelectorAll("button");
+  await buttons[0].trigger();
+  assert.ok(buttons.every(button => button.disabled));
+
+  controls.checkCodes.trigger();
+  await settle();
+  assert.deepEqual(controls.results.querySelectorAll("button"), buttons);
+  assert.ok(buttons.every(button => !button.disabled));
+  await buttons[1].trigger();
+  assert.equal(state.scriptArgs.args[0].code, second.code);
+});
+
+test("checking again without an HTTPS target keeps code buttons disabled", async () => {
+  const { controls, state } = await setup({ tabUrl: "chrome://extensions/" });
+  const button = controls.results.querySelectorAll("button")[0];
+  assert.equal(button.disabled, true);
+  controls.checkCodes.trigger();
+  await settle();
+  assert.equal(controls.results.querySelectorAll("button")[0], button);
+  assert.equal(button.disabled, true);
+  assert.equal(state.scriptArgs, null);
 });
 
 test("lets a manual retry supersede a pending check", async () => {
