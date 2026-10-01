@@ -9,6 +9,12 @@ from code_extraction import extract_code_details
 from link_extraction import extract_confirmation_link_details, extract_password_reset_link_details
 from errors import UserError
 
+MAIL_EXTRACTORS = {
+    "codes": extract_code_details,
+    "confirmationLinks": extract_confirmation_link_details,
+    "passwordResetLinks": extract_password_reset_link_details,
+}
+
 MAX_MESSAGE_AGE_SECONDS = 600
 MAX_FUTURE_SKEW_SECONDS = 120
 FIRST_BATCH_SIZE = 5
@@ -42,11 +48,7 @@ def connect_imap(credentials):
 
 class InboxSession:
     def __init__(self, credentials, kind="codes"):
-        self.extract_details = {
-            "codes": extract_code_details,
-            "confirmationLinks": extract_confirmation_link_details,
-            "passwordResetLinks": extract_password_reset_link_details,
-        }[kind]
+        self.extract_details = MAIL_EXTRACTORS[kind]
         self.credentials = credentials
         self.conn = None
         self.last_seen_uid = None

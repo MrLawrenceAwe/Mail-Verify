@@ -34,6 +34,11 @@ class HostTests(unittest.TestCase):
         from link_extraction import extract_password_reset_link_details
         self.assertIs(sessions.sessions[credentials["email"]].extract_details, extract_password_reset_link_details)
 
+    def test_non_string_actions_are_rejected_as_unsupported(self):
+        for action in (None, [], {}):
+            with self.subTest(action=action), self.assertRaisesRegex(host.UserError, "Unsupported request"):
+                host.handle_request({"action": action}, account_sessions.AccountSessions())
+
     def test_frame(self):
         p = json.dumps({"action": "status"}).encode()
         self.assertEqual(

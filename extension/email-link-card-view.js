@@ -3,7 +3,7 @@ import { appendEmailLinkDetails } from "./email-link-details.js";
 
 export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse, copyLink, mode }) {
   const reset = mode === "passwordResetLinks";
-  const { resultLabel, actionLabel, guidance } = MAIL_MODES[mode];
+  const { resultLabel, actionLabel, guidance, copiedLabel, copySuccessStatus } = MAIL_MODES[mode];
   const title = `Mail Verify ${resultLabel}`;
   const host = document.createElement("div");
   host.dataset.mailVerify = "email-links";
@@ -42,8 +42,8 @@ export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse,
             link.disabled = true;
             try {
               await copyLink(item);
-              link.textContent = "Copied";
-              root.querySelector("#status").textContent = "Password reset link copied to clipboard.";
+              link.textContent = copiedLabel;
+              root.querySelector("#status").textContent = copySuccessStatus;
             } catch (error) {
               root.querySelector("#status").textContent = error.message;
             } finally {

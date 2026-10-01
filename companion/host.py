@@ -13,7 +13,7 @@ from pathlib import Path
 
 from errors import UserError
 from keychain import keychain
-from inbox_session import connect_imap
+from inbox_session import MAIL_EXTRACTORS, connect_imap
 from account_sessions import AccountSessions
 
 MAX_FRAME_BYTES = 16_384
@@ -78,7 +78,7 @@ def handle_request(request, sessions):
             keychain("set", {"accounts": account_credentials})
         sessions.remove(address)
         return {"accountEmails": [item["email"] for item in account_credentials]}
-    if action in ("codes", "confirmationLinks", "passwordResetLinks"):
+    if isinstance(action, str) and action in MAIL_EXTRACTORS:
         account_credentials = load_account_credentials()
         if not account_credentials:
             sessions.close()

@@ -14,7 +14,7 @@ for file in extension/*.js; do node --check "$file"; done
 
 The installer test installs into a temporary directory, launches that copy to verify native-message framing and imports, then checks uninstall cleanup. It does not access Yahoo or Keychain.
 
-To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/inline-picker-preview.html`. The fixture does not access Yahoo.
+To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/code-picker-preview.html`. The fixture does not access Yahoo.
 
 Validation has included synthetic email and form tests, a live check through the installed native bridge, and an inline inbox check on an HTTPS demo form. An end-to-end fill with a newly received code still needs validation.
 
@@ -24,10 +24,10 @@ Validation has included synthetic email and form tests, a live check through the
 | --- | --- |
 | `content-entry.js` | Starts the code picker and email-link card with one page coordinator. |
 | `page-coordinator.js` | Shares code-field candidates, DOM observation, and page-change notifications. |
-| `inline-picker.js`, `inline-picker-view.js` | Control and render code suggestions beside a detected field. |
+| `code-picker.js`, `code-picker-view.js` | Control and render code suggestions beside a detected field. |
 | `email-link-card.js`, `email-link-card-view.js` | Detect confirmation/reset steps and control and render the link card. Step detection returns a separate identity key and mode. |
 | `popup-entry.js`, `popup-controller.js`, `popup-view.js` | Start the toolbar popup, manage accounts and polling, and render controls and results. |
-| `email-link-details.js`, `mail-modes.js` | Share link-detail rows and mode-specific result labels, actions, and guidance. |
+| `email-link-details.js`, `mail-modes.js`, `reset-link-copy.js` | Share link-detail rows, mode-specific labels and guidance, and reset-link clipboard handling. |
 | `inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight scans per mail type. |
 | `companion-client.js` | Handle one-off native requests and reusable native-messaging sessions. |
 | `polling-lifecycle.js` | Manage polling deadlines, stale-response generations, and retries. |

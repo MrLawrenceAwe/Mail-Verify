@@ -1,6 +1,6 @@
 import { normalizeStepText } from "./step-text.js";
 import { handleCodeField } from "./code-fields.js";
-import { createInlinePickerView } from "./inline-picker-view.js";
+import { createCodePickerView } from "./code-picker-view.js";
 import { initialStepCutoff, isFreshMessage, resendCutoff } from "./mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
@@ -80,7 +80,7 @@ export function isCodeRequestControl(control) {
     (/\b(?:code|otp|passcode)\b/i.test(label) || /^re-?send(?: again)?$/i.test(label));
 }
 
-export function startInlinePicker({ browser = globalThis, handleField = handleCodeField, page = getPageCoordinator(browser, handleField) } = {}) {
+export function startCodePicker({ browser = globalThis, handleField = handleCodeField, page = getPageCoordinator(browser, handleField) } = {}) {
   const { document, window, location, chrome, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 2000 });
@@ -128,7 +128,7 @@ export function startInlinePicker({ browser = globalThis, handleField = handleCo
     minReceivedAtMs ??= initialStepCutoff(clock.now());
     anchor = field.anchor;
     stepContext = context;
-    view = createInlinePickerView(document, {
+    view = createCodePickerView(document, {
       onClose: dismissPicker,
       onRetry: restartPolling,
       onFill: (item, button) => {

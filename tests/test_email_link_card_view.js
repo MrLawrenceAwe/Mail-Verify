@@ -58,3 +58,14 @@ test("reset-card action copies only an approved selection and reports success", 
   assert.equal(action.disabled, false);
   assert.match(controls["#status"].textContent, /copied to clipboard/);
 });
+
+
+test("failed reset-card copies show the error and allow another attempt", async () => {
+  const { action, controls } = setup("passwordResetLinks", {
+    copyLink: async () => { throw new Error("Clipboard denied. Use the toolbar popup."); },
+  });
+  await action.listeners.click();
+  assert.equal(action.disabled, false);
+  assert.equal(action.textContent, "Copy password reset link");
+  assert.match(controls["#status"].textContent, /Clipboard denied/);
+});

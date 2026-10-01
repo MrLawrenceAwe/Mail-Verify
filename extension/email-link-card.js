@@ -1,3 +1,4 @@
+import { copyPasswordResetLink } from "./reset-link-copy.js";
 import { MAIL_MODES } from "./mail-modes.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
 import { isSupportedEmailLinkUrl } from "./email-link-url.js";
@@ -9,10 +10,6 @@ import { createPollingLifecycle, createRetryGate } from "./polling-lifecycle.js"
 
 const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;
-
-export function isConfirmationScreen(text) {
-  return !isPasswordResetScreen(text) && matchesConfirmationPrompt(text);
-}
 
 function matchesConfirmationPrompt(text) {
   const value = text.replace(/\s+/g, " ").trim();
@@ -204,8 +201,8 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     view = createView(document, {
       onClose: dismiss, onRetry: restart, mode,
       async copyLink(item) {
-        if (!browser.navigator?.clipboard) throw new Error("Clipboard unavailable. Use Find password reset links in the toolbar popup.");
-        await browser.navigator.clipboard.writeText(item.url);
+        await copyPasswordResetLink(browser.navigator?.clipboard, item.url,
+          "Clipboard unavailable. Use Find password reset links in the toolbar popup.");
       },
       beforeUse(item) {
         if (document.hidden || lastURL !== location.href || detectCode() || !isCurrentStep() ||

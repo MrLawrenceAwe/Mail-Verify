@@ -15,6 +15,8 @@ export const MAIL_MODES = {
   passwordResetLinks: {
     resultLabel: "password reset links",
     actionLabel: "Copy password reset link",
+    copiedLabel: "Copied",
+    copySuccessStatus: "Password reset link copied to clipboard.",
     foundStatus: "Choose a password reset email to copy its link.",
     emptyStatus: "No recent password reset link yet. Request one and keep this popup open.",
     waitingStatus: "Waiting for your password reset email…",
