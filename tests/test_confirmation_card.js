@@ -60,6 +60,28 @@ test("countdown changes keep the same confirmation step", () => {
   assert.equal(getConfirmationStepKey(document), first);
 });
 
+test("short-unit countdown ticks retain links and the polling deadline", async () => {
+  for (const kind of ["links", "resetLinks"]) {
+    for (const unit of ["s", "m"]) {
+      const prompt = kind === "resetLinks" ? "Reset your password. Check your email." : "Check your email.";
+      const panel = { innerText: `${prompt} Resend email in 30${unit}`, getClientRects: () => [{}], checkVisibility: () => true };
+      const f = setup(panel, kind); await settle();
+      const view = f.state.views[0];
+      assert.deepEqual(view.links, [item]);
+      f.state.now = 11000;
+      panel.innerText = `${prompt} Resend email in 29${unit}`;
+      f.state.mutate(stepMutation()); await f.run(250);
+      assert.equal(f.state.views.length, 1, `${kind}: ${unit} countdown must keep the card`);
+      assert.deepEqual(view.links, [item]);
+      assert.equal(f.state.requests, 1);
+      f.state.now = 130000;
+      await f.run(8000);
+      assert.equal(f.state.requests, 1, "countdown must not restart the two-minute window");
+      assert.match(view.status, /Checking finished/);
+    }
+  }
+});
+
 test("recognises controls that request another confirmation message", () => {
   const control = (textContent) => ({ textContent, getAttribute: () => "" });
   for (const label of ["Resend email", "Send again", "Send confirmation email", "Request verification link"])
@@ -152,6 +174,30 @@ test("resend clears old links and expiry prevents opening", async () => {
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now += 700000;
   assert.equal(f.state.views.at(-1).callbacks.beforeUse(item), false);
+});
+
+test("input-button resends invalidate old confirmation and reset links", async () => {
+  for (const kind of ["links", "resetLinks"]) {
+    const prompt = kind === "resetLinks" ? "Reset your password. Check your email." : "Check your email.";
+    const panel = { innerText: prompt, getClientRects: () => [{}], checkVisibility: () => true };
+    const f = setup(panel, kind); await settle();
+    const oldView = f.state.views[0];
+    assert.deepEqual(oldView.links, [item]);
+    f.state.now = 11000;
+    const control = { tagName: "INPUT", value: "Resend email", getAttribute: () => "" };
+    f.events.click({ target: { closest(selector) {
+      return selector.split(", ").includes("input[type=button]") ? control : null;
+    } } });
+    await settle();
+    assert.equal(oldView.removed, true);
+    assert.deepEqual(f.state.views.at(-1).links, []);
+    assert.equal(oldView.callbacks.beforeUse(item), false);
+    f.state.now = 12000;
+    const newer = { ...item, uid: 2, receivedAt: 12000 };
+    f.state.respond = async () => ({ ok: true, [kind]: [item, newer] });
+    await f.run(8000);
+    assert.deepEqual(f.state.views.at(-1).links, [newer]);
+  }
 });
 
 test("a text update after resend cannot restore an earlier link", async () => {
