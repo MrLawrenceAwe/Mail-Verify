@@ -45,17 +45,40 @@ function verificationStepContext(anchor) {
   return { roots, parent: container.parentElement, key };
 }
 
-export function mutationAffectsPicker(records, host, contextRoots = [], stepRoots = [], stepParent, hasDescendant = (node, selector) => node?.querySelector?.(selector)) {
+const MAX_MUTATION_NODES = 500;
+const MAX_MUTATION_TEXT_UNITS = 10_000;
+
+export function mutationAffectsPicker(records, host, contextRoots = [], stepRoots = [], stepParent) {
   const attributeTargets = new Set();
-  const hasRelevantElement = (node) => node?.nodeType === 1 && (
-    node.matches?.("input, label, form, main") ||
-    hasDescendant(node, "input, label, form, main")
-  );
-  const relevantText = (value) => /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value || "");
-  const changesContext = (record) => record.type === "characterData"
-    ? relevantText(record.target.textContent) || relevantText(record.oldValue)
-    : record.type === "childList" &&
-      [...record.addedNodes, ...record.removedNodes].some((node) => relevantText(node.textContent));
+  let remainingNodes = MAX_MUTATION_NODES, remainingTextUnits = MAX_MUTATION_TEXT_UNITS;
+  const matchesText = (value) => /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value);
+  const relevantText = (value = "") => {
+    if (value.length > remainingTextUnits) return true;
+    remainingTextUnits -= value.length;
+    return matchesText(value);
+  };
+  const relevantSubtree = (root, selector, inspectText = false) => {
+    const text = [];
+    // Budget the whole batch before the coalesced scan. Never aggregate an
+    // element's textContent or query an unrestricted subtree in the observer.
+    for (let node = root; node;) {
+      if (--remainingNodes < 0) return true;
+      if (node.nodeType === 1 && node.matches?.(selector)) return true;
+      if (inspectText && node.nodeType === 3) {
+        const value = node.textContent || "";
+        if (value.length > remainingTextUnits) return true;
+        remainingTextUnits -= value.length;
+        text.push(value);
+      }
+      if (node.firstChild) {
+        node = node.firstChild;
+        continue;
+      }
+      while (node !== root && !node.nextSibling) node = node.parentNode;
+      node = node === root ? null : node.nextSibling;
+    }
+    return inspectText && matchesText(text.join(""));
+  };
   return records.some((record) => {
     const target = record.target;
     if (target === host || host?.contains(target)) return false;
@@ -66,13 +89,19 @@ export function mutationAffectsPicker(records, host, contextRoots = [], stepRoot
     if (record.type === "childList" && target === stepParent) return true;
     if (stepRoots.some((root) => root.contains?.(target)) &&
         (record.type === "characterData" || record.type === "childList")) return true;
-    if (contextRoots.some((root) => root.contains?.(target)) && changesContext(record)) return true;
     if (record.type === "attributes")
-      return target?.matches?.("input, label") || !!hasDescendant(target, "input");
-    if (record.type === "characterData")
+      return target?.matches?.("input, label") || relevantSubtree(target, "input");
+    const inContext = contextRoots.some((root) => root.contains?.(target));
+    if (record.type === "characterData") {
+      if (inContext && (--remainingNodes < 0 ||
+          relevantText(target.textContent || "") || relevantText(record.oldValue || ""))) return true;
       return !!target?.parentElement?.closest?.("label");
+    }
     if (target?.closest?.("label")) return true;
-    return [...record.addedNodes, ...record.removedNodes].some(hasRelevantElement);
+    for (const nodes of [record.addedNodes, record.removedNodes])
+      for (const node of nodes)
+        if (relevantSubtree(node, "input, label, form, main", inContext)) return true;
+    return false;
   });
 }
 
@@ -262,7 +291,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     });
   };
   page.onMutation((records) => {
-    if (mutationAffectsPicker(records, view?.host, page.candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent, page.hasMutationDescendant)) scheduleScan();
+    if (mutationAffectsPicker(records, view?.host, page.candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent)) scheduleScan();
   });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
