@@ -12,6 +12,69 @@ import account_sessions
 
 
 class AccountSessionsTests(unittest.TestCase):
+    def test_pending_scan_is_reported_until_completed_results_are_collected(self):
+        release = threading.Event()
+        sessions = account_sessions.AccountSessions()
+        accounts = [{"email": "test@yahoo.com", "password": "unused"}]
+        def fetch(_session):
+            release.wait(2)
+            return [{"code": "123456", "receivedAt": int(time.time() * 1000), "uid": 1}]
+        with patch.object(account_sessions, "fetch_with_timeout", side_effect=fetch):
+            try:
+                response = sessions.fetch_recent_items(accounts)
+                self.assertEqual(response["codes"], [])
+                self.assertTrue(response["scanPending"])
+                release.set()
+                sessions.pending[accounts[0]["email"]].result(timeout=2)
+                response = sessions.fetch_recent_items(accounts, collect_only=True)
+                self.assertFalse(response["scanPending"])
+                self.assertEqual(len(response["codes"]), 1)
+            finally:
+                release.set()
+                sessions.close()
+
+    def test_collection_polls_do_not_restart_completed_accounts(self):
+        release = threading.Event()
+        sessions = account_sessions.AccountSessions()
+        accounts = [{"email": "slow@yahoo.com", "password": "unused"},
+                    {"email": "healthy@yahoo.com", "password": "unused"}]
+        calls = []
+        def fetch(session):
+            calls.append(session.credentials["email"])
+            if session.credentials["email"].startswith("slow"):
+                release.wait(2)
+            return [{"code": "123456", "receivedAt": int(time.time() * 1000), "uid": 1}]
+        with patch.object(account_sessions, "fetch_with_timeout", side_effect=fetch):
+            try:
+                first = sessions.fetch_recent_items(accounts)
+                self.assertTrue(first["scanPending"])
+                self.assertEqual(len(first["codes"]), 1)
+                second = sessions.fetch_recent_items(accounts, collect_only=True)
+                self.assertTrue(second["scanPending"])
+                self.assertEqual(calls.count("healthy@yahoo.com"), 1)
+                release.set()
+                sessions.pending["slow@yahoo.com"].result(timeout=2)
+                final = sessions.fetch_recent_items(accounts, collect_only=True)
+                self.assertFalse(final["scanPending"])
+                self.assertEqual(len(final["codes"]), 2)
+                self.assertEqual(len(calls), 2)
+                sessions.fetch_recent_items(accounts)
+                self.assertEqual(len(calls), 4)
+            finally:
+                release.set()
+                sessions.close()
+
+    def test_collecting_without_pending_work_does_not_start_a_scan(self):
+        sessions = account_sessions.AccountSessions()
+        accounts = [{"email": "test@yahoo.com", "password": "unused"}]
+        with patch.object(account_sessions, "fetch_with_timeout") as fetch:
+            try:
+                response = sessions.fetch_recent_items(accounts, collect_only=True)
+                self.assertEqual(response, {"codes": [], "warnings": [], "scanPending": False})
+                fetch.assert_not_called()
+            finally:
+                sessions.close()
+
     def test_codes_are_labeled_and_sorted_across_accounts(self):
         accounts = [
             {"email": "one@yahoo.com", "password": "old-password"},
@@ -34,7 +97,7 @@ class AccountSessionsTests(unittest.TestCase):
             sessions.fetch_recent_items(accounts)
             old = sessions.sessions["one@yahoo.com"]
             with patch.object(old, "close") as close:
-                self.assertEqual(sessions.fetch_recent_items(accounts, "confirmationLinks"), {"confirmationLinks": [], "warnings": []})
+                self.assertEqual(sessions.fetch_recent_items(accounts, "confirmationLinks"), {"confirmationLinks": [], "warnings": [], "scanPending": False})
                 close.assert_called_once()
             from link_extraction import extract_confirmation_link_details
             self.assertIs(sessions.sessions["one@yahoo.com"].extract_item, extract_confirmation_link_details)
@@ -46,7 +109,7 @@ class AccountSessionsTests(unittest.TestCase):
             sessions.fetch_recent_items(accounts, "confirmationLinks")
             old = sessions.sessions["one@yahoo.com"]
             with patch.object(old, "close") as close:
-                self.assertEqual(sessions.fetch_recent_items(accounts, "passwordResetLinks"), {"passwordResetLinks": [], "warnings": []})
+                self.assertEqual(sessions.fetch_recent_items(accounts, "passwordResetLinks"), {"passwordResetLinks": [], "warnings": [], "scanPending": False})
                 close.assert_called_once()
             from link_extraction import extract_password_reset_link_details
             self.assertIs(sessions.sessions["one@yahoo.com"].extract_item, extract_password_reset_link_details)

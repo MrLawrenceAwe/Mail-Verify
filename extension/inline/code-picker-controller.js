@@ -1,7 +1,7 @@
 import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
 import { handleCodeField } from "../shared/code-fields.js";
 import { createCodePickerView } from "./code-picker-view.js";
-import { initialStepCutoff, isFreshMessage, resendCutoff } from "../shared/mail-timing.js";
+import { initialStepCutoff, isFreshMessage, resendCutoff, PENDING_SCAN_POLL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
@@ -89,11 +89,14 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
   const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 2000 });
   const { checks } = polling;
   let view;
+  let scanPending = false;
+  let nextScanAt = 0;
   let dismissed = false, filledStep = false, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);
   function unmountPicker({ preserveStep = false } = {}) {
+    scanPending = false;
     polling.cancelChecks();
     view?.host.remove();
     view = undefined;
@@ -161,13 +164,16 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
-      const response = await requestInlineCheck(chrome.runtime, "codes");
+      const collectOnly = scanPending && clock.now() < nextScanAt;
+      if (!collectOnly) nextScanAt = clock.now() + 2000;
+      const response = await requestInlineCheck(chrome.runtime, "codes", collectOnly);
       if (lastURL !== location.href) {
         syncPicker();
         return;
       }
       if (!polling.isCurrent(requestGeneration) || !view) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
+      scanPending = response.scanPending;
       checkFailed = !!response.warnings?.length;
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
       const codes = selectSuggestedCodes(response.codes, minReceivedAtMs, clock.now(), excludedMessageKeys);
@@ -181,6 +187,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     } catch (error) {
       checkFailed = true;
       if (polling.isCurrent(requestGeneration) && view) {
+        scanPending = false;
         view.clearCodes();
         view.setStatus(error.message);
       }
@@ -193,7 +200,8 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       }
       if (view) positionPicker();
       if (view && !polling.hasExpired()) {
-        polling.schedule(checkForCodes, polling.isCurrent(requestGeneration) ? 2000 : 0);
+        polling.schedule(checkForCodes, polling.isCurrent(requestGeneration)
+          ? scanPending ? PENDING_SCAN_POLL_MS : 2000 : 0);
       } else if (view && !view.hasCodes() && !checkFailed) {
         view.setStatus("No code found. Click ↻ to check again.");
       }

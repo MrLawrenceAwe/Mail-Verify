@@ -55,6 +55,50 @@ test("suggestions sit below the field and stay within the viewport", () => {
   assert.deepEqual(calculatePickerPosition({ left: 900, top: 700, bottom: 740 }, 300, 110, 1000, 800), { left: 692, top: 586 });
 });
 
+test("code picker collects pending scans quickly then resumes normal checks", async () => {
+  const modes = [];
+  const anchor = {};
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
+  const { timers, results } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => 10000,
+    check: async (_mailType, collectOnly) => {
+      modes.push(collectOnly);
+      return modes.length === 1 ? { ok: true, codes: [], scanPending: true }
+        : { ok: true, codes: [code], scanPending: false };
+    },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await timers.run(1000);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(results.childElementCount, 1);
+  assert.deepEqual(modes, [false, true]);
+  await timers.run(2000);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(modes.at(-1), false);
+});
+
+test("a slow account does not suppress normal code scans for healthy accounts", async () => {
+  const modes = [];
+  const anchor = {};
+  let now = 10000;
+  const { timers } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => now,
+    check: async (_mailType, collectOnly) => {
+      modes.push(collectOnly);
+      return { ok: true, codes: [], scanPending: true };
+    },
+  });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  now += 1000;
+  await timers.run(1000); await settle();
+  now += 1000;
+  await timers.run(1000); await settle();
+  assert.deepEqual(modes, [false, true, false]);
+});
+
 test("picker repositions using the current viewport after resize", () => {
   const frames = [];
   const anchor = {};

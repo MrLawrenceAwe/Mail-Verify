@@ -74,7 +74,7 @@ function createSession(runtime, timers) {
 export function createCompanionClient(runtime, timers = globalThis) {
   const session = createSession(runtime, timers);
   return {
-    sendSessionRequest: (action) => session.sendRequest({ action }),
+    sendSessionRequest: (action, collectOnly = false) => session.sendRequest({ action, collectOnly }),
     closeSession: session.closeSession,
     async sendOneOffRequest(request) {
       const oneOff = createSession(runtime, timers);

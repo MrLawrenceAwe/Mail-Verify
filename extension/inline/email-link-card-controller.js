@@ -3,13 +3,36 @@ import { MAIL_TYPES } from "../shared/mail-types.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
 import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
-import { initialStepCutoff, isFreshMessage, resendCutoff } from "../shared/mail-timing.js";
+import { initialStepCutoff, isFreshMessage, resendCutoff, PENDING_SCAN_POLL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
 
 const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;
+const MAX_PANEL_NODES = 500;
+const MAX_PANEL_TEXT_UNITS = 10_000;
+
+function isBoundedPanel(panel) {
+  // Bound traversal before any layout or full rendered-text reads. Hidden
+  // templates and non-rendered content do not consume the text budget.
+  let count = 0, textUnits = 0;
+  for (let node = panel; node;) {
+    if (++count > MAX_PANEL_NODES) return false;
+    if (node.nodeType === 3) {
+      textUnits += node.data.length;
+      if (textUnits > MAX_PANEL_TEXT_UNITS) return false;
+    }
+    const skipChildren = node.hidden || /^(SCRIPT|STYLE|TEMPLATE)$/.test(node.tagName);
+    if (!skipChildren && node.firstChild) {
+      node = node.firstChild;
+      continue;
+    }
+    while (node !== panel && !node.nextSibling) node = node.parentNode;
+    node = node === panel ? null : node.nextSibling;
+  }
+  return true;
+}
 
 function matchesConfirmationPrompt(text) {
   const value = text.replace(/\s+/g, " ").trim();
@@ -44,7 +67,7 @@ export function detectEmailLinkStep(document) {
   const panels = [...document.querySelectorAll("main, [role=main], form, [role=dialog]")];
   if (!panels.length) panels.push(document.body);
   for (const panel of panels) {
-    if (!panel?.getClientRects().length ||
+    if (!panel || !isBoundedPanel(panel) || !panel.getClientRects().length ||
         !panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     const text = panel.innerText || "";
     const mailType = isPasswordResetScreen(text) ? "passwordResetLinks"
@@ -105,6 +128,8 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
   const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 8000 });
   const { checks } = polling;
   let view, scanTimer;
+  let scanPending = false;
+  let nextScanAt = 0;
   let lastURL = location.href, dismissed = false, minReceivedAtMs, hasActiveStep = false, stepKey;
   let currentLinks = [];
   let mailType = "confirmationLinks";
@@ -113,6 +138,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     return step?.key === stepKey && step?.mailType === mailType;
   }
   function unmountCard() {
+    scanPending = false;
     polling.cancelChecks();
     view?.host.remove();
     view = undefined;
@@ -133,16 +159,20 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     const requestGeneration = polling.generation;
     const checkToken = checks.start();
     try {
-      const response = await requestInlineCheck(chrome.runtime, mailType);
+      const collectOnly = scanPending && clock.now() < nextScanAt;
+      if (!collectOnly) nextScanAt = clock.now() + 8000;
+      const response = await requestInlineCheck(chrome.runtime, mailType, collectOnly);
       if (!polling.isCurrent(requestGeneration) || !view || document.hidden) return;
       if (lastURL !== location.href || detectCode() || !isCurrentStep()) { syncLinkCard(); return; }
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
+      scanPending = response.scanPending;
       currentLinks = selectEmailLinks(response[mailType] || [], minReceivedAtMs, clock.now());
       view.renderLinks(currentLinks);
       view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
         currentLinks.length ? MAIL_TYPES[mailType].foundStatus : MAIL_TYPES[mailType].waitingStatus);
     } catch (error) {
       if (polling.isCurrent(requestGeneration) && view) {
+        scanPending = false;
         currentLinks = [];
         view.renderLinks(currentLinks);
         view.setStatus(error.message);
@@ -151,7 +181,8 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       const retry = checks.finish(checkToken);
       if (retry === null) return;
       if (retry && view && !document.hidden) checkForLinks();
-      else if (polling.isCurrent(requestGeneration) && view && !document.hidden) polling.schedule(checkForLinks);
+      else if (polling.isCurrent(requestGeneration) && view && !document.hidden)
+        polling.schedule(checkForLinks, scanPending ? PENDING_SCAN_POLL_MS : 8000);
     }
   }
   function syncLinkCard() {

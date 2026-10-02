@@ -36,9 +36,11 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `shared/mail-timing.js`, `shared/step-text.js`, `shared/email-link-url.js` | Share freshness, step-text and request-control parsing, and link-URL rules. |
 | `shared/code-fields.js` | Detect and fill verification inputs; helpers stay inside the injected function because Chrome serializes it. |
 
-The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Update the companion and extension together when changing this contract.
+The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Mail responses include the boolean `scanPending`. Requests with `collectOnly: true` collect existing workers and cached results without starting scans. All surfaces collect pending scans every second, then resume their normal check interval. While a slower account remains pending, full checks still run at the normal interval so healthy accounts can discover new mail. Update the companion and extension together when changing this contract.
 
 Scroll and resize updates reuse cached field candidates and position the picker on the next animation frame. Relevant DOM changes refresh discovery. Mutation batches deduplicate attribute targets and cache descendant containment until child-list or role changes invalidate it. Hidden documents skip mutation dispatch and invalidate field candidates for rediscovery when visible. Filling always rediscovers fields and verifies the target rather than trusting cached hints.
+
+Before requesting layout or reading a link panel's `innerText`, detection walks at most 500 DOM nodes and allows at most 10,000 raw text code units. Larger panels, including the body fallback, are skipped; later short panels can still match. Explicitly hidden subtrees, scripts, styles, and templates are not traversed. The existing 2,500-character rendered-text limit still applies. This keeps extraction bounded on large pages; panels with extensive CSS-hidden markup may also be skipped.
 
 ## Companion modules
 
@@ -53,7 +55,7 @@ Scroll and resize updates reuse cached field candidates and position the picker 
 | `keychain.py`, `errors.py` | Store credentials and define user-facing errors. |
 | `install.py` | Discover, install, and remove companion runtime modules. |
 
-Up to four account scans run concurrently in a thread pool. Each request waits at most 250 ms for scans, returns completed results, and retains pending work for later polls without overlapping scans for the same session. Cached results expire after ten minutes. Removing an account or changing credentials or mail type discards its results immediately and closes its connection after any active worker finishes.
+Up to four account scans run concurrently in a thread pool. Each request waits at most 250 ms for scans, returns completed results and pending status, and retains pending work for later collection polls without overlapping scans for the same session. Collection polls do not rescan accounts that already finished. Cached results expire after ten minutes. Removing an account or changing credentials or mail type discards its results immediately and closes its connection after any active worker finishes.
 
 Each worker uses a 25-second scan budget, applying the remaining budget to blocking IMAP reads with a maximum socket timeout of 15 seconds. Session requests have a 35-second companion watchdog; account setup allows 60 seconds for login and Keychain access. A watchdog disconnects the native port, clears the pending request, and allows retry. One-off account operations use their own native port so they can also be disconnected on timeout.
 

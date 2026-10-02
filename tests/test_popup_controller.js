@@ -83,6 +83,8 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     failRemove: false,
     scriptArgs: null,
     requests: [],
+    sessionRequests: [],
+    scanPending: false,
     sendOneOff: null,
   };
   const tab = { id: 1, url: tabUrl };
@@ -90,11 +92,13 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     closeSession() {
       state.closes++;
     },
-    async sendSessionRequest(action) {
+    async sendSessionRequest(action, collectOnly = false) {
+      state.sessionRequests.push({ action, collectOnly });
       return action === "status"
         ? { accountEmails: account ? [account] : [] }
-        : action === "passwordResetLinks" ? { passwordResetLinks: await state.fetchPasswordResetLinks() }
-        : action === "confirmationLinks" ? { confirmationLinks: await state.fetchConfirmationLinks() } : { codes: await state.fetchCodes() };
+        : action === "passwordResetLinks" ? { passwordResetLinks: await state.fetchPasswordResetLinks(), scanPending: state.scanPending }
+        : action === "confirmationLinks" ? { confirmationLinks: await state.fetchConfirmationLinks(), scanPending: state.scanPending }
+        : { codes: await state.fetchCodes(), scanPending: state.scanPending };
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);
@@ -143,6 +147,41 @@ test("polls whether codes are present or absent", async () => {
       "keep checking with or without an existing code",
     );
   }
+});
+
+test("popup collects pending results quickly without reporting an empty completed scan", async () => {
+  const { state, timers, controls } = await setup({ codes: [] });
+  state.scanPending = true;
+  await timers.run(8000);
+  assert.match(controls.status.textContent, /Checking/);
+  state.scanPending = false;
+  state.fetchCodes = async () => [code];
+  await timers.run(1000);
+  assert.equal(state.sessionRequests.at(-1).collectOnly, true);
+  assert.equal(controls.results.querySelectorAll("button").length, 1);
+  await timers.run(8000);
+  assert.equal(state.sessionRequests.at(-1).collectOnly, false);
+});
+
+test("a manual popup retry starts a new scan instead of collecting a closed session", async () => {
+  const { state, timers, controls } = await setup({ codes: [] });
+  state.scanPending = true;
+  await timers.run(8000);
+  controls.checkCodes.trigger(); await settle();
+  assert.equal(state.sessionRequests.at(-1).collectOnly, false);
+});
+
+test("a slow account does not suppress normal popup scans for healthy accounts", async () => {
+  const { state, timers } = await setup({ codes: [] });
+  state.scanPending = true;
+  state.now += 8000;
+  await timers.run(8000);
+  state.now += 1000;
+  await timers.run(1000);
+  assert.equal(state.sessionRequests.at(-1).collectOnly, true);
+  state.now += 7000;
+  await timers.run(1000);
+  assert.equal(state.sessionRequests.at(-1).collectOnly, false);
 });
 
 test("stops polling after the deadline", async () => {

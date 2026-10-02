@@ -25,13 +25,13 @@ export function registerInlineRequests(chrome, timers = globalThis) {
         if (active?.id !== sender.tab.id) throw new Error("Return to this tab to check your inboxes.");
         if (!scan.pending) {
           timers.clearTimeout(scan.idleTimer);
-          scan.pending = scan.client.sendSessionRequest(mailType).finally(() => {
+          scan.pending = scan.client.sendSessionRequest(mailType, message.collectOnly === true).finally(() => {
             scan.pending = undefined;
             scan.idleTimer = timers.setTimeout(() => scan.client.closeSession(), 15_000);
           });
         }
         const response = await scan.pending;
-        reply({ ok: true, [mailType]: response[mailType], warnings: response.warnings || [] });
+        reply({ ok: true, [mailType]: response[mailType], warnings: response.warnings || [], scanPending: response.scanPending });
       } catch (error) {
         reply({ ok: false, error: error.message });
       }

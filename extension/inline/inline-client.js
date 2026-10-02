@@ -1,4 +1,4 @@
-export function requestInlineCheck(runtime, mailType) {
+export function requestInlineCheck(runtime, mailType, collectOnly = false) {
   return new Promise((resolve, reject) => {
     const port = runtime.connect({ name: "mail-verify-inline" });
     let settled = false;
@@ -14,7 +14,7 @@ export function requestInlineCheck(runtime, mailType) {
       reject(new Error("Mail Verify disconnected. Reload the extension and try again."));
     });
     try {
-      port.postMessage({ mailType });
+      port.postMessage({ mailType, collectOnly });
     } catch (error) {
       if (settled) return;
       settled = true;

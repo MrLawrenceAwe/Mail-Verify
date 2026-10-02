@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mail Verify",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Find email codes, account confirmation links and password reset links; fill, open or copy a selected result.",
   "permissions": [
     "nativeMessaging",

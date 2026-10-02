@@ -24,11 +24,19 @@ function runtime() {
 test("inline check keeps its port open until the response arrives", async () => {
   const chromeRuntime = runtime();
   const pending = requestInlineCheck(chromeRuntime, "codes");
-  assert.deepEqual(chromeRuntime.sent, { mailType: "codes" });
+  assert.deepEqual(chromeRuntime.sent, { mailType: "codes", collectOnly: false });
   assert.equal(chromeRuntime.closed, false);
   chromeRuntime.respond({ ok: true, codes: [] });
   assert.deepEqual(await pending, { ok: true, codes: [] });
   assert.equal(chromeRuntime.closed, true);
+});
+
+test("collection requests preserve their mode and pending scan status", async () => {
+  const chromeRuntime = runtime();
+  const pending = requestInlineCheck(chromeRuntime, "confirmationLinks", true);
+  assert.deepEqual(chromeRuntime.sent, { mailType: "confirmationLinks", collectOnly: true });
+  chromeRuntime.respond({ ok: true, confirmationLinks: [], scanPending: true });
+  assert.equal((await pending).scanPending, true);
 });
 
 test("inline check reports a disconnected service worker", async () => {

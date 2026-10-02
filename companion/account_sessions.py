@@ -56,7 +56,7 @@ class AccountSessions:
             else:
                 session.close()
 
-    def fetch_recent_items(self, account_credentials, mail_type="codes"):
+    def fetch_recent_items(self, account_credentials, mail_type="codes", collect_only=False):
         if mail_type != self.mail_type:
             for email in list(self.sessions):
                 self.remove(email)
@@ -80,7 +80,7 @@ class AccountSessions:
             if not session:
                 session = self.sessions[key] = InboxSession(account, mail_type)
             # Keep a completed scan until its response has been collected.
-            if key not in self.pending:
+            if not collect_only and key not in self.pending:
                 self.pending[key] = self.executor.submit(fetch_with_timeout, session)
         if self.pending:
             wait(self.pending.values(), timeout=SCAN_RESPONSE_WAIT_SECONDS)
@@ -88,8 +88,8 @@ class AccountSessions:
         for account in account_credentials:
             email = account["email"]
             key = email.lower()
-            future = self.pending[key]
-            if not future.done():
+            future = self.pending.get(key)
+            if future is None or not future.done():
                 continue
             self.pending.pop(key)
             try:
@@ -101,4 +101,4 @@ class AccountSessions:
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
         items = [item for results in self.results.values() for item in results]
         items.sort(key=lambda item: item["receivedAt"], reverse=True)
-        return {mail_type: items, "warnings": warnings}
+        return {mail_type: items, "warnings": warnings, "scanPending": bool(self.pending)}
