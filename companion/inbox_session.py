@@ -19,9 +19,8 @@ MAIL_EXTRACTORS = {
 
 MAX_MESSAGE_AGE_SECONDS = 600
 MAX_FUTURE_SKEW_SECONDS = 120
-FIRST_BATCH_SIZE = 5
+MESSAGE_BATCH_SIZE = 5
 MAX_MESSAGES = 30
-MAX_NEW_RESULTS_PER_SCAN = 5
 RECENT_RESULT_LIMIT = 5
 DISTINCT_SENDER_LIMIT = 5
 MAX_MESSAGE_BYTES = 1_000_000
@@ -205,12 +204,12 @@ class InboxSession:
         return eligible
 
     def _fetch_items(self, candidates):
-        new_item_count = 0
-        # Return results from the newest batch immediately. Older candidates stay
-        # queued for the next poll; if no result is found, continue this check.
-        for batch in (candidates[:FIRST_BATCH_SIZE], candidates[FIRST_BATCH_SIZE:]):
-            if not batch:
-                continue
+        # Process every downloaded body before returning a batch's results.
+        # Older candidates stay unfetched until a later poll; empty batches
+        # continue this check, with at most five bodies downloaded at a time.
+        for start in range(0, len(candidates), MESSAGE_BATCH_SIZE):
+            batch = candidates[start:start + MESSAGE_BATCH_SIZE]
+            batch_has_items = False
             status, body = self.connection.uid(
                 "fetch", b",".join(str(uid).encode() for uid in batch), "(UID BODY.PEEK[])"
             )
@@ -234,10 +233,8 @@ class InboxSession:
                     found["receivedAt"] = int(received * 1000)
                     found["uid"] = uid
                     self.items_by_uid[uid] = found
-                    new_item_count += 1
-                if new_item_count == MAX_NEW_RESULTS_PER_SCAN:
-                    return
-            if new_item_count:
+                    batch_has_items = True
+            if batch_has_items:
                 return
 
     def _prune_pending_messages(self, now):

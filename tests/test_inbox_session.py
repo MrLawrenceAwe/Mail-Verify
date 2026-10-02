@@ -169,7 +169,7 @@ class InboxSessionTests(unittest.TestCase):
         self.assertEqual(connection.sequence, "9971:10000")
         self.assertEqual(session.last_seen_uid, 10000)
 
-    def test_initial_scan_without_codes_uses_two_body_fetches(self):
+    def test_initial_scan_without_codes_uses_bounded_body_batches(self):
         class FakeConnection:
             def __init__(self):
                 self.body_batches = []
@@ -200,7 +200,44 @@ class InboxSessionTests(unittest.TestCase):
         with patch.object(inbox_session, "connect_imap", return_value=connection):
             session = inbox_session.InboxSession({"email": "test@yahoo.com", "password": "unused"})
             self.assertEqual(session.recent_items(), [])
-        self.assertEqual([len(batch) for batch in connection.body_batches], [5, 25])
+        self.assertEqual([len(batch) for batch in connection.body_batches], [5] * 6)
+        self.assertEqual(
+            [int(uid) for batch in connection.body_batches for uid in batch],
+            list(range(30, 0, -1)),
+        )
+        self.assertFalse(session.pending_received_at_by_uid)
+
+    def test_result_in_later_batch_defers_unfetched_bodies_without_redownloading(self):
+        class FakeConnection:
+            def __init__(self):
+                self.body_batches = []
+
+            def uid(self, command, *args):
+                if command == "search":
+                    return "OK", [b""]
+                uids = [int(uid) for uid in args[0].split(b",")]
+                self.body_batches.append(uids)
+                return body_response(
+                    (uid, b"From: auth@example.com\r\n\r\nYour code is 123456."
+                     if uid <= 25 else b"No code here.")
+                    for uid in uids
+                )
+
+        session = inbox_session.InboxSession({})
+        connection = session.connection = FakeConnection()
+        session.last_seen_uid = 30
+        session.pending_received_at_by_uid = {
+            uid: time.time() - 60 for uid in range(1, 31)
+        }
+
+        self.assertEqual([item["uid"] for item in session.recent_items()], [25, 24, 23, 22, 21])
+        self.assertEqual(connection.body_batches, [[30, 29, 28, 27, 26], [25, 24, 23, 22, 21]])
+        self.assertEqual(set(session.pending_received_at_by_uid), set(range(1, 21)))
+
+        session.recent_items()
+        self.assertEqual(connection.body_batches[-1], [20, 19, 18, 17, 16])
+        downloaded = [uid for batch in connection.body_batches for uid in batch]
+        self.assertEqual(len(downloaded), len(set(downloaded)))
 
     def test_future_internaldate_does_not_permanently_skip_code(self):
         class FakeConnection:
