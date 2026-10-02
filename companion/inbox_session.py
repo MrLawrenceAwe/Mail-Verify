@@ -3,6 +3,8 @@
 import imaplib
 import re
 import ssl
+import socket
+import threading
 import time
 
 from code_extraction import extract_code_details
@@ -31,9 +33,69 @@ def message_uid(metadata):
     return int(match.group(1)) if match else None
 
 
-def connect_imap(credentials):
-    connection = imaplib.IMAP4_SSL(
-        "imap.mail.yahoo.com", 993, ssl_context=ssl.create_default_context(), timeout=15
+class DeadlineIMAPConnection(imaplib.IMAP4_SSL):
+    """Apply the current scan budget to each blocking IMAP read."""
+
+    def __init__(self, *args, deadline=None, **kwargs):
+        self._deadline = deadline
+        self._deadline_timer = None
+        super().__init__(*args, **kwargs)
+
+    @property
+    def deadline(self):
+        return self._deadline
+
+    @deadline.setter
+    def deadline(self, value):
+        if self._deadline_timer:
+            self._deadline_timer.cancel()
+            self._deadline_timer = None
+        self._deadline = value
+        if value is not None:
+            self._deadline_timer = threading.Timer(
+                max(0, value - time.monotonic()), self._interrupt_read
+            )
+            self._deadline_timer.daemon = True
+            self._deadline_timer.start()
+
+    def open(self, *args, **kwargs):
+        super().open(*args, **kwargs)
+        self.deadline = self._deadline
+
+    def _interrupt_read(self):
+        # shutdown wakes a blocked read even if Yahoo keeps trickling bytes.
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+    def shutdown(self):
+        self.deadline = None
+        super().shutdown()
+
+    def _apply_timeout(self):
+        if self.deadline is not None:
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0:
+                raise UserError("Yahoo took too long to respond. Try checking again.")
+            self.sock.settimeout(min(15, remaining))
+        else:
+            self.sock.settimeout(15)
+
+    def read(self, size):
+        self._apply_timeout()
+        return super().read(size)
+
+    def readline(self):
+        self._apply_timeout()
+        return super().readline()
+
+
+def connect_imap(credentials, deadline=None):
+    connection = DeadlineIMAPConnection(
+        "imap.mail.yahoo.com", 993, ssl_context=ssl.create_default_context(),
+        timeout=min(15, max(0.001, deadline - time.monotonic())) if deadline else 15,
+        deadline=deadline
     )
     try:
         connection.login(credentials["email"], credentials["password"])
@@ -48,6 +110,7 @@ def connect_imap(credentials):
 
 class InboxSession:
     def __init__(self, credentials, mail_type="codes"):
+        self.deadline = None
         self.extract_item = MAIL_EXTRACTORS[mail_type]
         self.credentials = credentials
         self.connection = None
@@ -199,7 +262,8 @@ class InboxSession:
     def recent_items(self):
         try:
             if self.connection is None:
-                self.connection = connect_imap(self.credentials)
+                self.connection = connect_imap(self.credentials, deadline=self.deadline)
+            self.connection.deadline = self.deadline
             if self.last_seen_uid is None:
                 # Refresh the count on retries: a message may have been deleted
                 # between SELECT and the previous sequence-number FETCH.

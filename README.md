@@ -30,7 +30,7 @@ Use **↻** to restart checking, or **× / Escape** to dismiss an on-page sugges
 
 Automatic checking lasts up to two minutes while the tab is active. Code suggestions check two seconds after each response; link cards and the popup check about every eight seconds. Keep the popup open for manual polling. Hidden tabs stop checking.
 
-Each account scans its inbox only, starting with the latest 30 messages and limiting results to the last ten minutes. Spam and other folders are excluded. Multiple inboxes are scanned in turn, so checks may take longer.
+Each account scans its inbox only, starting with the latest 30 messages and limiting results to the last ten minutes. Spam and other folders are excluded. Up to four inboxes scan concurrently. Checks return completed results promptly while slower inboxes continue in the background; their results appear on a later poll.
 
 On-page suggestions show emails received since the current verification step began. Resending clears older suggestions; the popup lets you choose other recent emails manually.
 

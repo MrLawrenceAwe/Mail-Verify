@@ -3,6 +3,7 @@
 from pathlib import Path
 import sys
 import time
+import socket
 import unittest
 from unittest.mock import patch
 
@@ -336,6 +337,46 @@ class InboxSessionTests(unittest.TestCase):
         self.assertEqual([item["uid"] for item in results], [10, 9, 8, 7, 6, 5])
         self.assertEqual(results[-1]["sender"], "other@example.com")
         self.assertEqual(session.pending_received_at_by_uid, {})
+
+    def test_blocked_imap_read_uses_remaining_scan_deadline(self):
+        client, server = socket.socketpair()
+        connection = inbox_session.DeadlineIMAPConnection.__new__(inbox_session.DeadlineIMAPConnection)
+        connection.sock = client
+        connection._deadline_timer = None
+        connection._deadline = time.monotonic() + 0.02
+        try:
+            started = time.monotonic()
+            with patch.object(inbox_session.imaplib.IMAP4_SSL, "readline",
+                              lambda self: self.sock.recv(1)):
+                with self.assertRaises(TimeoutError):
+                    connection.readline()
+            self.assertLess(time.monotonic() - started, 0.5)
+            connection.deadline = time.monotonic() - 1
+            with self.assertRaisesRegex(inbox_session.UserError, "too long"):
+                connection.read(1)
+        finally:
+            connection.deadline = None
+            client.close()
+            server.close()
+
+    def test_scan_watchdog_interrupts_a_read_independently_of_socket_timeout(self):
+        client, server = socket.socketpair()
+        connection = inbox_session.DeadlineIMAPConnection.__new__(inbox_session.DeadlineIMAPConnection)
+        connection.sock = client
+        connection._deadline_timer = None
+        def blocked_read(self):
+            self.sock.settimeout(2)
+            return self.sock.recv(1)
+        try:
+            connection.deadline = time.monotonic() + 0.02
+            with patch.object(inbox_session.imaplib.IMAP4_SSL, "readline", blocked_read):
+                started = time.monotonic()
+                self.assertEqual(connection.readline(), b"")
+                self.assertLess(time.monotonic() - started, 0.5)
+        finally:
+            connection.deadline = None
+            client.close()
+            server.close()
 
 
 if __name__ == "__main__":

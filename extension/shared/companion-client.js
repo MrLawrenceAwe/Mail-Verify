@@ -8,27 +8,22 @@ function requireSuccessfulResponse(response) {
   return response;
 }
 
-export function createCompanionClient(runtime) {
+function createSession(runtime, timers) {
   let nativePort, pendingRequest;
-  async function sendOneOffRequest(request) {
-    let response;
-    try {
-      response = await runtime.sendNativeMessage(HOST_NAME, request);
-    } catch {
-      throw new Error(COMPANION_UNAVAILABLE);
-    }
-    return requireSuccessfulResponse(response);
+  function takePending() {
+    const pending = pendingRequest;
+    pendingRequest = undefined;
+    if (pending) timers.clearTimeout(pending.timer);
+    return pending;
   }
-  function closeSession() {
+  function closeSession(error = new Error("Check interrupted.")) {
     const port = nativePort;
     nativePort = undefined;
     if (port) port.disconnect();
-    if (pendingRequest) {
-      pendingRequest.reject(new Error("Check interrupted."));
-      pendingRequest = undefined;
-    }
+    takePending()?.reject(error);
   }
-  function sendSessionRequest(action) {
+  function sendRequest(request) {
+    const { action } = request;
     if (pendingRequest)
       throw new Error("A companion request is already in progress.");
     if (!nativePort) {
@@ -40,8 +35,7 @@ export function createCompanionClient(runtime) {
       const port = nativePort;
       port.onMessage.addListener((response) => {
         if (nativePort !== port) return;
-        const pending = pendingRequest;
-        pendingRequest = undefined;
+        const pending = takePending();
         if (!pending) return;
         try {
           pending.resolve(requireSuccessfulResponse(response));
@@ -57,19 +51,35 @@ export function createCompanionClient(runtime) {
             pendingRequest.action === "status"
               ? COMPANION_UNAVAILABLE
               : "Mac companion disconnected. Try checking again.";
-          pendingRequest.reject(new Error(message));
-          pendingRequest = undefined;
+          takePending().reject(new Error(message));
         }
       });
     }
     return new Promise((resolve, reject) => {
-      pendingRequest = { action, resolve, reject };
+      pendingRequest = { action, resolve, reject,
+        timer: timers.setTimeout(() => closeSession(new Error(
+          "Mac companion took too long to respond. Check Keychain access and try again.",
+        )), action === "saveAccount" ? 60_000 : 35_000),
+      };
       try {
-        nativePort.postMessage({ action });
+        nativePort.postMessage(request);
       } catch {
         closeSession();
       }
     });
   }
-  return { sendOneOffRequest, sendSessionRequest, closeSession };
+  return { sendRequest, closeSession };
+}
+
+export function createCompanionClient(runtime, timers = globalThis) {
+  const session = createSession(runtime, timers);
+  return {
+    sendSessionRequest: (action) => session.sendRequest({ action }),
+    closeSession: session.closeSession,
+    async sendOneOffRequest(request) {
+      const oneOff = createSession(runtime, timers);
+      try { return await oneOff.sendRequest(request); }
+      finally { oneOff.closeSession(); }
+    },
+  };
 }

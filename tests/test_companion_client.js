@@ -71,7 +71,6 @@ test("rejects overlapping session requests without losing the first response", a
 test("uses the same response errors for one-off and session requests", async () => {
   let reply;
   const client = createCompanionClient({
-    sendNativeMessage: async () => ({ ok: false, error: "Denied" }),
     connectNative: () => ({
       onMessage: { addListener(listener) { reply = listener; } },
       onDisconnect: { addListener() {} },
@@ -79,8 +78,45 @@ test("uses the same response errors for one-off and session requests", async () 
       disconnect() {},
     }),
   });
-  await assert.rejects(client.sendOneOffRequest({ action: "saveAccount" }), /Denied/);
+  const oneOff = client.sendOneOffRequest({ action: "saveAccount" });
+  reply({ ok: false, error: "Denied" });
+  await assert.rejects(oneOff, /Denied/);
   const request = client.sendSessionRequest("codes");
   reply({ ok: false, error: "Denied" });
   await assert.rejects(request, /Denied/);
+});
+
+
+test("silent hosts time out, disconnect, and allow a fresh request", async () => {
+  const { createFakeTimers } = await import("./fake_timers.js");
+  const timers = createFakeTimers();
+  const ports = [];
+  const client = createCompanionClient({connectNative() {
+    const port = {
+      onMessage: {addListener(fn) { port.reply = fn; }},
+      onDisconnect: {addListener(fn) { port.disconnected = fn; }},
+      postMessage(request) { port.request = request; },
+      disconnect() { port.closed = true; port.disconnected(); },
+    };
+    ports.push(port);
+    return port;
+  }}, timers);
+  const stalled = client.sendSessionRequest("status");
+  const rejected = assert.rejects(stalled, /too long/);
+  await timers.run(35_000);
+  await rejected;
+  assert.equal(ports[0].closed, true);
+  const retry = client.sendSessionRequest("codes");
+  ports[0].reply({ok: true, codes: [code]});
+  ports[1].reply({ok: true, codes: []});
+  assert.deepEqual((await retry).codes, []);
+  assert.equal(timers.length, 0);
+  client.closeSession();
+  const save = client.sendOneOffRequest({action: "saveAccount", email: "test@yahoo.com", password: "unused"});
+  assert.equal(ports[2].request.email, "test@yahoo.com");
+  const saveRejected = assert.rejects(save, /too long/);
+  await timers.run(60_000);
+  await saveRejected;
+  assert.equal(ports[2].closed, true);
+  assert.equal(timers.length, 0);
 });

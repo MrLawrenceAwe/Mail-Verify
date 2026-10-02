@@ -1,67 +1,104 @@
-"""Coordinate inbox sessions across connected Yahoo accounts."""
+"""Coordinate bounded background scans across connected Yahoo accounts."""
 
 import imaplib
-import signal
+import time
+from concurrent.futures import ThreadPoolExecutor, wait
 
 from errors import UserError
-from inbox_session import InboxSession
+from inbox_session import InboxSession, MAX_MESSAGE_AGE_SECONDS
 
 ACCOUNT_CHECK_TIMEOUT_SECONDS = 25
+SCAN_RESPONSE_WAIT_SECONDS = 0.25
+MAX_CONCURRENT_ACCOUNTS = 4
 
 
 def fetch_with_timeout(session):
-    def timeout(_signum, _frame):
-        raise UserError("Yahoo took too long to respond. Try checking again.")
-
-    previous = signal.signal(signal.SIGALRM, timeout)
-    signal.setitimer(signal.ITIMER_REAL, ACCOUNT_CHECK_TIMEOUT_SECONDS)
+    session.deadline = time.monotonic() + ACCOUNT_CHECK_TIMEOUT_SECONDS
     try:
-        return session.recent_items()
+        result = session.recent_items()
+        if time.monotonic() >= session.deadline:
+            raise UserError("Yahoo took too long to respond. Try checking again.")
+        return result
+    except Exception:
+        if time.monotonic() >= session.deadline:
+            raise UserError("Yahoo took too long to respond. Try checking again.") from None
+        raise
     finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous)
+        session.deadline = None
+        if session.connection is not None:
+            session.connection.deadline = None
 
 
 class AccountSessions:
     def __init__(self):
         self.sessions = {}
+        self.pending = {}
+        self.results = {}
+        self.executor = None
         self.mail_type = "codes"
 
     def close(self):
-        for session in self.sessions.values():
-            session.close()
-        self.sessions.clear()
+        for email in list(self.sessions):
+            self.remove(email)
+        if self.executor:
+            self.executor.shutdown(wait=False, cancel_futures=True)
+            self.executor = None
 
     def remove(self, email):
-        session = self.sessions.pop(email.lower(), None)
+        key = email.lower()
+        session = self.sessions.pop(key, None)
+        future = self.pending.pop(key, None)
+        self.results.pop(key, None)
         if session:
-            session.close()
+            if future and not future.done() and not future.cancel():
+                # The worker owns its connection until the scan finishes.
+                future.add_done_callback(lambda _future: session.close())
+            else:
+                session.close()
 
     def fetch_recent_items(self, account_credentials, mail_type="codes"):
         if mail_type != self.mail_type:
-            self.close()
+            for email in list(self.sessions):
+                self.remove(email)
             self.mail_type = mail_type
+        now = time.time()
+        self.results = {key: [item for item in items
+            if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS]
+            for key, items in self.results.items()}
         active = {account["email"].lower() for account in account_credentials}
         for email in list(self.sessions):
             if email not in active:
                 self.remove(email)
-        items, warnings = [], []
+        if not self.executor:
+            self.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS)
         for account in account_credentials:
-            email = account["email"]
-            key = email.lower()
+            key = account["email"].lower()
             session = self.sessions.get(key)
             if session and session.credentials != account:
-                self.remove(email)
+                self.remove(key)
                 session = None
             if not session:
                 session = self.sessions[key] = InboxSession(account, mail_type)
+            # Keep a completed scan until its response has been collected.
+            if key not in self.pending:
+                self.pending[key] = self.executor.submit(fetch_with_timeout, session)
+        if self.pending:
+            wait(self.pending.values(), timeout=SCAN_RESPONSE_WAIT_SECONDS)
+        warnings = []
+        for account in account_credentials:
+            email = account["email"]
+            key = email.lower()
+            future = self.pending[key]
+            if not future.done():
+                continue
+            self.pending.pop(key)
             try:
-                items.extend({**item, "accountEmail": email} for item in fetch_with_timeout(session))
+                self.results[key] = [dict(item, accountEmail=email) for item in future.result()]
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
-                self.remove(email)
+                self.remove(key)
                 warnings.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
-        if warnings and not items and len(warnings) == len(account_credentials):
+        if warnings and not self.results and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
+        items = [item for results in self.results.values() for item in results]
         items.sort(key=lambda item: item["receivedAt"], reverse=True)
         return {mail_type: items, "warnings": warnings}
-

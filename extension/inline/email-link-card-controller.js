@@ -72,24 +72,29 @@ export function isEmailLinkRequestControl(control) {
     /\b(?:e-?mail|link)\b/i.test(label);
 }
 
-export function mutationAffectsEmailLinkCard(records, host, document, hasActiveStep) {
+export function mutationAffectsEmailLinkCard(records, host, document, hasActiveStep, hasDescendant = (node, selector) => node?.querySelector?.(selector)) {
+  const attributeTargets = new Set();
   const panels = "main, [role=main], form, [role=dialog]";
   const relevantElements = `${panels}, input`;
   const relevantText = (value) => /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(value || "");
   return records.some((record) => {
     const target = record.target;
     if (target === host || host?.contains(target)) return false;
+    if (record.type === "attributes") {
+      if (attributeTargets.has(target)) return false;
+      attributeTargets.add(target);
+    }
     const element = target.nodeType === 1 ? target : target.parentElement;
     const inActivePanel = hasActiveStep &&
       (element?.closest?.(panels) || !document.querySelector?.(panels));
     if (record.type === "attributes")
-      return !!(target.matches?.(relevantElements) || target.querySelector?.(relevantElements));
+      return !!(target.matches?.(relevantElements) || hasDescendant(target, relevantElements));
     if (record.type === "characterData")
       return !!inActivePanel || relevantText(target.textContent) || relevantText(record.oldValue);
     if (record.type === "childList")
       return !!inActivePanel || [...record.addedNodes, ...record.removedNodes].some((node) =>
         relevantText(node.textContent) || (node.nodeType === 1 &&
-          (node.matches?.(relevantElements) || node.querySelector?.(relevantElements))));
+          (node.matches?.(relevantElements) || hasDescendant(node, relevantElements))));
     return false;
   });
 }
@@ -214,7 +219,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     scanTimer = setTimeout(() => { scanTimer = undefined; syncLinkCard(); }, 250);
   }
   page.onMutation((records) => {
-    if (mutationAffectsEmailLinkCard(records, view?.host, document, hasActiveStep)) scheduleScan();
+    if (mutationAffectsEmailLinkCard(records, view?.host, document, hasActiveStep, page.hasMutationDescendant)) scheduleScan();
   });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismissCard(); });
   document.addEventListener("click", (event) => {
