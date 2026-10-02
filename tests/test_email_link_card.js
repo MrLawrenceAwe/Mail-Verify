@@ -207,6 +207,64 @@ test("unrelated mutations do not schedule a confirmation scan", async () => {
   assert.ok(f.state.stepReads > before);
 });
 
+test("large added and removed subtrees queue a scan without aggregate text or descendant queries", () => {
+  const subtree = {
+    nodeType: 1, matches: () => false,
+    get textContent() { assert.fail("must not aggregate subtree text"); },
+    querySelector() { assert.fail("must not query an unbounded subtree"); },
+  };
+  subtree.firstChild = { nodeType: 3, textContent: "x".repeat(2_000_000), parentNode: subtree };
+  for (const changedNodes of ["addedNodes", "removedNodes"]) {
+    const record = { type: "childList", target: { nodeType: 1 }, addedNodes: [], removedNodes: [] };
+    record[changedNodes] = [subtree];
+    assert.equal(mutationAffectsEmailLinkCard([record], null, {}, false), true);
+  }
+});
+
+test("mutation node and text budgets apply across the whole batch", () => {
+  let inspected = 0;
+  const records = Array.from({ length: 2000 }, () => ({
+    type: "childList", target: { nodeType: 1 }, removedNodes: [],
+    addedNodes: [{ nodeType: 1, matches: () => false,
+      get firstChild() { inspected++; return null; } }],
+  }));
+  assert.equal(mutationAffectsEmailLinkCard(records, null, {}, false), true);
+  assert.equal(inspected, 500);
+
+  let textReads = 0;
+  const textRecords = Array.from({ length: 100 }, () => ({
+    type: "characterData", target: { nodeType: 3,
+      get textContent() { textReads++; return "x".repeat(1000); } }, oldValue: "",
+  }));
+  assert.equal(mutationAffectsEmailLinkCard(textRecords, null, {}, false), true);
+  assert.equal(textReads, 11);
+});
+
+test("bounded mutation traversal preserves prompts split across nested elements", () => {
+  const root = { nodeType: 1, matches: () => false };
+  const span = { nodeType: 1, matches: () => false, parentNode: root };
+  root.firstChild = { nodeType: 3, textContent: "e", parentNode: root, nextSibling: span };
+  span.firstChild = { nodeType: 3, textContent: "mail", parentNode: span };
+  const record = { type: "childList", target: { nodeType: 1 }, addedNodes: [root], removedNodes: [] };
+  assert.equal(mutationAffectsEmailLinkCard([record], null, {}, false), true);
+  span.firstChild.textContent = "Price changed";
+  assert.equal(mutationAffectsEmailLinkCard([record], null, {}, false), false);
+  span.matches = (selector) => selector.includes("input");
+  assert.equal(mutationAffectsEmailLinkCard([record], null, {}, false), true);
+});
+
+test("oversized mutations are coalesced into one throttled confirmation scan", async () => {
+  const f = setup(); await settle();
+  const before = f.state.stepReads;
+  const records = [{ type: "childList", target: { nodeType: 1, closest: () => null },
+    addedNodes: [{ nodeType: 3, textContent: "x".repeat(2_000_000) }], removedNodes: [] }];
+  for (let count = 0; count < 20; count++) f.state.mutate(records);
+  assert.equal([...f.timers.values()].filter((timer) => timer.delay === 250).length, 1);
+  assert.equal(f.state.stepReads, before);
+  await f.run(250);
+  assert.equal(f.state.stepReads, before + 1);
+});
+
 test("selects fresh HTTPS links and omits older or unsafe candidates", () => {
   assert.deepEqual(selectEmailLinks([item, { ...item, receivedAt: 1 }, { ...item, url: "javascript:alert(1)" }, { ...item, receivedAt: 20000 }], 5000, 10000), [item]);
 });

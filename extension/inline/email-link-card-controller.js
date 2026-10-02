@@ -12,6 +12,8 @@ const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;
 const MAX_PANEL_NODES = 500;
 const MAX_PANEL_TEXT_UNITS = 10_000;
+const MAX_MUTATION_NODES = 500;
+const MAX_MUTATION_TEXT_UNITS = 10_000;
 
 function isBoundedPanel(panel) {
   // Bound traversal before any layout or full rendered-text reads. Hidden
@@ -99,7 +101,35 @@ export function mutationAffectsEmailLinkCard(records, host, document, hasActiveS
   const attributeTargets = new Set();
   const panels = "main, [role=main], form, [role=dialog]";
   const relevantElements = `${panels}, input`;
-  const relevantText = (value) => /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(value || "");
+  let remainingNodes = MAX_MUTATION_NODES, remainingTextUnits = MAX_MUTATION_TEXT_UNITS;
+  const matchesText = (value) => /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(value);
+  const relevantText = (value = "") => {
+    if (value.length > remainingTextUnits) return true;
+    remainingTextUnits -= value.length;
+    return matchesText(value);
+  };
+  const relevantSubtree = (root) => {
+    const text = [];
+    // Never aggregate an element's textContent or query its whole subtree.
+    // Exhaustion queues the throttled scan rather than overlooking a prompt.
+    for (let node = root; node;) {
+      if (--remainingNodes < 0) return true;
+      if (node.nodeType === 1 && node.matches?.(relevantElements)) return true;
+      if (node.nodeType === 3) {
+        const value = node.textContent || "";
+        if (value.length > remainingTextUnits) return true;
+        remainingTextUnits -= value.length;
+        text.push(value);
+      }
+      if (node.firstChild) {
+        node = node.firstChild;
+        continue;
+      }
+      while (node !== root && !node.nextSibling) node = node.parentNode;
+      node = node === root ? null : node.nextSibling;
+    }
+    return matchesText(text.join(""));
+  };
   return records.some((record) => {
     const target = record.target;
     if (target === host || host?.contains(target)) return false;
@@ -113,11 +143,14 @@ export function mutationAffectsEmailLinkCard(records, host, document, hasActiveS
     if (record.type === "attributes")
       return !!(target.matches?.(relevantElements) || hasDescendant(target, relevantElements));
     if (record.type === "characterData")
-      return !!inActivePanel || relevantText(target.textContent) || relevantText(record.oldValue);
-    if (record.type === "childList")
-      return !!inActivePanel || [...record.addedNodes, ...record.removedNodes].some((node) =>
-        relevantText(node.textContent) || (node.nodeType === 1 &&
-          (node.matches?.(relevantElements) || hasDescendant(node, relevantElements))));
+      return !!inActivePanel || relevantText(target.textContent || "") || relevantText(record.oldValue || "");
+    if (record.type === "childList") {
+      if (inActivePanel) return true;
+      for (const nodes of [record.addedNodes, record.removedNodes])
+        for (const node of nodes)
+          if (relevantSubtree(node)) return true;
+      return false;
+    }
     return false;
   });
 }

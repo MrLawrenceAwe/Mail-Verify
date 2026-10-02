@@ -42,6 +42,8 @@ Scroll and resize updates reuse cached field candidates and position the picker 
 
 Before requesting layout or reading a link panel's `innerText`, detection walks at most 500 DOM nodes and allows at most 10,000 raw text code units. Larger panels, including the body fallback, are skipped; later short panels can still match. Explicitly hidden subtrees, scripts, styles, and templates are not traversed. The existing 2,500-character rendered-text limit still applies. This keeps extraction bounded on large pages; panels with extensive CSS-hidden markup may also be skipped.
 
+Link-card mutation filtering inspects added and removed subtrees directly, without aggregating element `textContent` or querying entire changed subtrees. One mutation batch allows at most 500 inspected nodes and 10,000 text code units, including current and previous character-data values. Exhausting either budget schedules the existing coalesced 250 ms scan so a prompt beyond the budget is still considered by bounded panel detection.
+
 ## Companion modules
 
 | Module | Responsibility |
