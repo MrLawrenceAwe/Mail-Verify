@@ -59,7 +59,7 @@ Each worker uses a 25-second scan budget, applying the remaining budget to block
 
 Background sessions close after 15 seconds without a new check; the popup reuses its session while open. Simultaneous requests of the same type share an in-flight scan. Separate sessions per type prevent one scan from consuming another type’s results.
 
-A scan returns results from the newest five eligible messages immediately when it finds any. Older candidates remain queued for later polls, behind newly arrived mail; if the first batch contains no result, the scan continues through remaining candidates. Missing metadata and bodies are retried. Each check reloads credentials so removed or changed accounts cannot retain an active connection.
+A scan downloads eligible messages in batches of at most five, newest first. It processes every returned body in a batch and returns as soon as that batch yields results. Older candidates remain unfetched and queued for later polls, behind newly arrived mail; empty batches continue through remaining candidates within the scan budget. Missing metadata and bodies are retried. Each check reloads credentials so removed or changed accounts cannot retain an active connection.
 
 ## Detection and freshness rules
 
