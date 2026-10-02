@@ -441,3 +441,12 @@ test("a purpose change with the same step key discards old results and switches 
   await f.run(8000);
   assert.deepEqual(f.state.views.at(-1).links, [newer]);
 });
+
+
+test("repeated unrelated attribute targets are inspected once per batch", () => {
+  let queries = 0;
+  const target = {nodeType: 1, matches: () => false, querySelector() { queries++; return null; } };
+  const records = Array.from({length: 1000}, () => ({type: "attributes", target}));
+  assert.equal(mutationAffectsEmailLinkCard(records, null, {}, false), false);
+  assert.equal(queries, 1);
+});

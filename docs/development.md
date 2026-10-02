@@ -38,7 +38,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 
 The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Update the companion and extension together when changing this contract.
 
-Scroll and resize updates reuse cached field candidates and position the picker on the next animation frame. Relevant DOM changes refresh discovery. Filling always rediscovers fields and verifies the target rather than trusting cached hints.
+Scroll and resize updates reuse cached field candidates and position the picker on the next animation frame. Relevant DOM changes refresh discovery. Mutation batches deduplicate attribute targets and cache descendant containment until child-list or role changes invalidate it. Hidden documents skip mutation dispatch and invalidate field candidates for rediscovery when visible. Filling always rediscovers fields and verifies the target rather than trusting cached hints.
 
 ## Companion modules
 
@@ -53,7 +53,9 @@ Scroll and resize updates reuse cached field candidates and position the picker 
 | `keychain.py`, `errors.py` | Store credentials and define user-facing errors. |
 | `install.py` | Discover, install, and remove companion runtime modules. |
 
-Each account fetch has its own 25-second timeout; multiple accounts are fetched in turn.
+Up to four account scans run concurrently in a thread pool. Each request waits at most 250 ms for scans, returns completed results, and retains pending work for later polls without overlapping scans for the same session. Cached results expire after ten minutes. Removing an account or changing credentials or mail type discards its results immediately and closes its connection after any active worker finishes.
+
+Each worker uses a 25-second scan budget, applying the remaining budget to blocking IMAP reads with a maximum socket timeout of 15 seconds. Session requests have a 35-second companion watchdog; account setup allows 60 seconds for login and Keychain access. A watchdog disconnects the native port, clears the pending request, and allows retry. One-off account operations use their own native port so they can also be disconnected on timeout.
 
 Background sessions close after 15 seconds without a new check; the popup reuses its session while open. Simultaneous requests of the same type share an in-flight scan. Separate sessions per type prevent one scan from consuming another type’s results.
 

@@ -578,3 +578,12 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   assert.equal(frames.length, 0);
   assert.equal(detections, before);
 });
+
+
+test("repeated unrelated attribute targets are inspected once per batch", () => {
+  let queries = 0;
+  const target = {nodeType: 1, matches: () => false, querySelector() { queries++; return null; } };
+  const records = Array.from({length: 1000}, () => ({type: "attributes", target}));
+  assert.equal(mutationAffectsPicker(records), false);
+  assert.equal(queries, 1);
+});
