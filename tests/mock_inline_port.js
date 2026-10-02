@@ -5,9 +5,9 @@ export function inlineRuntime(check) {
       return {
         onMessage: { addListener(fn) { onMessage = fn; } },
         onDisconnect: { addListener(fn) { onDisconnect = fn; } },
-        postMessage({ mailType }) {
+        postMessage({ mailType, collectOnly }) {
           if (name !== "mail-verify-inline") throw new Error("Unexpected port name.");
-          Promise.resolve(check(mailType))
+          Promise.resolve(check(mailType, collectOnly))
             .then((response) => { if (!disconnected) onMessage(response); },
               () => { if (!disconnected) onDisconnect(); });
         },

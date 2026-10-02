@@ -1,7 +1,7 @@
 import { MAIL_TYPES } from "../shared/mail-types.js";
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
 import { handleCodeField } from "../shared/code-fields.js";
-import { isFreshMessage } from "../shared/mail-timing.js";
+import { isFreshMessage, PENDING_SCAN_POLL_MS } from "../shared/mail-timing.js";
 import { createPopupView } from "./popup-view.js";
 import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import { createPollingLifecycle } from "../shared/polling-lifecycle.js";
@@ -26,6 +26,8 @@ export function createPopupController({
     usingResult = false,
     removingAccount = false,
     addingAccount = false;
+  let scanPending = false;
+  let nextScanAt = 0;
   const view = createPopupView(document, {
     onRemoveAccount: removeAccount,
     onFillCode: fillSelectedCode,
@@ -49,6 +51,7 @@ export function createPopupController({
     checkInbox();
   }
   function abortCheck() {
+    scanPending = false;
     polling.cancelScheduledCheck();
     polling.invalidateResponses();
     checking = false;
@@ -145,20 +148,25 @@ export function createPopupController({
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
-      const response = await sendSessionRequest(mailType);
+      const collectOnly = scanPending && clock.now() < nextScanAt;
+      if (!collectOnly) nextScanAt = clock.now() + POLL_INTERVAL_MS;
+      const response = await sendSessionRequest(mailType, collectOnly);
       const results = response[mailType];
       if (!usingResult && polling.isCurrent(requestGeneration)) {
+        scanPending = response.scanPending;
         if (mailType !== "codes") view.renderLinks(results, mailType);
         else view.renderCodes(results, targetTab);
         view.setStatus(
           response.warnings?.length
             ? `Some accounts could not be checked: ${response.warnings.join("; ")}`
-            : results.length ? MAIL_TYPES[mailType].foundStatus : MAIL_TYPES[mailType].emptyStatus,
+            : results.length ? MAIL_TYPES[mailType].foundStatus
+              : scanPending ? "Checking your connected inboxes…" : MAIL_TYPES[mailType].emptyStatus,
         );
       }
     } catch (error) {
       failed = true;
       if (!usingResult && polling.isCurrent(requestGeneration)) {
+        scanPending = false;
         view.clearResults();
         view.setStatus(error.message, true);
       }
@@ -169,7 +177,7 @@ export function createPopupController({
         scheduleCheck(
           failed
             ? POLL_INTERVAL_MS
-            : Math.max(
+            : scanPending ? PENDING_SCAN_POLL_MS : Math.max(
                 MIN_POLL_PAUSE_MS,
                 POLL_INTERVAL_MS - (clock.now() - startedAt),
               ),

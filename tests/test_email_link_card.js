@@ -15,13 +15,13 @@ const stepMutation = () => [{ type: "characterData", target: { nodeType: 3, text
 
 function setup(panel = null, mailType = "confirmationLinks") {
   const timers = createFakeTimers(), events = {}, windowEvents = {};
-  const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, stepReads: 0, views: [], respond: async () => ({ ok: true, [mailType]: [item] }) };
+  const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, collectionModes: [], stepReads: 0, views: [], respond: async () => ({ ok: true, [mailType]: [item], scanPending: false }) };
   state.mailType = mailType;
   const document = { hidden: false, documentElement: { append() {} }, querySelector: () => ({}), addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
   startEmailLinkCard({
     browser: { navigator: { clipboard: { async writeText(value) { state.copied = value; } } }, document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
-      chrome: { runtime: inlineRuntime(async (mailType) => { assert.equal(mailType, state.mailType); state.requests++; return state.respond(); }) },
+      chrome: { runtime: inlineRuntime(async (mailType, collectOnly) => { assert.equal(mailType, state.mailType); state.collectionModes.push(collectOnly); state.requests++; return state.respond(); }) },
       Date: { now: () => state.now },
       setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
       MutationObserver: class { constructor(fn) { state.mutate = fn; } observe() {} },
@@ -45,6 +45,73 @@ test("recognises confirmation prompts but rejects resets, newsletters and long p
     assert.equal(detectedMailType(text), "confirmationLinks", text);
   for (const text of ["Reset your password. Check your email", "Check your email for our newsletter", "Welcome to our website", "x".repeat(2501) + " Check your email"])
     assert.notEqual(detectedMailType(text), "confirmationLinks", text);
+});
+
+test("large panels are rejected before layout and rendered-text extraction", () => {
+  const panel = {
+    nodeType: 1,
+    get innerText() { assert.fail("must not extract a large panel's rendered text"); },
+    getClientRects() { assert.fail("must not request layout for a large panel"); },
+  };
+  panel.firstChild = { nodeType: 3, data: "x".repeat(10001), parentNode: panel };
+  assert.equal(detectEmailLinkStep({ querySelectorAll: () => [panel] }), null);
+});
+
+test("panel traversal stops at its node budget and still checks a later short panel", () => {
+  let inspected = 0;
+  const large = {
+    nodeType: 1,
+    get innerText() { assert.fail("must not read oversized panels"); },
+    getClientRects() { assert.fail("must not lay out oversized panels"); },
+  };
+  let previous;
+  for (let index = 0; index < 2000; index++) {
+    const node = { nodeType: 1, parentNode: large,
+      get firstChild() { inspected++; return null; } };
+    if (previous) previous.nextSibling = node;
+    else large.firstChild = node;
+    previous = node;
+  }
+  const small = { nodeType: 1, innerText: "Check your email", getClientRects: () => [{}], checkVisibility: () => true };
+  assert.equal(detectEmailLinkStep({ querySelectorAll: () => [large, small] }).mailType, "confirmationLinks");
+  assert.ok(inspected < 500);
+});
+
+test("large body fallback is bounded, while hidden templates do not reject a short panel", () => {
+  const body = { nodeType: 1, firstChild: { nodeType: 3, data: "x".repeat(10001) } };
+  assert.equal(detectEmailLinkStep({ querySelectorAll: () => [], body }), null);
+  const panel = { nodeType: 1, innerText: "Reset your password. Check your email",
+    getClientRects: () => [{}], checkVisibility: () => true };
+  const template = { nodeType: 1, tagName: "TEMPLATE", parentNode: panel,
+    get firstChild() { assert.fail("must not traverse template content"); } };
+  panel.firstChild = template;
+  template.nextSibling = { nodeType: 3, data: panel.innerText, parentNode: panel };
+  assert.equal(detectEmailLinkStep({ querySelectorAll: () => [panel] }).mailType, "passwordResetLinks");
+});
+
+test("link cards collect pending scans quickly then resume normal checks", async () => {
+  const f = setup(); await settle();
+  f.state.respond = async () => ({ ok: true, confirmationLinks: [], scanPending: true });
+  await f.run(8000);
+  f.state.respond = async () => ({ ok: true, confirmationLinks: [item], scanPending: false });
+  await f.run(1000);
+  assert.deepEqual(f.state.views.at(-1).links, [item]);
+  assert.equal(f.state.collectionModes.at(-1), true);
+  await f.run(8000);
+  assert.equal(f.state.collectionModes.at(-1), false);
+});
+
+test("a slow account does not suppress normal link scans for healthy accounts", async () => {
+  const f = setup(); await settle();
+  f.state.respond = async () => ({ ok: true, confirmationLinks: [], scanPending: true });
+  f.state.now += 8000;
+  await f.run(8000);
+  f.state.now += 1000;
+  await f.run(1000);
+  assert.equal(f.state.collectionModes.at(-1), true);
+  f.state.now += 7000;
+  await f.run(1000);
+  assert.equal(f.state.collectionModes.at(-1), false);
 });
 
 test("distinguishes replacement confirmation panels with identical text", () => {

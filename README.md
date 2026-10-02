@@ -28,7 +28,7 @@ Use **↻** to restart checking, or **× / Escape** to dismiss an on-page sugges
 
 ## Checking and freshness
 
-Automatic checking lasts up to two minutes while the tab is active. Code suggestions check two seconds after each response; link cards and the popup check about every eight seconds. Keep the popup open for manual polling. Hidden tabs stop checking.
+Automatic checking lasts up to two minutes while the tab is active. Code suggestions check two seconds after each response; link cards and the popup check about every eight seconds. While inbox scans are still running, results are collected every second without starting additional scans. Keep the popup open for manual polling. Hidden tabs stop checking.
 
 Each account scans its inbox only, starting with the latest 30 messages and limiting results to the last ten minutes. Spam and other folders are excluded. Up to four inboxes scan concurrently. Checks return completed results promptly while slower inboxes continue in the background; their results appear on a later poll.
 
