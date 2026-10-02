@@ -561,7 +561,7 @@ test("page mutations only rescan when fields or their form can change", () => {
   const node = (tag, hasInput = false) => ({
     nodeType: 1,
     matches: (selector) => selector.split(", ").includes(tag),
-    querySelector: () => hasInput ? {} : null,
+    firstChild: hasInput ? { nodeType: 1, matches: selector => selector.includes("input") } : null,
     closest: () => null,
   });
   const unrelated = node("div");
@@ -625,9 +625,80 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
 
 
 test("repeated unrelated attribute targets are inspected once per batch", () => {
-  let queries = 0;
-  const target = {nodeType: 1, matches: () => false, querySelector() { queries++; return null; } };
+  let visits = 0;
+  const target = {nodeType: 1, matches: () => false, get firstChild() { visits++; return null; } };
   const records = Array.from({length: 1000}, () => ({type: "attributes", target}));
   assert.equal(mutationAffectsPicker(records), false);
-  assert.equal(queries, 1);
+  assert.equal(visits, 1);
+});
+
+test("picker bounds added and removed subtrees without aggregate text or queries", () => {
+  const root = {
+    nodeType: 1, matches: () => false,
+    get textContent() { assert.fail("must not aggregate element text"); },
+    querySelector() { assert.fail("must not query an unrestricted subtree"); },
+  };
+  root.firstChild = { nodeType: 3, textContent: "x".repeat(1_000_000), parentNode: root };
+  const context = [{ contains: () => true }];
+  for (const changed of ["addedNodes", "removedNodes"]) {
+    const record = { type: "childList", target: {}, addedNodes: [], removedNodes: [] };
+    record[changed] = [root];
+    assert.equal(mutationAffectsPicker([record], null, context), true);
+  }
+});
+
+test("picker node budget covers the whole batch including attribute descendants", () => {
+  for (const type of ["childList", "attributes"]) {
+    let visits = 0;
+    const records = Array.from({ length: 2000 }, () => {
+      const root = { nodeType: 1, matches: () => false,
+        querySelector() { assert.fail("must traverse with a budget"); },
+        get firstChild() { visits++; return null; } };
+      return { type, target: type === "attributes" ? root : {}, addedNodes: [root], removedNodes: [] };
+    });
+    assert.equal(mutationAffectsPicker(records), true);
+    assert.equal(visits, 500);
+  }
+});
+
+test("picker text budget includes current and previous text across records", () => {
+  let reads = 0;
+  const records = Array.from({ length: 100 }, () => ({
+    type: "characterData", target: { nodeType: 3,
+      get textContent() { reads++; return "x".repeat(1000); } },
+    oldValue: "y".repeat(1000),
+  }));
+  assert.equal(mutationAffectsPicker(records, null, [{ contains: () => true }]), true);
+  assert.equal(reads, 6);
+});
+
+test("picker bounded traversal preserves nested fields and split context prompts", () => {
+  const root = { nodeType: 1, matches: () => false };
+  const span = { nodeType: 1, matches: () => false, parentNode: root };
+  root.firstChild = { nodeType: 3, textContent: "e", parentNode: root, nextSibling: span };
+  span.firstChild = { nodeType: 3, textContent: "mail", parentNode: span };
+  const record = { type: "childList", target: {}, addedNodes: [root], removedNodes: [] };
+  const context = [{ contains: () => true }];
+  assert.equal(mutationAffectsPicker([record], null, context), true);
+  span.firstChild.textContent = "Price changed";
+  assert.equal(mutationAffectsPicker([record], null, context), false);
+  span.matches = selector => selector.includes("input");
+  assert.equal(mutationAffectsPicker([record]), true);
+});
+
+test("oversized picker mutations coalesce into one deferred discovery", async () => {
+  let observer, discoveries = 0;
+  const contextRoots = [{ contains: () => true }];
+  const { timers } = pickerBrowser({
+    handleField: () => { discoveries++; return { ok: false, candidateCache: { inputs: [], contextRoots } }; },
+    onObserve: callback => { observer = callback; },
+    check: () => { assert.fail("no field should start a mail check"); },
+  });
+  const records = [{ type: "childList", target: {}, removedNodes: [],
+    addedNodes: [{ nodeType: 3, textContent: "x".repeat(1_000_000) }] }];
+  for (let index = 0; index < 20; index++) observer(records);
+  assert.equal(discoveries, 1);
+  assert.equal(timers.length, 1);
+  await timers.run(150);
+  assert.equal(discoveries, 2);
 });
