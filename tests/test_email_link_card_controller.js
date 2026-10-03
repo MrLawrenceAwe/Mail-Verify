@@ -87,7 +87,7 @@ test("short-unit countdown ticks retain links and the polling deadline", async (
 
 test("countdown completion retains confirmation and reset links and the deadline", async () => {
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
-    for (const countdown of ["Resend in 30 seconds", "Resend email in 30s", "Resend in 00:30"]) {
+    for (const countdown of ["Resend in 30 seconds", "Resend email in 30s", "Resend in 00:30", "Resend email (30)", "Resend email (30s)", "Resend email (00:30)"]) {
       const prompt = mailType === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
       const panel = { innerText: `${prompt} ${countdown}`, getClientRects: () => [{}], checkVisibility: () => true };
       const f = setup(panel, mailType); await settle();
@@ -378,4 +378,21 @@ test("a purpose change with the same step key discards old results and switches 
   f.state.now = 11000;
   await f.run(8000);
   assert.deepEqual(f.state.views.at(-1).links, [newer]);
+});
+
+
+test("parenthesised countdown ticks retain links without restarting the attempt", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const prompt = mailType === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.";
+    const panel = { innerText: `${prompt} Resend email (30)`, getClientRects: () => [{}], checkVisibility: () => true };
+    const f = setup(panel, mailType); await settle();
+    const view = f.state.views[0];
+    assert.deepEqual(view.links, [item]);
+    f.state.now = 11000;
+    panel.innerText = `${prompt} Resend email (29)`;
+    f.state.mutate(stepMutation()); await f.run(250);
+    assert.equal(f.state.views.length, 1);
+    assert.deepEqual(view.links, [item]);
+    assert.equal(f.state.requests, 1);
+  }
 });

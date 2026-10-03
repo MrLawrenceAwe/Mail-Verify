@@ -76,9 +76,38 @@ test("selects fresh HTTPS links and omits older or unsafe candidates", () => {
 });
 
 test("repeated unrelated attribute targets are inspected once per batch", () => {
-  let queries = 0;
-  const target = {nodeType: 1, matches: () => false, querySelector() { queries++; return null; } };
+  let inspections = 0;
+  const target = {nodeType: 1, matches() { inspections++; return false; },
+    querySelector() { assert.fail("must not query unrestricted descendants"); } };
   const records = Array.from({length: 1000}, () => ({type: "attributes", target}));
   assert.equal(mutationAffectsEmailLinkCard(records, null, {}, false), false);
-  assert.equal(queries, 1);
+  assert.equal(inspections, 1);
+});
+
+
+test("attribute inspection shares the batch node budget without descendant queries", () => {
+  let inspected = 0;
+  const records = Array.from({ length: 2000 }, () => ({
+    type: "attributes", target: {
+      nodeType: 1, matches: () => false,
+      get firstChild() { inspected++; return null; },
+      querySelector() { assert.fail("must not query unrestricted descendants"); },
+    },
+  }));
+  assert.equal(mutationAffectsEmailLinkCard(records, null, {}, false), true);
+  assert.equal(inspected, 500);
+});
+
+test("one large attribute subtree exhausts the node budget and queues discovery", () => {
+  let inspected = 0;
+  const root = { nodeType: 1, matches: () => false,
+    querySelector() { assert.fail("must not query unrestricted descendants"); } };
+  let node = root;
+  for (let index = 0; index < 2000; index++) {
+    const child = { nodeType: 1, matches: () => { inspected++; return false; }, parentNode: node };
+    node.firstChild = child;
+    node = child;
+  }
+  assert.equal(mutationAffectsEmailLinkCard([{ type: "attributes", target: root }], null, {}, false), true);
+  assert.equal(inspected, 499);
 });

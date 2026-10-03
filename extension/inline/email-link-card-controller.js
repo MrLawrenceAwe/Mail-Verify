@@ -136,7 +136,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     discoveryTimer = setTimeout(() => { discoveryTimer = undefined; syncLinkCard(); }, 250);
   }
   page.onMutation((records) => {
-    if (mutationAffectsEmailLinkCard(records, view?.host, document, hasActiveStep, page.hasMutationDescendant)) scheduleDiscovery();
+    if (mutationAffectsEmailLinkCard(records, view?.host, document, hasActiveStep)) scheduleDiscovery();
   });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismissCard(); });
   document.addEventListener("click", (event) => {

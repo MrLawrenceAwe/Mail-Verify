@@ -44,32 +44,28 @@ test("page interfaces share one observer, navigation listener and code-field cac
 });
 
 
-test("mutation containment is cached, invalidated by structure, and skipped while hidden", () => {
-  let observe, queries = 0, mutations = 0;
-  const document = {documentElement: {}, hidden: false, addEventListener() {}};
-  const browser = {document, window: {addEventListener() {}}, MutationObserver: class {
+test("hidden mutations skip dispatch and invalidate code candidates", () => {
+  let observe, mutations = 0, discoveries = 0;
+  const document = { documentElement: {}, hidden: false, addEventListener() {} };
+  const browser = { document, window: { addEventListener() {} }, MutationObserver: class {
     constructor(callback) { observe = callback; }
     observe() {}
-  }};
-  const page = getPageCoordinator(browser, () => ({ok: false, candidateCache: {inputs: []}}));
-  const target = {querySelector() { queries++; return null; }};
-  page.onMutation(() => {
-    mutations++;
-    page.hasMutationDescendant(target, "input");
+  } };
+  const page = getPageCoordinator(browser, ({ candidateCache }) => {
+    if (!candidateCache) discoveries++;
+    return { ok: false, candidateCache: { inputs: [] } };
   });
-  for (let i = 0; i < 1000; i++) observe([{type: "attributes", target, attributeName: "class"}]);
-  assert.equal(queries, 1);
-  observe([{type: "childList", target}]);
-  assert.equal(queries, 2);
-  observe([{type: "attributes", target, attributeName: "role"}]);
-  assert.equal(queries, 3);
+  page.onMutation(() => { mutations++; });
   page.detectCodeField();
+  observe([{ type: "attributes" }]);
+  assert.equal(mutations, 1);
   document.hidden = true;
-  observe([{type: "childList", target}]);
-  assert.equal(mutations, 1002);
-  assert.equal(queries, 3);
+  observe([{ type: "childList" }]);
+  assert.equal(mutations, 1);
   assert.equal(page.candidateCache, undefined);
   document.hidden = false;
-  observe([{type: "attributes", target}]);
-  assert.equal(queries, 4);
+  observe([{ type: "attributes" }]);
+  assert.equal(mutations, 2);
+  page.detectCodeField();
+  assert.equal(discoveries, 2);
 });

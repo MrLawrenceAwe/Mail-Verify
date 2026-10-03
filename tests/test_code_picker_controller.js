@@ -377,7 +377,7 @@ test("returning to a hidden tab starts a check while the old one is pending", as
 });
 
 test("countdown completion retains codes without starting a new attempt", async () => {
-  for (const countdown of ["Resend in 30 seconds", "Resend code in 30s", "Resend in 00:30"]) {
+  for (const countdown of ["Resend in 30 seconds", "Resend code in 30s", "Resend in 00:30", "Resend code (30)", "Resend code (30s)", "Resend code (00:30)"]) {
     let observer, now = 10_000;
     const form = { textContent: `We sent a code to alice@example.test. ${countdown}`, contains: () => true };
     const anchor = { form };
