@@ -1,14 +1,13 @@
 export const MAIL_PRESENTATION = {
   codes: {
     resultLabel: "codes",
-    popupFoundStatus: "Choose the code for this website. Checking for newer codes…",
+    foundStatus: "Choose the code for this website. Checking for newer codes…",
     popupEmptyStatus: "No recent code yet. Request one on the website; keep this popup open.",
   },
   confirmationLinks: {
     resultLabel: "confirmation links",
     actionLabel: "Open confirmation link ↗",
-    popupFoundStatus: "Choose a confirmation link to open.",
-    inlineFoundStatus: "Choose a confirmation link to open.",
+    foundStatus: "Choose a confirmation link to open.",
     popupEmptyStatus: "No recent confirmation link yet. Request one and keep this popup open.",
     waitingStatus: "Waiting for your confirmation email…",
     guidance: "Check the sender and destination. Opening a link in a new tab may confirm your account.",
@@ -18,8 +17,7 @@ export const MAIL_PRESENTATION = {
     actionLabel: "Copy password reset link",
     copyAgainLabel: "Copy again",
     copySuccessStatus: "Password reset link copied to clipboard.",
-    popupFoundStatus: "Choose a password reset email to copy its link.",
-    inlineFoundStatus: "Choose a password reset email to copy its link.",
+    foundStatus: "Choose a password reset email to copy its link.",
     popupEmptyStatus: "No recent password reset link yet. Request one and keep this popup open.",
     waitingStatus: "Waiting for your password reset email…",
     guidance: "Check the sender and destination before copying.",

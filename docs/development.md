@@ -18,6 +18,8 @@ To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 1
 
 The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle. `test_popup_integration.js` covers the popup controller and its real view together.
 
+`tests/timer_queue.js` stores callbacks for explicit execution by insertion order or requested delay; it does not advance a clock. `tests/email_messages.py` shares the raw-email builder used by code-extraction and inbox-scanning tests.
+
 ### Manual validation
 
 After installing the companion, reloading the extension, and refreshing the test page:
@@ -46,7 +48,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `inline/mutation-inspection.js` | Share bounded mutation traversal and attribute-target deduplication; picker and link policies supply relevance rules. |
 | `popup-entry.js`, `popup/popup-controller.js`, `popup/popup-view.js` | Start the toolbar popup, manage accounts and polling, and render controls and results. |
 | `shared/email-link-details.js`, `shared/mail-presentation.js`, `shared/reset-link-copy.js` | Share link-detail rows, mail-type-specific labels and guidance, and reset-link clipboard handling. |
-| `inline/inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight scans per mail type. |
+| `inline/inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight native requests per mail type. |
 | `shared/companion-client.js` | Handle one-off native requests and reusable native-messaging sessions. |
 | `shared/polling-lifecycle.js` | Manage polling deadlines, stale responses, cancellation, and queued retries. |
 | `shared/scan-schedule.js` | Decide when to collect pending workers or start a full scan and choose the next poll delay. |
@@ -56,6 +58,8 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 ### Request contract
 
 The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Mail responses include the boolean `scanPending`. Requests with `collectOnly: true` collect existing workers and cached results without starting scans. All surfaces collect pending scans every second, then resume their normal check interval. While a slower account remains pending, full checks still run at the normal interval so healthy accounts can discover new mail. Update the companion and extension together when changing this contract.
+
+Automatic checking runs for up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. `planNextCheck()` returns `{ collectOnly }` and updates the next full-scan time; `pollDelayMs` gives the delay before the next check.
 
 ## Companion modules
 
@@ -74,9 +78,11 @@ Up to four account scans run concurrently in a thread pool. Each request waits a
 
 Each worker uses a 25-second scan budget, applying the remaining budget to blocking IMAP reads with a maximum socket timeout of 15 seconds. Session requests have a 35-second companion watchdog; account setup allows 60 seconds for login and Keychain access. A watchdog disconnects the native port, clears the pending request, and allows retry. One-off account operations use their own native port so they can also be disconnected on timeout.
 
-Background sessions close after 15 seconds without a new check; the popup reuses its session while open. Simultaneous requests of the same type share an in-flight scan. Separate sessions per type prevent one scan from consuming another type’s results.
+Background sessions close after 15 seconds without a new check; the popup reuses its session while open. Simultaneous requests of the same type share an in-flight native request. Separate sessions per type prevent one request from consuming another type’s results.
 
 A scan downloads eligible messages in batches of at most five, newest first. It processes every returned body in a batch and returns as soon as that batch yields results. Older candidates remain unfetched and queued for later polls, behind newly arrived mail; empty batches continue through remaining candidates within the scan budget. Missing metadata and bodies are retried. Each check reloads credentials so removed or changed accounts cannot retain an active connection.
+
+Initial discovery starts with the latest 30 inbox messages. `discovery_cursor_uid` tracks discovered UIDs even when their metadata or bodies still need fetching; `pending_body_timestamps` maps queued body UIDs to arrival times in seconds. Each inbox retains the union of its five newest results (`NEWEST_OVERALL_COUNT`) and its newest result from each of five distinct senders. These groups overlap, so an inbox can retain up to nine results.
 
 ## Detection and freshness rules
 

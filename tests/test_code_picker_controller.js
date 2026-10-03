@@ -2,11 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startCodePicker } from "../extension/inline/code-picker-controller.js";
 import { inlineRuntime } from "./mock_inline_port.js";
-import { createFakeTimers } from "./fake_timers.js";
+import { createTimerQueue } from "./timer_queue.js";
 
 function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
   onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn() }) {
-  const events = new Map(), timers = createFakeTimers();
+  const events = new Map(), timers = createTimerQueue();
   const results = {
     dataset: {}, children: [],
     get childElementCount() { return this.children.length; },
@@ -71,11 +71,11 @@ test("code picker collects pending scans quickly then resumes normal checks", as
     },
   });
   await new Promise(resolve => setImmediate(resolve));
-  await timers.run(1000);
+  await timers.runWithDelay(1000);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(results.childElementCount, 1);
   assert.deepEqual(modes, [false, true]);
-  await timers.run(2000);
+  await timers.runWithDelay(2000);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(modes.at(-1), false);
 });
@@ -95,9 +95,9 @@ test("a slow account does not suppress normal code scans for healthy accounts", 
   const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle();
   now += 1000;
-  await timers.run(1000); await settle();
+  await timers.runWithDelay(1000); await settle();
   now += 1000;
-  await timers.run(1000); await settle();
+  await timers.runWithDelay(1000); await settle();
   assert.deepEqual(modes, [false, true, false]);
 });
 
@@ -166,7 +166,7 @@ test("a successful fill allows a new code field on the same URL", async () => {
   anchor = {};
   codes = [oldCode, newCode];
   observer([{ type: "attributes", target: { matches: () => true } }]);
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.equal(mounts, 2);
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
@@ -191,7 +191,7 @@ test("a successful fill keeps the same field closed until a resend", async () =>
   await flush();
   results.children[0].onclick();
   observer([{ type: "attributes", target: { matches: () => true } }]);
-  timers.pop()();
+  timers.takeNewest()();
   assert.equal(mounts, 1);
   now = 21_000;
   codes = [oldCode, newCode];
@@ -216,7 +216,7 @@ test("a failed inbox check removes previously offered codes", async () => {
   assert.equal(results.childElementCount, 1);
 
   connected = false;
-  timers.pop()();
+  timers.takeNewest()();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(results.childElementCount, 0);
   assert.match(elements["#status"].textContent, /Connect Yahoo Mail first/);
@@ -263,7 +263,7 @@ test("resend input clears the old suggestion and waits for newer mail", async ()
   assert.equal(results.childElementCount, 0);
   now = 11_000;
   codes = [oldCode, { ...oldCode, uid: 8, code: "222222", receivedAt: 10_000 }];
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.equal(results.childElementCount, 1);
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
@@ -288,7 +288,7 @@ test("resend before the first check returns does not revive an unseen old code",
   await flush();
   assert.equal(results.childElementCount, 0);
   now = 10500;
-  timers.pop()();
+  timers.takeNewest()();
   const newCode = { uid: 8, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 10000 };
   requests.shift()({ ok: true, codes: [oldCode, newCode] });
   await flush();
@@ -315,7 +315,7 @@ test("new route clears suggestions even when the code field is reused", async ()
   assert.equal(results.childElementCount, 0);
   responses = [{ ...oldCode, uid: 2, code: "222222", receivedAt: 11_000 }];
   now = 12_000;
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.equal(results.childElementCount, 1);
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
@@ -362,10 +362,10 @@ test("returning to a hidden tab starts a check while the old one is pending", as
   assert.equal(requests.length, 1);
   browser.document.hidden = true;
   events.get("visibilitychange")();
-  timers.shift()();
+  timers.takeOldest()();
   browser.document.hidden = false;
   events.get("visibilitychange")();
-  timers.shift()();
+  timers.takeOldest()();
   assert.equal(requests.length, 2);
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
   requests[0]({ ok: true, codes: [] });
@@ -394,7 +394,7 @@ test("countdown completion retains codes without starting a new attempt", async 
     now = 40_000;
     form.textContent = "We sent a code to alice@example.test. Resend code";
     observer([{ type: "characterData", target: {} }]);
-    await timers.run(150);
+    await timers.runWithDelay(150);
     await flush();
     assert.equal(results.children[0]?.strong.textContent, "Fill code 111111", countdown);
     assert.equal(requests, 1, "countdown completion must not trigger a new attempt");
@@ -422,7 +422,7 @@ test("changed verification instructions reset codes on the same field and URL", 
   const changeInstructions = (text) => {
     form.textContent = text;
     observer([{ type: "characterData", target: {} }]);
-    timers.pop()();
+    timers.takeNewest()();
   };
   await flush();
   assert.equal(results.childElementCount, 1);
@@ -439,13 +439,13 @@ test("changed verification instructions reset codes on the same field and URL", 
   assert.equal(results.childElementCount, 0);
   responses = [oldCode, { ...oldCode, uid: 2, code: "222222", receivedAt: 21_000 }];
   now = 22_000;
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
   now = 30_000;
   form.previousElementSibling = { textContent: "Verification code for charlie@example.test" };
   observer([{ type: "childList", target: parent, addedNodes: [], removedNodes: [] }]);
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.equal(mounts, 3);
   assert.equal(results.childElementCount, 0);
@@ -463,18 +463,18 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
   const rescan = () => {
     observer([{ type: "attributes", target: { matches: () => true } }]);
-    timers.pop()();
+    timers.takeNewest()();
   };
   await flush();
   assert.equal(results.childElementCount, 1);
   warnings = ["one@yahoo.com: Yahoo took too long to respond."];
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.match(elements["#status"].textContent, /Could not check: one@yahoo\.com/);
   const originalResponses = responses;
   responses = [];
   now = 131_000;
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.match(elements["#status"].textContent, /Could not check: one@yahoo\.com/);
   responses = originalResponses;
@@ -485,7 +485,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   await flush();
   assert.equal(results.childElementCount, 0);
   now = 10500;
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.equal(results.childElementCount, 1);
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
@@ -498,7 +498,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   await flush();
   assert.equal(results.childElementCount, 0);
   responses = [{ uid: 3, accountEmail: "test@yahoo.com", code: "333333", sender: "auth@example.test", receivedAt: 20_000 }];
-  timers.pop()();
+  timers.takeNewest()();
   await flush();
   assert.equal(results.childElementCount, 1);
   now = 30_000;
@@ -542,7 +542,7 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   frames.shift()();
   assert.equal(mounted, undefined);
   observer([{ type: "attributes", target: { matches: () => true } }]);
-  timers.shift()();
+  timers.takeOldest()();
   assert.equal(discoveries, 2);
   visible = true;
   events.get("scroll")();
@@ -567,7 +567,7 @@ test("oversized picker mutations coalesce into one deferred discovery", async ()
   for (let index = 0; index < 20; index++) observer(records);
   assert.equal(discoveries, 1);
   assert.equal(timers.length, 1);
-  await timers.run(150);
+  await timers.runWithDelay(150);
   assert.equal(discoveries, 2);
 });
 

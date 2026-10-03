@@ -6,12 +6,12 @@ export function createScanSchedule({ clock, intervalMs }) {
   let nextScanAt = 0;
   return {
     get pending() { return pending; },
-    get pollDelay() { return pending ? PENDING_SCAN_POLL_MS : intervalMs; },
-    beginCheck() {
+    get pollDelayMs() { return pending ? PENDING_SCAN_POLL_MS : intervalMs; },
+    planNextCheck() {
       const now = clock.now();
       const collectOnly = pending && now < nextScanAt;
       if (!collectOnly) nextScanAt = now + intervalMs;
-      return collectOnly;
+      return { collectOnly };
     },
     recordResponse(scanPending) { pending = scanPending === true; },
     clearPending() { pending = false; },
