@@ -75,15 +75,41 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   // maxlength is ignored by number inputs, including one-digit OTP widgets.
   const isPotentialDigitInput = (input) => hasSupportedType(input) &&
     (input.maxLength === 1 || input.type === "number");
+  const isInside = (input, ancestor) => {
+    for (let parent = input.parentElement; parent; parent = parent.parentElement)
+      if (parent === ancestor) return true;
+    return false;
+  };
+  const isCodeDigit = (input) => hasCodeHint(input) || getInputHints(input).every((hint) =>
+    !hint || /^(?:(?:enter )?(?:digit|character|box|cell|otp|pin|code)[\s_-]*\d*|\d)$/i.test(hint.trim()));
+  const findDigitGroup = (anchor, digitInputs, length) => {
+    const matchesGroup = (group) =>
+      (length === undefined ? group.length >= 4 && group.length <= 8 : group.length === length) &&
+      group.some(hasCodeHint) && group.every(isCodeDigit);
+    for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
+      const group = digitInputs.filter((input) =>
+        input.form === anchor.form && isInside(input, parent));
+      if (matchesGroup(group)) return group;
+    }
+    // A form can own inputs placed outside its DOM subtree via the form attribute.
+    if (anchor.form) {
+      const group = digitInputs.filter((input) => input.form === anchor.form);
+      if (matchesGroup(group)) return group;
+    }
+    return null;
+  };
   const focused = document.activeElement;
   // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
   // Filling always rediscovers the page so cached hints cannot authorize a fill.
-  const candidates = detectOnly && candidateCache ? candidateCache : {
-    inputs: [...document.querySelectorAll("input")].filter(
-      (input) => hasSupportedType(input) && hasCodeHint(input),
-    ),
-    contextRoots: [...contextRoots],
-  };
+  let candidates = detectOnly && candidateCache;
+  if (!candidates) {
+    const inputs = [...document.querySelectorAll("input")];
+    candidates = {
+      inputs: inputs.filter((input) => hasSupportedType(input) && hasCodeHint(input)),
+      digitInputs: inputs.filter(isPotentialDigitInput),
+      contextRoots: [...contextRoots],
+    };
+  }
   const visibleCodeInputs = candidates.inputs.filter(isUsableInput);
   if (!detectOnly && expectedAnchor && !visibleCodeInputs.includes(expectedAnchor))
     return { ok: false, error: "The verification-code field changed. Select it and try again." };
@@ -93,7 +119,14 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   const targetInput =
     (!detectOnly && expectedAnchor) || focusedCodeInput || (visibleCodeInputs.length === 1 ? visibleCodeInputs[0] : null);
   if (detectOnly) {
-    const anchor = targetInput || (visibleCodeInputs.length && visibleCodeInputs.every(isPotentialDigitInput) ? visibleCodeInputs[0] : null);
+    let anchor = targetInput || (visibleCodeInputs.includes(trackedAnchor) ? trackedAnchor : null) ||
+      (visibleCodeInputs.length && visibleCodeInputs.every(isPotentialDigitInput) ? visibleCodeInputs[0] : null);
+    if (anchor && isPotentialDigitInput(anchor)) {
+      const group = findDigitGroup(anchor, candidates.digitInputs.filter(isUsableInput));
+      // All digits share one suggestion identity, even as focus moves between
+      // them. Keep the anchor labelled so filling can validate it again.
+      if (group) anchor = group.find((input) => visibleCodeInputs.includes(input));
+    }
     if (!anchor) return { ok: false, candidateCache: candidates,
       trackedAnchorOffscreen: !!trackedAnchor && candidates.inputs.includes(trackedAnchor) &&
         inputVisibility(trackedAnchor) === "offscreen" };
@@ -104,26 +137,6 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   const getVisibleInputs = () =>
     [...document.querySelectorAll("input")].filter(isUsableInput);
   const getDigitInputs = () => getVisibleInputs().filter(isPotentialDigitInput);
-  const isInside = (input, ancestor) => {
-    for (let parent = input.parentElement; parent; parent = parent.parentElement)
-      if (parent === ancestor) return true;
-    return false;
-  };
-  const isCodeDigit = (input) => hasCodeHint(input) || getInputHints(input).every((hint) =>
-    !hint || /^(?:(?:enter )?(?:digit|character|box|cell|otp|pin|code)[\s_-]*\d*|\d)$/i.test(hint.trim()));
-  const findDigitGroup = (anchor, digitInputs, length) => {
-    for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
-      const group = digitInputs.filter((input) =>
-        input.form === anchor.form && isInside(input, parent));
-      if (group.length === length && group.some(hasCodeHint) && group.every(isCodeDigit)) return group;
-    }
-    // A form can own inputs placed outside its DOM subtree via the form attribute.
-    if (anchor.form) {
-      const group = digitInputs.filter((input) => input.form === anchor.form);
-      if (group.length === length && group.some(hasCodeHint) && group.every(isCodeDigit)) return group;
-    }
-    return null;
-  };
   const findUniqueDigitGroup = (digitInputs, length) => {
     const groups = [];
     for (const anchor of digitInputs.filter(hasCodeHint)) {

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { startCodePicker } from "../extension/inline/code-picker-controller.js";
+import { handleCodeField } from "../extension/shared/code-fields.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createTimerQueue } from "./timer_queue.js";
 
@@ -56,6 +58,64 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
   return { browser, events, timers, results, elements };
 }
 
+
+test("focus moves within split digits preserve suggestions, but another group starts a new attempt", async () => {
+  for (const [type, labelAllDigits] of [["tel", true], ["number", true], ["tel", false], ["number", false]]) {
+    const form = { textContent: "Enter your verification code", parentElement: null };
+    const makeGroup = () => {
+      const container = { parentElement: form };
+      return Array.from({ length: 6 }, (_, index) => ({
+        type, maxLength: type === "number" ? -1 : 1,
+        autocomplete: labelAllDigits || index === 0 || index === 3 ? "one-time-code" : "",
+        name: `digit_${index + 1}`, form, parentElement: { parentElement: container },
+        labels: [], getAttribute: () => "", getClientRects: () => [1],
+        checkVisibility: () => true,
+        getBoundingClientRect: () => ({ top: 100, bottom: 130, left: 20, right: 40 }),
+      }));
+    };
+    const first = makeGroup(), second = makeGroup();
+    let queries = 0, mounts = 0, requests = 0;
+    const context = vm.createContext({
+      document: { activeElement: first[0], querySelectorAll: () => { queries++; return [...first, ...second]; } },
+      innerHeight: 800, innerWidth: 1200,
+    });
+    const detect = vm.runInContext(`(${handleCodeField.toString()})`, context);
+    const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
+    const { events, timers, results } = pickerBrowser({
+      handleField: detect, now: () => 10000,
+      onMount: () => { mounts++; },
+      check: async () => { requests++; return { ok: true, codes: [code] }; },
+    });
+    const settle = () => new Promise(resolve => setImmediate(resolve));
+    await settle();
+    const button = results.children[0];
+    assert.ok(button, type);
+    for (const digit of [...first.slice(1), null, first[0]]) {
+      context.document.activeElement = digit;
+      events.get("focusin")();
+      await timers.runWithDelay(150);
+      await settle();
+      assert.equal(results.children[0], button, `${type}: focus must preserve the result`);
+      assert.equal(mounts, 1);
+      assert.equal(requests, 1);
+    }
+    const beforeScroll = queries;
+    events.get("scroll")();
+    assert.equal(queries, beforeScroll, "scroll must reuse cached candidates");
+    context.document.activeElement = second[0];
+    events.get("focusin")();
+    await timers.runWithDelay(150);
+    await settle();
+    assert.equal(mounts, 2, "another group in the same form starts a new attempt");
+    assert.equal(results.childElementCount, 0, "the previous group's code stays excluded");
+    context.document.activeElement = null;
+    events.get("focusin")();
+    await timers.runWithDelay(150);
+    await settle();
+    assert.equal(mounts, 2, "losing focus must retain the selected group");
+    assert.equal(requests, 2);
+  }
+});
 
 test("code picker collects pending scans quickly then resumes normal checks", async () => {
   const modes = [];
