@@ -20,6 +20,7 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
     Date: { now },
     location: { href: "https://example.test", hostname: "example.test" },
     innerWidth: 1200, innerHeight: 800,
+    getComputedStyle: node => node.reviewStyle || {},
     document: {
       hidden: false,
       documentElement: { append: onMount },
@@ -246,6 +247,52 @@ test("selection revalidates the verification step before the queued discovery ru
       button.onclick();
       assert.equal(fills, 0, "a detached old button cannot fill the new attempt");
     }
+  }
+});
+
+test("switching CSS-hidden recipients blocks the previous code before discovery runs", async () => {
+  for (const hiddenStyle of [{ display: "none" }, { visibility: "hidden" }, { opacity: "0" }]) {
+    let fills = 0, observer, now = 10000;
+    const form = { nodeType: 1, tagName: "FORM", contains: () => true };
+    const alice = { nodeType: 1, tagName: "P", parentNode: form, reviewStyle: {} };
+    const bob = { nodeType: 1, tagName: "P", parentNode: form, reviewStyle: hiddenStyle };
+    form.firstChild = alice;
+    alice.nextSibling = bob;
+    alice.firstChild = { nodeType: 3, data: "We sent a code to alice@example.test", parentNode: alice };
+    bob.firstChild = { nodeType: 3, data: "We sent a code to bob@example.test", parentNode: bob };
+    const anchor = {};
+    const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+    const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20000 };
+    let codes = [oldCode];
+    const { results, timers } = pickerBrowser({
+      handleField: ({ action }) => {
+        if (action === "fill") { fills++; return { ok: true }; }
+        return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 }, stepContext: { roots: [form] } };
+      },
+      now: () => now,
+      check: async () => ({ ok: true, codes }),
+      onObserve: callback => { observer = callback; },
+    });
+    const settle = () => new Promise(resolve => setImmediate(resolve));
+    await settle();
+    const button = results.children[0];
+    assert.ok(button);
+    now = 20000;
+    codes = [oldCode, newCode];
+    alice.reviewStyle = hiddenStyle;
+    bob.reviewStyle = {};
+    observer([{ type: "attributes", attributeName: "class", target: { matches: () => true } }]);
+    button.onclick();
+    assert.equal(fills, 0, "selection must revalidate the visible recipient immediately");
+    await settle();
+    assert.equal(results.children.length, 1);
+    assert.equal(results.children[0].strong.textContent, "Fill code 222222");
+    await timers.runWithDelay(150);
+    await settle();
+    button.onclick();
+    assert.equal(fills, 0, "the detached old selection stays blocked");
+    results.children[0].onclick();
+    assert.equal(fills, 1, "the new recipient's fresh code can be filled");
   }
 });
 

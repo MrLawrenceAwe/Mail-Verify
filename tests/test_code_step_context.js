@@ -10,7 +10,8 @@ function element(tagName, children = [], props = {}) {
   Object.defineProperty(root, "textContent", { get() { assert.fail("aggregate text must not be read"); } });
   return root;
 }
-const key = roots => readCodeStepContext({ roots }).key;
+const getStyle = node => node.reviewStyle || {};
+const key = roots => readCodeStepContext({ roots }, getStyle).key;
 
 test("step identity follows recipients across inline markup and ignores incidental text", () => {
   const instruction = () => element("P", ["We sent a code to ", element("SPAN", ["a***@example.test"])]);
@@ -31,6 +32,25 @@ test("hidden content and scripts are skipped before descendant text reads", () =
   for (const node of hidden) Object.defineProperty(node, "firstChild", { get: forbidden });
   assert.equal(key([element("FORM", ["Code sent to alice@example.test", ...hidden])]),
     key([element("P", ["Code sent to alice@example.test"])]));
+});
+
+test("CSS visibility switches change the recipient identity", () => {
+  const alice = element("P", ["We sent a code to alice@example.test"]);
+  const bob = element("P", ["We sent a code to bob@example.test"], { reviewStyle: { display: "none" } });
+  const form = element("FORM", [alice, bob]);
+  assert.equal(readCodeStepContext({ roots: [form] }, getStyle).key, '["alice@example.test"]');
+  alice.reviewStyle = { display: "none" };
+  bob.reviewStyle = {};
+  assert.equal(readCodeStepContext({ roots: [form] }, getStyle).key, '["bob@example.test"]');
+});
+
+test("CSS-hidden subtrees are skipped before reading descendants", () => {
+  for (const reviewStyle of [{ display: "none" }, { visibility: "hidden" },
+    { visibility: "collapse" }, { opacity: "0" }]) {
+    const hidden = element("DIV", [], { reviewStyle });
+    Object.defineProperty(hidden, "firstChild", { get() { assert.fail("CSS-hidden descendants must not be read"); } });
+    assert.equal(key([element("FORM", ["Code sent to alice@example.test", hidden])]), '["alice@example.test"]');
+  }
 });
 
 test("step text budget is shared across roots and rejects incomplete identities", () => {
