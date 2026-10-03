@@ -20,7 +20,7 @@ export function isEmailLinkRequestControl(control) {
 }
 
 export function mutationAffectsEmailLinkCard(records, host, document, hasActiveStep) {
-  const panels = "main, [role=main], form, [role=dialog]";
+  const panels = "main, [role=main], form, [role=dialog], dialog";
   const relevantElements = `${panels}, input`;
   const { textNeedsRescan, subtreeNeedsRescan, shouldInspectRecord } = createMutationInspection(
     (value) => /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(value),

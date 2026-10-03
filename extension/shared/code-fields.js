@@ -132,12 +132,15 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     return null;
   };
   const focused = document.activeElement;
+  const scope = document.querySelector?.('dialog:modal') || document;
   // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
   // Filling always rediscovers the page so cached hints cannot authorize a fill.
   let candidates = detectOnly && candidateCache;
+  if (candidates && candidates.scope !== scope) candidates = undefined;
   if (!candidates) {
-    const inputs = [...document.querySelectorAll("input")];
+    const inputs = [...scope.querySelectorAll("input")];
     candidates = {
+      scope,
       inputs: inputs.filter((input) => hasSupportedType(input) && hasCodeHint(input)),
       digitInputs: inputs.filter(isPotentialDigitInput),
       contextRoots: [...contextRoots],
@@ -174,7 +177,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
       stepContext: verificationContext(anchor), candidateCache: candidates };
   }
   const getVisibleInputs = () =>
-    [...document.querySelectorAll("input")].filter(isUsableInput);
+    [...scope.querySelectorAll("input")].filter(isUsableInput);
   const getDigitInputs = () => getVisibleInputs().filter(isPotentialDigitInput);
   const findUniqueDigitGroup = (digitInputs, length) => {
     const groups = [];

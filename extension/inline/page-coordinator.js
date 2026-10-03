@@ -28,7 +28,7 @@ export function getPageCoordinator(browser, handleField = handleCodeField) {
     for (const listener of mutationListeners) listener(records);
   }).observe(document.documentElement, {
     childList: true, subtree: true, characterData: true, characterDataOldValue: true, attributes: true,
-    attributeFilter: ["role", "type", "name", "id", "placeholder", "autocomplete", "aria-label", "aria-labelledby", "aria-hidden", "hidden", "style", "class", "disabled", "readonly", "maxlength", "for"],
+    attributeFilter: ["role", "type", "name", "id", "placeholder", "autocomplete", "aria-label", "aria-labelledby", "aria-hidden", "hidden", "open", "style", "class", "disabled", "readonly", "maxlength", "for"],
   });
   const notifyPageChange = () => {
     for (const listener of pageListeners) listener();

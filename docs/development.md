@@ -16,6 +16,8 @@ The installer test installs into a temporary directory, launches that copy to ve
 
 To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/code-picker-preview.html`. The fixture does not access Yahoo.
 
+`tests/fixtures/inline-regression-preview.html` supplies synthetic mail for modal and link-step checks. Use `?mode=modal-code` to fill a code in a native modal, `?mode=modal-reset` to copy a reset link in a modal, or `?mode=status` for a normal waiting panel. Add `&transform=1` to test a scaled, clipped dialog. **Update connection status** must retain the offered link; **Change recipient** and **Resend email** must clear it. These fixtures do not access Yahoo. When testing edits, serve with caching disabled or use a fresh local port so Chrome reloads imported modules.
+
 The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle. `test_popup_integration.js` covers the popup controller and its real view together.
 
 `tests/timer_queue.js` stores callbacks for explicit execution by insertion order or requested delay; it does not advance a clock. `tests/email_messages.py` shares the raw-email builder used by code-extraction and inbox-scanning tests.
@@ -41,6 +43,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | --- | --- |
 | `content-entry.js` | Starts the code picker and email-link card with one page coordinator. |
 | `inline/page-coordinator.js` | Shares code-field candidates, DOM observation, and page-change notifications. |
+| `inline/suggestion-mount.js` | Mounts suggestions inside the active native modal so they remain clickable above its backdrop. |
 | `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control and render code suggestions beside a detected field. |
 | `inline/code-picker-policy.js`, `inline/email-link-card-policy.js` | Filter suggestions and classify request controls and mutations; code policy also positions the picker. |
 | `inline/email-link-step.js` | Detect confirmation/reset waiting prompts and return a step identity and mail type. |
@@ -92,6 +95,7 @@ On-page results must have arrived since the verification step began, allowing fi
 - Codes are numeric, 4–8 digits, directly labelled by common English instructions such as “Your code is”, “Security code:”, or “Sign in to Indeed with code:”. Emails with multiple candidate codes are omitted.
 - Code fields must be ordinary inputs or common split-digit forms on HTTPS pages with verification-related labels or attributes. A generic “code” label needs nearby email/sign-in instructions. Coupon and promo fields are excluded; unlabelled fields, cross-origin embedded forms, and unusual widgets may not work.
 - Link cards recognise common English waiting prompts in short visible panels. Newsletter screens are excluded.
+- Link-step identity tracks the panel, email purpose, and recipients in delivery instructions. Incidental status text and countdowns retain results and the polling deadline; panel replacement, recipient changes, purpose changes, navigation, and explicit resends start new attempts.
 - Confirmation links require instructions such as “Verify email”, “Confirm account”, or “Activate account”; password-reset subjects are excluded. Reset links require instructions such as “Reset your password”, “Change your password”, or “Password reset”; help/support links and negated reset instructions are excluded.
 - Both link types require a visible HTML link or instructions immediately before a plain-text URL. Qualifying HTML takes precedence over plain text. Only supported HTTPS URLs are accepted; attachments, hidden links, and emails with multiple distinct qualifying links are omitted.
 - Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Tracking links show their initial destination; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
@@ -99,6 +103,8 @@ On-page results must have arrived since the verification step began, allowing fi
 ## Page detection and performance
 
 Scroll and resize reuse cached field candidates and position the picker on the next animation frame. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Code inputs can use HTML labels, `aria-label`, or an accessible name assembled from `aria-labelledby` references; changes to referenced labels refresh detection. Supported split-digit groups use a stable labelled anchor so moving focus between digits preserves suggestions; selecting a separate group starts a new attempt. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
+
+Native modal dialogs take precedence over background forms. Their inputs use a separate discovery scope, and both suggestion types mount inside the modal rather than in the inert background. Modal suggestions use manual popovers to keep viewport positioning and escape dialog transforms or clipping. Dialog opening and closing refresh detection.
 
 Code-step tracking identifies email recipients (including masked addresses) in nearby code-delivery instructions. Recipient changes, field changes, navigation, and explicit resend clicks start new attempts; incidental status messages retain valid codes. Step tracking never reads aggregate element `textContent`, and skips explicitly hidden content, content hidden by computed CSS display, visibility, or opacity, scripts, styles, and templates. An incomplete context retains the last known recipient identity instead of guessing from truncated text.
 

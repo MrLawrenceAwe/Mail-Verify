@@ -409,6 +409,27 @@ test("automatic detection does not fill or dispatch events", () => {
   assert.deepEqual(input.events, []);
 });
 
+test("opening a modal invalidates cached background code fields and restricts filling", () => {
+  const background = new FakeInput({ autocomplete: 'one-time-code' });
+  const inside = new FakeInput({ autocomplete: 'one-time-code' });
+  let modal = null;
+  const dialog = { querySelectorAll: () => [inside] };
+  const document = { activeElement: null, querySelector: () => modal,
+    querySelectorAll: () => [background, inside] };
+  const handle = vm.runInNewContext(`(${handleCodeField.toString()})`, {
+    document, HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
+    Event: class { constructor(type) { this.type = type; } },
+  });
+  const initial = handle({ action: 'detect', trackedAnchor: background });
+  modal = dialog;
+  const detected = handle({ action: 'detect', candidateCache: initial.candidateCache });
+  assert.equal(detected.anchor, inside);
+  assert.equal(handle({ action: 'fill', code: '123456', expectedAnchor: background }).ok, false);
+  assert.equal(handle({ action: 'fill', code: '123456' }).ok, true);
+  assert.equal(inside.value, '123456');
+  assert.equal(background.value, undefined);
+});
+
 test("detection reports generic code context for later page updates", () => {
   const form = { textContent: "Enter code", contains: () => true };
   const input = new FakeInput({ name: "code", form });

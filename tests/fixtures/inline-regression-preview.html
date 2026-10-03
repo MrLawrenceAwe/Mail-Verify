@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mail Verify inline regression preview</title>
+<style>
+  body { font:18px system-ui; margin:40px; }
+  dialog { padding:32px; min-width:300px; }
+  dialog::backdrop { background:#0008; }
+  input { display:block; font:inherit; padding:8px; margin-top:8px; }
+</style>
+<script type="module">
+import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
+import { startEmailLinkCard } from '../../extension/inline/email-link-card-controller.js';
+import { inlineRuntime } from '../mock_inline_port.js';
+const mode = new URL(location.href).searchParams.get('mode') || 'status';
+const panel = document.createElement(mode.startsWith('modal') ? 'dialog' : 'main');
+panel.innerHTML = mode === 'modal-code'
+  ? '<h1>Email verification</h1><p>We sent a security code to preview@yahoo.com.</p><label>Verification code<input autocomplete="one-time-code"></label><p id="feedback"></p>'
+  : '<h1>Password reset</h1><p>Check your email for a link to reset your password.</p><p>We sent a link to preview@yahoo.com.</p><button id="statusUpdate">Update connection status</button><button id="recipientUpdate">Change recipient</button><button id="resend">Resend email</button><p id="connection"></p>';
+document.body.append(panel);
+if (new URL(location.href).searchParams.has('transform')) {
+  panel.style.transform = 'scale(.9)';
+  panel.style.overflow = 'hidden';
+}
+if (panel.tagName === 'DIALOG') panel.showModal();
+let receivedAt = Date.now();
+const item = { uid:1, accountEmail:'preview@yahoo.com', code:'331519',
+  sender:'auth@example.test', subject:'Your verification email',
+  url:'https://example.test/reset', receivedAt };
+window.chrome = { runtime:inlineRuntime(() => ({ ok:true, codes:[item],
+  confirmationLinks:[item], passwordResetLinks:[item], scanPending:false })) };
+panel.querySelector('input')?.addEventListener('input', event => {
+  panel.querySelector('#feedback').textContent = event.target.value === item.code ? 'Code filled successfully.' : 'Incorrect code';
+});
+panel.querySelector('#statusUpdate')?.addEventListener('click', () => {
+  panel.querySelector('#connection').textContent = 'Connection restored.';
+});
+panel.querySelector('#recipientUpdate')?.addEventListener('click', () => {
+  panel.querySelectorAll('p')[1].textContent = 'We sent a link to another@yahoo.com.';
+});
+startCodePicker();
+startEmailLinkCard();
+</script>
