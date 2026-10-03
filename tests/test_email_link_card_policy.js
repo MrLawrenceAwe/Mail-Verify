@@ -39,6 +39,35 @@ test("large added and removed subtrees queue a scan without aggregate text or de
   }
 });
 
+test("visibility changes discover existing confirmation and reset prompts", () => {
+  for (const attributeName of ["hidden", "class", "style"]) {
+    for (const text of ["Check your email", "Password reset link sent to your inbox"]) {
+      const prompt = { nodeType: 1, matches: () => false };
+      prompt.firstChild = { nodeType: 3, textContent: text, parentNode: prompt };
+      const record = { type: "attributes", attributeName, target: prompt };
+      assert.equal(mutationAffectsEmailLinkCard([record], null, {}, false), true,
+        `${attributeName}: ${text}`);
+      assert.equal(mutationAffectsEmailLinkCard([record], prompt, {}, false), false,
+        "extension controls must remain excluded");
+    }
+  }
+});
+
+test("attribute prompt inspection shares the text budget and deduplicates targets", () => {
+  let reads = 0;
+  const records = Array.from({ length: 20 }, () => {
+    const target = { nodeType: 1, matches: () => false };
+    target.firstChild = { nodeType: 3, parentNode: target,
+      get textContent() { reads++; return "x".repeat(1000); } };
+    return { type: "attributes", target };
+  });
+  assert.equal(mutationAffectsEmailLinkCard([records[0], records[0]], null, {}, false), false);
+  assert.equal(reads, 1);
+  reads = 0;
+  assert.equal(mutationAffectsEmailLinkCard(records, null, {}, false), true);
+  assert.equal(reads, 11, "text inspection stops when the batch budget is exhausted");
+});
+
 test("mutation node and text budgets apply across the whole batch", () => {
   let inspected = 0;
   const records = Array.from({ length: 2000 }, () => ({

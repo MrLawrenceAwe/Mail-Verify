@@ -38,6 +38,28 @@ function setup(panel = null, mailType = "confirmationLinks") {
 }
 
 
+test("revealing a pre-existing waiting prompt mounts its link card", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const text = mailType === "passwordResetLinks"
+      ? "Reset your password. Check your email." : "Check your email.";
+    const panel = { nodeType: 1, tagName: "MAIN", getClientRects: () => [{}], checkVisibility: () => true };
+    const prompt = { nodeType: 1, tagName: "P", hidden: true, parentNode: panel, matches: () => false };
+    prompt.firstChild = { nodeType: 3, data: text, textContent: text, parentNode: prompt };
+    panel.firstChild = prompt;
+    Object.defineProperty(panel, "innerText", { get: () => prompt.hidden ? "" : text });
+    const f = setup(panel, mailType);
+    await settle();
+    assert.equal(f.state.views.length, 0);
+    assert.equal(f.state.requests, 0);
+    prompt.hidden = false;
+    f.state.mutate([{ type: "attributes", attributeName: "hidden", target: prompt }]);
+    await f.run(250);
+    assert.equal(f.state.views.length, 1);
+    assert.equal(f.state.requests, 1);
+    assert.deepEqual(f.state.views[0].links, [item]);
+  }
+});
+
 test("link cards collect pending scans quickly then resume normal checks", async () => {
   const f = setup(); await settle();
   f.state.respond = async () => ({ ok: true, confirmationLinks: [], scanPending: true });

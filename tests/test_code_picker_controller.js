@@ -204,6 +204,41 @@ test("picker passes its mounted field to the fill action", async () => {
   assert.equal(fills[0].expectedAnchor, anchor);
 });
 
+test("selection revalidates the verification step before the queued discovery runs", async () => {
+  for (const changed of [true, false]) {
+    let observer, fills = 0;
+    const form = { textContent: "We sent a code to alice@example.test. Resend in 30 seconds", contains: () => true };
+    const anchor = { form };
+    const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+    const { timers, results } = pickerBrowser({
+      handleField: ({ action }) => {
+        if (action === "fill") { fills++; return { ok: true }; }
+        return { ok: true, anchor, stepContext: { roots: [form] },
+          candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } };
+      },
+      now: () => 10000,
+      check: async () => ({ ok: true, codes: [code] }),
+      onObserve: callback => { observer = callback; },
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    const button = results.children[0];
+    form.textContent = changed
+      ? "We sent a code to bob@example.test. Resend in 30 seconds"
+      : "We sent a code to alice@example.test. Resend in 29 seconds";
+    observer([{ type: "characterData", target: {} }]);
+    assert.ok(timers.length, "discovery has been queued but has not run");
+    button.onclick();
+    assert.equal(fills, changed ? 0 : 1,
+      "recipient changes block filling; countdown changes keep the selection valid");
+    await new Promise(resolve => setImmediate(resolve));
+    if (changed) {
+      assert.equal(results.childElementCount, 0, "the old result is excluded from the new attempt");
+      button.onclick();
+      assert.equal(fills, 0, "a detached old button cannot fill the new attempt");
+    }
+  }
+});
+
 test("a successful fill allows a new code field on the same URL", async () => {
   let observer, now = 10_000, anchor = {};
   let mounts = 0;

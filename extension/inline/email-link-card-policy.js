@@ -29,7 +29,7 @@ export function mutationAffectsEmailLinkCard(records, host, document, hasActiveS
     const target = record.target;
     if (!shouldInspectRecord(record, host)) return false;
     if (record.type === "attributes")
-      return subtreeNeedsRescan(target, relevantElements);
+      return subtreeNeedsRescan(target, relevantElements, true);
     const element = target.nodeType === 1 ? target : target.parentElement;
     const inActivePanel = hasActiveStep &&
       (element?.closest?.(panels) || !document.querySelector?.(panels));
