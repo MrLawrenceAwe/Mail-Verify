@@ -1,12 +1,12 @@
-import { MAIL_TYPES } from "../shared/mail-types.js";
+import { createScanSchedule } from "../shared/scan-schedule.js";
+import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
 import { handleCodeField } from "../shared/code-fields.js";
-import { isFreshMessage, PENDING_SCAN_POLL_MS } from "../shared/mail-timing.js";
+import { isFreshMessage, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { createPopupView } from "./popup-view.js";
 import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import { createPollingLifecycle } from "../shared/polling-lifecycle.js";
 
-const POLL_INTERVAL_MS = 8_000;
 const MIN_POLL_PAUSE_MS = 2_000;
 
 export function createPopupController({
@@ -19,20 +19,19 @@ export function createPopupController({
   clipboard = globalThis.navigator?.clipboard,
 }) {
   const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
-  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: POLL_INTERVAL_MS });
+  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: DEFAULT_SCAN_INTERVAL_MS });
   let targetTab;
   let mailType = "codes";
   let checking = false,
     usingResult = false,
     removingAccount = false,
     addingAccount = false;
-  let scanPending = false;
-  let nextScanAt = 0;
+  const scanSchedule = createScanSchedule({ clock, intervalMs: DEFAULT_SCAN_INTERVAL_MS });
   const view = createPopupView(document, {
     onRemoveAccount: removeAccount,
     onFillCode: fillSelectedCode,
     onUseLink: useSelectedLink,
-    onSelectMailType: selectMailType,
+    onCheckMail: startMailCheck,
     onAddAccount: addAccount,
   });
   function applyConnectedAccounts(accountEmails) {
@@ -51,7 +50,7 @@ export function createPopupController({
     checkInbox();
   }
   function abortCheck() {
-    scanPending = false;
+    scanSchedule.clearPending();
     polling.cancelScheduledCheck();
     polling.invalidateResponses();
     checking = false;
@@ -61,7 +60,7 @@ export function createPopupController({
     if (usingResult || removingAccount || addingAccount) return;
     usingResult = true;
     abortCheck();
-    view.setAccountAndCheckButtonsDisabled(true);
+    view.setCheckAndRemoveButtonsDisabled(true);
     view.setResultButtonsDisabled(true);
     try {
       await action();
@@ -72,7 +71,7 @@ export function createPopupController({
     } finally {
       usingResult = false;
       if (reusable) view.setResultButtonsDisabled(false);
-      view.setAccountAndCheckButtonsDisabled(addingAccount);
+      view.setCheckAndRemoveButtonsDisabled(addingAccount);
       if (polling.deadline) scheduleCheck();
       else closeSession();
     }
@@ -111,7 +110,7 @@ export function createPopupController({
         await copyPasswordResetLink(clipboard, item.url,
           "Clipboard unavailable. Close and reopen this popup, then try again.");
         view.markLinkCopied(button);
-        view.setStatus(MAIL_TYPES.passwordResetLinks.copySuccessStatus);
+        view.setStatus(MAIL_PRESENTATION.passwordResetLinks.copySuccessStatus);
         return;
       }
       await chrome.tabs.create({ url: item.url });
@@ -119,7 +118,7 @@ export function createPopupController({
       view.setStatus("Confirmation link opened in a new tab.");
     }, { reusable: mailType === "passwordResetLinks" });
   }
-  function scheduleCheck(delay = POLL_INTERVAL_MS) {
+  function scheduleCheck(delay = DEFAULT_SCAN_INTERVAL_MS) {
     if (polling.hasExpired()) {
       finishPolling();
       return;
@@ -132,7 +131,7 @@ export function createPopupController({
     polling.cancelScheduledCheck();
     closeSession();
     if (!usingResult && !removingAccount)
-      view.setStatus(`Automatic checking finished. Check again for newer ${MAIL_TYPES[mailType].resultLabel}.`);
+      view.setStatus(`Automatic checking finished. Check again for newer ${MAIL_PRESENTATION[mailType].resultLabel}.`);
   }
   async function checkInbox() {
     if (usingResult || removingAccount) return;
@@ -148,44 +147,43 @@ export function createPopupController({
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
-      const collectOnly = scanPending && clock.now() < nextScanAt;
-      if (!collectOnly) nextScanAt = clock.now() + POLL_INTERVAL_MS;
+      const collectOnly = scanSchedule.beginCheck();
       const response = await sendSessionRequest(mailType, collectOnly);
       const results = response[mailType];
       if (!usingResult && polling.isCurrent(requestGeneration)) {
-        scanPending = response.scanPending;
+        scanSchedule.recordResponse(response.scanPending);
         if (mailType !== "codes") view.renderLinks(results, mailType);
         else view.renderCodes(results, targetTab);
         view.setStatus(
           response.warnings?.length
             ? `Some accounts could not be checked: ${response.warnings.join("; ")}`
-            : results.length ? MAIL_TYPES[mailType].foundStatus
-              : scanPending ? "Checking your connected inboxes…" : MAIL_TYPES[mailType].emptyStatus,
+            : results.length ? (MAIL_PRESENTATION[mailType].popupFoundStatus || MAIL_PRESENTATION[mailType].foundStatus)
+              : scanSchedule.pending ? "Checking your connected inboxes…" : MAIL_PRESENTATION[mailType].popupEmptyStatus,
         );
       }
     } catch (error) {
       failed = true;
       if (!usingResult && polling.isCurrent(requestGeneration)) {
-        scanPending = false;
+        scanSchedule.clearPending();
         view.clearResults();
         view.setStatus(error.message, true);
       }
     } finally {
       if (polling.isCurrent(requestGeneration)) {
         checking = false;
-        view.setAccountAndCheckButtonsDisabled(usingResult || removingAccount || addingAccount);
+        view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount || addingAccount);
         scheduleCheck(
           failed
-            ? POLL_INTERVAL_MS
-            : scanPending ? PENDING_SCAN_POLL_MS : Math.max(
+            ? DEFAULT_SCAN_INTERVAL_MS
+            : scanSchedule.pending ? scanSchedule.pollDelay : Math.max(
                 MIN_POLL_PAUSE_MS,
-                POLL_INTERVAL_MS - (clock.now() - startedAt),
+                DEFAULT_SCAN_INTERVAL_MS - (clock.now() - startedAt),
               ),
         );
       }
     }
   }
-  function selectMailType(nextMailType) {
+  function startMailCheck(nextMailType) {
     if (usingResult || removingAccount || addingAccount) return;
     abortCheck();
     if (mailType !== nextMailType) view.clearResults();
@@ -200,7 +198,7 @@ export function createPopupController({
     if (addingAccount || removingAccount) return;
     addingAccount = true;
     view.setAddAccountDisabled(true);
-    view.setAccountAndCheckButtonsDisabled(true);
+    view.setCheckAndRemoveButtonsDisabled(true);
     view.setStatus("Checking your Yahoo connection…");
     const { email, password } = view.readCredentialsAndClearPassword();
     try {
@@ -216,7 +214,7 @@ export function createPopupController({
     } finally {
       addingAccount = false;
       view.setAddAccountDisabled(false);
-      view.setAccountAndCheckButtonsDisabled(usingResult || removingAccount);
+      view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount);
     }
   }
   async function removeAccount(email) {
@@ -224,7 +222,7 @@ export function createPopupController({
     polling.reset();
     removingAccount = true;
     abortCheck();
-    view.setAccountAndCheckButtonsDisabled(true);
+    view.setCheckAndRemoveButtonsDisabled(true);
     try {
       const result = await sendOneOffRequest({ action: "removeAccount", email });
       removingAccount = false;
@@ -234,7 +232,7 @@ export function createPopupController({
       polling.renewDeadline();
     } finally {
       removingAccount = false;
-      view.setAccountAndCheckButtonsDisabled(false);
+      view.setCheckAndRemoveButtonsDisabled(false);
       if (polling.deadline && !checking) scheduleCheck();
     }
   }

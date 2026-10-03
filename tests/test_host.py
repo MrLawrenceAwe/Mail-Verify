@@ -27,7 +27,7 @@ class HostTests(unittest.TestCase):
     def test_collection_request_does_not_start_new_mail_scans(self):
         credentials = {"email": "test@yahoo.com", "password": "unused"}
         sessions = account_sessions.AccountSessions()
-        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "fetch_with_timeout") as fetch:
+        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "scan_with_deadline") as fetch:
             try:
                 response = host.handle_request({"action": "codes", "collectOnly": True}, sessions)
                 self.assertEqual(response, {"codes": [], "warnings": [], "scanPending": False})
@@ -39,7 +39,7 @@ class HostTests(unittest.TestCase):
         credentials = {"email": "test@yahoo.com", "password": "unused"}
         sessions = account_sessions.AccountSessions()
         item = {"url": "https://example.com/reset", "receivedAt": 1000, "uid": 1}
-        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "fetch_with_timeout", return_value=[item]):
+        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "scan_with_deadline", return_value=[item]):
             result = host.handle_request({"action": "passwordResetLinks"}, sessions)
         self.assertEqual(result, {"passwordResetLinks": [{**item, "accountEmail": credentials["email"]}], "warnings": [], "scanPending": False})
         from link_extraction import extract_password_reset_link_details
@@ -89,7 +89,7 @@ class HostTests(unittest.TestCase):
             with self.assertRaisesRegex(host.UserError, "Connect Yahoo Mail first"):
                 host.handle_request({"action": "codes"}, sessions)
             # Account cleanup occurs when the next scan sees the changed list.
-            sessions.fetch_recent_items([])
+            sessions.poll_accounts([])
             close.assert_called_once()
 
     def test_reused_session_keeps_connection_for_unchanged_account(self):
@@ -97,7 +97,7 @@ class HostTests(unittest.TestCase):
         session = account_sessions.InboxSession(credentials)
         sessions = account_sessions.AccountSessions()
         sessions.sessions["test@yahoo.com"] = session
-        with patch.object(host, "keychain", return_value={"accounts": [dict(credentials)]}), patch.object(session, "close") as close, patch.object(account_sessions, "fetch_with_timeout", return_value=[]) as check:
+        with patch.object(host, "keychain", return_value={"accounts": [dict(credentials)]}), patch.object(session, "close") as close, patch.object(account_sessions, "scan_with_deadline", return_value=[]) as check:
             self.assertEqual(host.handle_request({"action": "codes"}, sessions), {"codes": [], "warnings": [], "scanPending": False})
             close.assert_not_called()
             check.assert_called_once_with(session)

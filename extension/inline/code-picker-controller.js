@@ -1,7 +1,9 @@
+import { createScanSchedule } from "../shared/scan-schedule.js";
+import { createMutationInspection } from "./mutation-inspection.js";
 import { normalizeStepText, getRequestControlLabel, REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
 import { handleCodeField } from "../shared/code-fields.js";
 import { createCodePickerView } from "./code-picker-view.js";
-import { initialStepCutoff, isFreshMessage, resendCutoff, PENDING_SCAN_POLL_MS } from "../shared/mail-timing.js";
+import { initialStepCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
@@ -34,58 +36,18 @@ function messageKey(item) {
   return `${item.accountEmail.toLowerCase()}:${item.uid}`;
 }
 
-function verificationStepContext(anchor) {
-  const container = anchor?.form || anchor?.parentElement;
-  if (!container) return { roots: [], key: "" };
-  const roots = [container];
-  let sibling = container.previousElementSibling;
-  for (let count = 0; sibling && count < 2; count++, sibling = sibling.previousElementSibling)
-    roots.push(sibling);
+function verificationStepContext({ roots, parent }) {
   const key = roots.map((root) => normalizeStepText(root.textContent || "")).join("\n");
-  return { roots, parent: container.parentElement, key };
+  return { roots, parent, key };
 }
 
-const MAX_MUTATION_NODES = 500;
-const MAX_MUTATION_TEXT_UNITS = 10_000;
-
 export function mutationAffectsPicker(records, host, contextRoots = [], stepRoots = [], stepParent) {
-  const attributeTargets = new Set();
-  let remainingNodes = MAX_MUTATION_NODES, remainingTextUnits = MAX_MUTATION_TEXT_UNITS;
-  const matchesText = (value) => /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value);
-  const relevantText = (value = "") => {
-    if (value.length > remainingTextUnits) return true;
-    remainingTextUnits -= value.length;
-    return matchesText(value);
-  };
-  const relevantSubtree = (root, selector, inspectText = false) => {
-    const text = [];
-    // Budget the whole batch before the coalesced scan. Never aggregate an
-    // element's textContent or query an unrestricted subtree in the observer.
-    for (let node = root; node;) {
-      if (--remainingNodes < 0) return true;
-      if (node.nodeType === 1 && node.matches?.(selector)) return true;
-      if (inspectText && node.nodeType === 3) {
-        const value = node.textContent || "";
-        if (value.length > remainingTextUnits) return true;
-        remainingTextUnits -= value.length;
-        text.push(value);
-      }
-      if (node.firstChild) {
-        node = node.firstChild;
-        continue;
-      }
-      while (node !== root && !node.nextSibling) node = node.parentNode;
-      node = node === root ? null : node.nextSibling;
-    }
-    return inspectText && matchesText(text.join(""));
-  };
+  const { inspectNode, relevantText, relevantSubtree, shouldInspectRecord } = createMutationInspection(
+    (value) => /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value),
+  );
   return records.some((record) => {
     const target = record.target;
-    if (target === host || host?.contains(target)) return false;
-    if (record.type === "attributes") {
-      if (attributeTargets.has(target)) return false;
-      attributeTargets.add(target);
-    }
+    if (!shouldInspectRecord(record, host)) return false;
     if (record.type === "childList" && target === stepParent) return true;
     if (stepRoots.some((root) => root.contains?.(target)) &&
         (record.type === "characterData" || record.type === "childList")) return true;
@@ -93,7 +55,7 @@ export function mutationAffectsPicker(records, host, contextRoots = [], stepRoot
       return target?.matches?.("input, label") || relevantSubtree(target, "input");
     const inContext = contextRoots.some((root) => root.contains?.(target));
     if (record.type === "characterData") {
-      if (inContext && (--remainingNodes < 0 ||
+      if (inContext && (!inspectNode() ||
           relevantText(target.textContent || "") || relevantText(record.oldValue || ""))) return true;
       return !!target?.parentElement?.closest?.("label");
     }
@@ -115,17 +77,16 @@ export function isCodeRequestControl(control) {
 export function startCodePicker({ browser = globalThis, handleField = handleCodeField, page = getPageCoordinator(browser, handleField) } = {}) {
   const { document, window, location, chrome, requestAnimationFrame,
     setTimeout, clearTimeout, Date: clock = Date } = browser;
-  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: 2000 });
+  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: CODE_PICKER_SCAN_INTERVAL_MS });
   const { checks } = polling;
   let view;
-  let scanPending = false;
-  let nextScanAt = 0;
+  const scanSchedule = createScanSchedule({ clock, intervalMs: CODE_PICKER_SCAN_INTERVAL_MS });
   let dismissed = false, filledStep = false, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);
   function unmountPicker({ preserveStep = false } = {}) {
-    scanPending = false;
+    scanSchedule.clearPending();
     polling.cancelChecks();
     view?.host.remove();
     view = undefined;
@@ -152,7 +113,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
-  function mountPicker(field, context = verificationStepContext(field.anchor)) {
+  function mountPicker(field, context = verificationStepContext(field.stepContext)) {
     const mountedAnchor = field.anchor;
     minReceivedAtMs ??= initialStepCutoff(clock.now());
     anchor = field.anchor;
@@ -172,7 +133,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
           filledStep = true;
           unmountPicker({ preserveStep: true });
         } else {
-          view.setStatus("Select the code field and try again.");
+          view.setStatus(result.error || "Select the code field and try again.");
           positionPicker();
         }
       },
@@ -193,8 +154,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
-      const collectOnly = scanPending && clock.now() < nextScanAt;
-      if (!collectOnly) nextScanAt = clock.now() + 2000;
+      const collectOnly = scanSchedule.beginCheck();
       const response = await requestInlineCheck(chrome.runtime, "codes", collectOnly);
       if (lastURL !== location.href) {
         syncPicker();
@@ -202,7 +162,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       }
       if (!polling.isCurrent(requestGeneration) || !view) return;
       if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
-      scanPending = response.scanPending;
+      scanSchedule.recordResponse(response.scanPending);
       checkFailed = !!response.warnings?.length;
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
       const codes = selectSuggestedCodes(response.codes, minReceivedAtMs, clock.now(), excludedMessageKeys);
@@ -216,7 +176,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     } catch (error) {
       checkFailed = true;
       if (polling.isCurrent(requestGeneration) && view) {
-        scanPending = false;
+        scanSchedule.clearPending();
         view.clearCodes();
         view.setStatus(error.message);
       }
@@ -230,7 +190,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       if (view) positionPicker();
       if (view && !polling.hasExpired()) {
         polling.schedule(checkForCodes, polling.isCurrent(requestGeneration)
-          ? scanPending ? PENDING_SCAN_POLL_MS : 2000 : 0);
+          ? scanSchedule.pollDelay : 0);
       } else if (view && !view.hasCodes() && !checkFailed) {
         view.setStatus("No code found. Click ↻ to check again.");
       }
@@ -267,7 +227,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       return;
     }
     const context = refreshCandidates || !view || anchor !== field.anchor
-      ? verificationStepContext(field.anchor)
+      ? verificationStepContext(field.stepContext)
       : stepContext;
     if (anchor && anchor !== field.anchor) resetAttempt();
     else if (stepContext && context.key !== stepContext.key)

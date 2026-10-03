@@ -34,20 +34,24 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     input.getAttribute("aria-label"),
     ...[...(input.labels || [])].map((label) => label.textContent),
   ];
+  const verificationContext = (input) => {
+    const container = input.form || input.parentElement;
+    if (!container) return { roots: [], parent: undefined };
+    const roots = [container];
+    // Nearby instructions can identify a field; distant main content cannot.
+    let sibling = container.previousElementSibling;
+    for (let count = 0; sibling && count < 2; count++, sibling = sibling.previousElementSibling)
+      roots.push(sibling);
+    return { roots, parent: container.parentElement };
+  };
   const contextMatches = new Map();
   const contextRoots = new Set();
   // A bare "code" may mean a coupon, referral, or product code.
   const hasContextualCodeHint = (input, hints) => {
     const hintText = hints.filter(Boolean).join(" ");
     if (!/\bcode\b/i.test(hintText) || /coupon|promo|postal|zip|referral|product/i.test(hintText)) return false;
-    const container = input.form || input.parentElement;
-    const roots = [container];
-    // Instructions are often just before the form, but text elsewhere in
-    // <main> can describe a different code field on the page.
-    let sibling = container?.previousElementSibling;
-    for (let count = 0; sibling && count < 2; count++, sibling = sibling.previousElementSibling)
-      roots.push(sibling);
-    if (container?.parentElement) contextRoots.add(container.parentElement);
+    const { roots, parent } = verificationContext(input);
+    if (parent) contextRoots.add(parent);
     const verificationText = /(?:check your email for a code|(?:we(?:['’]ve| have)? sent|emailed)[\s\S]{0,100}\bcode\b|verification code|sign[- ]?in code)/i;
     for (const root of roots) {
       if (!root) continue;
@@ -94,7 +98,8 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
       trackedAnchorOffscreen: !!trackedAnchor && candidates.inputs.includes(trackedAnchor) &&
         inputVisibility(trackedAnchor) === "offscreen" };
     const { top, bottom, left, right } = anchor.getBoundingClientRect();
-    return { ok: true, anchor, rect: { top, bottom, left, right }, candidateCache: candidates };
+    return { ok: true, anchor, rect: { top, bottom, left, right },
+      stepContext: verificationContext(anchor), candidateCache: candidates };
   }
   const getVisibleInputs = () =>
     [...document.querySelectorAll("input")].filter(isUsableInput);

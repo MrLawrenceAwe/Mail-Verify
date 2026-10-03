@@ -256,7 +256,7 @@ class InboxSession:
         self.pending_received_at_by_uid = dict(pending)
         return [uid for uid, _ in pending]
 
-    def recent_items(self):
+    def scan_inbox(self):
         try:
             if self.connection is None:
                 self.connection = connect_imap(self.credentials, deadline=self.deadline)
@@ -278,7 +278,7 @@ class InboxSession:
             self.pending_received_at_by_uid.update(self._eligible_messages(metadata, now))
             candidates = self._prune_pending_messages(now)
             self._fetch_items(candidates)
-            return self._results()
+            return self._select_and_prune_results()
         except Exception:
             self.close()
             raise
@@ -290,7 +290,7 @@ class InboxSession:
             reverse=True,
         )
 
-    def _results(self):
+    def _select_and_prune_results(self):
         newest = self._newest_items()
         newest_overall = newest[:RECENT_RESULT_LIMIT]
         newest_by_sender = self._newest_distinct_senders(newest)

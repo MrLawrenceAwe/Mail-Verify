@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculatePickerPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl, startCodePicker } from "../extension/inline/code-picker-controller.js";
+import { startCodePicker } from "../extension/inline/code-picker-controller.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createFakeTimers } from "./fake_timers.js";
 
@@ -46,14 +46,16 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
     clearTimeout: timers.clearTimeout,
     chrome: { runtime: inlineRuntime(check) },
   };
-  startCodePicker({ browser, handleField });
+  const detectOrFill = (request) => {
+    const result = handleField(request);
+    return request.action === "detect"
+      ? { stepContext: { roots: [], parent: undefined }, ...result }
+      : result;
+  };
+  startCodePicker({ browser, handleField: detectOrFill });
   return { browser, events, timers, results, elements };
 }
 
-test("suggestions sit below the field and stay within the viewport", () => {
-  assert.deepEqual(calculatePickerPosition({ left: 100, top: 200, bottom: 240 }, 300, 110, 1000, 800), { left: 100, top: 244 });
-  assert.deepEqual(calculatePickerPosition({ left: 900, top: 700, bottom: 740 }, 300, 110, 1000, 800), { left: 692, top: 586 });
-});
 
 test("code picker collects pending scans quickly then resumes normal checks", async () => {
   const modes = [];
@@ -240,57 +242,6 @@ test("retry during an active check ignores its response and checks again immedia
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
 });
 
-test("old codes are withheld while waiting for this verification attempt", () => {
-  const older = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 1000 };
-  const newest = { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
-  assert.deepEqual(selectSuggestedCodes([older], 5000, 10000), []);
-  assert.deepEqual(selectSuggestedCodes([older, newest], 5000, 10000), [newest]);
-  assert.deepEqual(selectSuggestedCodes([newest], 9500, 10000), []);
-});
-
-test("only the latest code per sender is suggested, without changing the response", () => {
-  const codes = [
-    { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "AUTH@example.test", receivedAt: 8000 },
-    { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 },
-    { uid: 3, accountEmail: "test@yahoo.com", code: "333333", sender: "other@example.test", receivedAt: 9500 },
-  ];
-  assert.deepEqual(selectSuggestedCodes(codes, 5000, 10000).map(x => x.code), ["333333", "222222"]);
-  assert.equal(codes[0].code, "111111");
-});
-
-test("codes without a sender remain separate suggestions", () => {
-  const codes = [
-    { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "", receivedAt: 9000 },
-    { uid: 2, accountEmail: "test@yahoo.com", code: "222222", sender: "", receivedAt: 9500 },
-  ];
-  assert.deepEqual(selectSuggestedCodes(codes, 8000, 10000).map(item => item.code), ["222222", "111111"]);
-});
-
-test("UID exclusion distinguishes two messages received in the same second", () => {
-  const old = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
-  const newer = { uid: 8, accountEmail: "test@yahoo.com", code: "222222", sender: "auth@example.test", receivedAt: 9000 };
-  assert.deepEqual(selectSuggestedCodes([old, newer], 9000, 9500, new Set(["test@yahoo.com:7"])), [newer]);
-});
-
-test("same sender and UID in separate accounts remain distinct", () => {
-  const codes = [
-    { uid: 7, code: "111111", sender: "auth@example.test", accountEmail: "one@yahoo.com", receivedAt: 9000 },
-    { uid: 7, code: "222222", sender: "auth@example.test", accountEmail: "two@yahoo.com", receivedAt: 9100 },
-  ];
-  assert.deepEqual(selectSuggestedCodes(codes, 8000, 10000).map(x => x.code), ["222222", "111111"]);
-  assert.deepEqual(selectSuggestedCodes(codes, 8000, 10000, new Set(["one@yahoo.com:7"])).map(x => x.code), ["222222"]);
-});
-
-test("recognises common resend labels without treating coupon requests as email codes", () => {
-  for (const textContent of ["Resend code", "Send another verification code", "Request a new code", "Get a new OTP", "Resend"])
-    assert.equal(isCodeRequestControl({ textContent }), true, textContent);
-  assert.equal(isCodeRequestControl({ textContent: "Send promo code" }), false);
-  assert.equal(isCodeRequestControl({ textContent: "Continue" }), false);
-  assert.equal(isCodeRequestControl({ textContent: "", getAttribute: () => "Resend verification code" }), true);
-  assert.equal(isCodeRequestControl({ tagName: "INPUT", value: "Resend code", getAttribute: () => null }), true);
-  assert.equal(isCodeRequestControl({ tagName: "INPUT", value: "Send promo code", getAttribute: () => null }), false);
-});
-
 test("resend input clears the old suggestion and waits for newer mail", async () => {
   let now = 9500;
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
@@ -433,7 +384,7 @@ test("countdown completion retains codes without starting a new attempt", async 
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
     let requests = 0;
     const { timers, results, elements } = pickerBrowser({
-      handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+      handleField: () => ({ ok: true, anchor, stepContext: { roots: [form, form.previousElementSibling].filter(Boolean), parent: form.parentElement }, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
       now: () => now,
       check: async () => { requests++; return { ok: true, codes: [code] }; },
       onObserve: callback => { observer = callback; },
@@ -461,7 +412,7 @@ test("changed verification instructions reset codes on the same field and URL", 
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let responses = [oldCode];
   const { timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    handleField: () => ({ ok: true, anchor, stepContext: { roots: [form, form.previousElementSibling].filter(Boolean), parent: form.parentElement }, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     check: async () => ({ ok: true, codes: responses }),
     onObserve: callback => { observer = callback; },
@@ -557,26 +508,6 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   assert.equal(results.childElementCount, 0);
 });
 
-test("page mutations only rescan when fields or their form can change", () => {
-  const node = (tag, hasInput = false) => ({
-    nodeType: 1,
-    matches: (selector) => selector.split(", ").includes(tag),
-    firstChild: hasInput ? { nodeType: 1, matches: selector => selector.includes("input") } : null,
-    closest: () => null,
-  });
-  const unrelated = node("div");
-  const input = node("input");
-  const labelChild = { ...node("span"), closest: (selector) => selector.includes("label") ? {} : null };
-  assert.equal(mutationAffectsPicker([{ type: "attributes", target: unrelated }]), false);
-  assert.equal(mutationAffectsPicker([{ type: "childList", target: unrelated, addedNodes: [node("span")], removedNodes: [] }]), false);
-  assert.equal(mutationAffectsPicker([{ type: "childList", target: unrelated, addedNodes: [input], removedNodes: [] }]), true);
-  assert.equal(mutationAffectsPicker([{ type: "attributes", target: node("div", true) }]), true);
-  assert.equal(mutationAffectsPicker([{ type: "characterData", target: { parentElement: labelChild } }]), true);
-  const context = [{ contains: () => true }];
-  assert.equal(mutationAffectsPicker([{ type: "characterData", target: { textContent: "new code" } }], null, context), true);
-  assert.equal(mutationAffectsPicker([{ type: "characterData", target: { textContent: "clock" } }], null, context), false);
-});
-
 test("scroll positioning uses animation frames and cached candidates; mutations rediscover", async () => {
   const frames = [];
   let observer, discoveries = 0, detections = 0, visible = false, mounted;
@@ -623,69 +554,6 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   assert.equal(detections, before);
 });
 
-
-test("repeated unrelated attribute targets are inspected once per batch", () => {
-  let visits = 0;
-  const target = {nodeType: 1, matches: () => false, get firstChild() { visits++; return null; } };
-  const records = Array.from({length: 1000}, () => ({type: "attributes", target}));
-  assert.equal(mutationAffectsPicker(records), false);
-  assert.equal(visits, 1);
-});
-
-test("picker bounds added and removed subtrees without aggregate text or queries", () => {
-  const root = {
-    nodeType: 1, matches: () => false,
-    get textContent() { assert.fail("must not aggregate element text"); },
-    querySelector() { assert.fail("must not query an unrestricted subtree"); },
-  };
-  root.firstChild = { nodeType: 3, textContent: "x".repeat(1_000_000), parentNode: root };
-  const context = [{ contains: () => true }];
-  for (const changed of ["addedNodes", "removedNodes"]) {
-    const record = { type: "childList", target: {}, addedNodes: [], removedNodes: [] };
-    record[changed] = [root];
-    assert.equal(mutationAffectsPicker([record], null, context), true);
-  }
-});
-
-test("picker node budget covers the whole batch including attribute descendants", () => {
-  for (const type of ["childList", "attributes"]) {
-    let visits = 0;
-    const records = Array.from({ length: 2000 }, () => {
-      const root = { nodeType: 1, matches: () => false,
-        querySelector() { assert.fail("must traverse with a budget"); },
-        get firstChild() { visits++; return null; } };
-      return { type, target: type === "attributes" ? root : {}, addedNodes: [root], removedNodes: [] };
-    });
-    assert.equal(mutationAffectsPicker(records), true);
-    assert.equal(visits, 500);
-  }
-});
-
-test("picker text budget includes current and previous text across records", () => {
-  let reads = 0;
-  const records = Array.from({ length: 100 }, () => ({
-    type: "characterData", target: { nodeType: 3,
-      get textContent() { reads++; return "x".repeat(1000); } },
-    oldValue: "y".repeat(1000),
-  }));
-  assert.equal(mutationAffectsPicker(records, null, [{ contains: () => true }]), true);
-  assert.equal(reads, 6);
-});
-
-test("picker bounded traversal preserves nested fields and split context prompts", () => {
-  const root = { nodeType: 1, matches: () => false };
-  const span = { nodeType: 1, matches: () => false, parentNode: root };
-  root.firstChild = { nodeType: 3, textContent: "e", parentNode: root, nextSibling: span };
-  span.firstChild = { nodeType: 3, textContent: "mail", parentNode: span };
-  const record = { type: "childList", target: {}, addedNodes: [root], removedNodes: [] };
-  const context = [{ contains: () => true }];
-  assert.equal(mutationAffectsPicker([record], null, context), true);
-  span.firstChild.textContent = "Price changed";
-  assert.equal(mutationAffectsPicker([record], null, context), false);
-  span.matches = selector => selector.includes("input");
-  assert.equal(mutationAffectsPicker([record]), true);
-});
-
 test("oversized picker mutations coalesce into one deferred discovery", async () => {
   let observer, discoveries = 0;
   const contextRoots = [{ contains: () => true }];
@@ -701,4 +569,21 @@ test("oversized picker mutations coalesce into one deferred discovery", async ()
   assert.equal(timers.length, 1);
   await timers.run(150);
   assert.equal(discoveries, 2);
+});
+
+test("failed fills retain specific field guidance and use a fallback when absent", async () => {
+  for (const error of ["The verification-code fields changed while filling them. Try again.", undefined]) {
+    const anchor = {};
+    const { results, elements } = pickerBrowser({
+      handleField: ({ action }) => action === "fill" ? { ok: false, error }
+        : { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 } },
+      now: () => 10000,
+      check: async () => ({ ok: true, codes: [{ uid: 1, accountEmail: "test@yahoo.com",
+        code: "123456", sender: "auth@example.test", receivedAt: 9000 }] }),
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    results.children[0].onclick();
+    assert.equal(elements["#status"].textContent, error || "Select the code field and try again.");
+    assert.equal(results.childElementCount, 1);
+  }
 });

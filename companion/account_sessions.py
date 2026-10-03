@@ -12,10 +12,10 @@ SCAN_RESPONSE_WAIT_SECONDS = 0.25
 MAX_CONCURRENT_ACCOUNTS = 4
 
 
-def fetch_with_timeout(session):
+def scan_with_deadline(session):
     session.deadline = time.monotonic() + ACCOUNT_CHECK_TIMEOUT_SECONDS
     try:
-        result = session.recent_items()
+        result = session.scan_inbox()
         if time.monotonic() >= session.deadline:
             raise UserError("Yahoo took too long to respond. Try checking again.")
         return result
@@ -32,8 +32,8 @@ def fetch_with_timeout(session):
 class AccountSessions:
     def __init__(self):
         self.sessions = {}
-        self.pending = {}
-        self.results = {}
+        self.pending_scans = {}
+        self.cached_results_by_account = {}
         self.executor = None
         self.mail_type = "codes"
 
@@ -47,8 +47,8 @@ class AccountSessions:
     def remove(self, email):
         key = email.lower()
         session = self.sessions.pop(key, None)
-        future = self.pending.pop(key, None)
-        self.results.pop(key, None)
+        future = self.pending_scans.pop(key, None)
+        self.cached_results_by_account.pop(key, None)
         if session:
             if future and not future.done() and not future.cancel():
                 # The worker owns its connection until the scan finishes.
@@ -56,15 +56,15 @@ class AccountSessions:
             else:
                 session.close()
 
-    def fetch_recent_items(self, account_credentials, mail_type="codes", collect_only=False):
+    def poll_accounts(self, account_credentials, mail_type="codes", collect_only=False):
         if mail_type != self.mail_type:
             for email in list(self.sessions):
                 self.remove(email)
             self.mail_type = mail_type
         now = time.time()
-        self.results = {key: [item for item in items
+        self.cached_results_by_account = {key: [item for item in items
             if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS]
-            for key, items in self.results.items()}
+            for key, items in self.cached_results_by_account.items()}
         active = {account["email"].lower() for account in account_credentials}
         for email in list(self.sessions):
             if email not in active:
@@ -80,25 +80,25 @@ class AccountSessions:
             if not session:
                 session = self.sessions[key] = InboxSession(account, mail_type)
             # Keep a completed scan until its response has been collected.
-            if not collect_only and key not in self.pending:
-                self.pending[key] = self.executor.submit(fetch_with_timeout, session)
-        if self.pending:
-            wait(self.pending.values(), timeout=SCAN_RESPONSE_WAIT_SECONDS)
+            if not collect_only and key not in self.pending_scans:
+                self.pending_scans[key] = self.executor.submit(scan_with_deadline, session)
+        if self.pending_scans:
+            wait(self.pending_scans.values(), timeout=SCAN_RESPONSE_WAIT_SECONDS)
         warnings = []
         for account in account_credentials:
             email = account["email"]
             key = email.lower()
-            future = self.pending.get(key)
+            future = self.pending_scans.get(key)
             if future is None or not future.done():
                 continue
-            self.pending.pop(key)
+            self.pending_scans.pop(key)
             try:
-                self.results[key] = [dict(item, accountEmail=email) for item in future.result()]
+                self.cached_results_by_account[key] = [dict(item, accountEmail=email) for item in future.result()]
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
                 self.remove(key)
                 warnings.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
-        if warnings and not self.results and len(warnings) == len(account_credentials):
+        if warnings and not self.cached_results_by_account and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
-        items = [item for results in self.results.values() for item in results]
+        items = [item for results in self.cached_results_by_account.values() for item in results]
         items.sort(key=lambda item: item["receivedAt"], reverse=True)
-        return {mail_type: items, "warnings": warnings, "scanPending": bool(self.pending)}
+        return {mail_type: items, "warnings": warnings, "scanPending": bool(self.pending_scans)}

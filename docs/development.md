@@ -16,7 +16,20 @@ The installer test installs into a temporary directory, launches that copy to ve
 
 To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/code-picker-preview.html`. The fixture does not access Yahoo.
 
-The suites use synthetic mail and fake Chrome/IMAP connections. Previous manual checks covered the installed native bridge and inline inbox access; filling a newly received code still needs end-to-end validation. For a complete manual check, request a new email on an HTTPS page and select its result to fill a code, open a confirmation link, or copy a reset link.
+The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle. `test_popup_integration.js` covers the popup controller and its real view together.
+
+### Manual validation
+
+After installing the companion, reloading the extension, and refreshing the test page:
+
+1. Connect a Yahoo account and confirm that it appears in the popup.
+2. Request a fresh code on an HTTPS page. Select its on-page suggestion and verify the field value; repeat using the popup.
+3. Request a confirmation email. Select its link and verify that the intended destination opens in a new tab.
+4. Request a reset email. Copy its link, verify the clipboard value, and use **Copy again** to repeat the copy.
+5. Resend an email and confirm that older on-page results disappear. Hide the tab and confirm checking stops; return and check again.
+6. Remove the account and confirm that its results disappear.
+
+These checks require real Yahoo mail and Chrome; automated suites do not establish end-to-end success.
 
 ## Extension modules
 
@@ -27,24 +40,21 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `content-entry.js` | Starts the code picker and email-link card with one page coordinator. |
 | `inline/page-coordinator.js` | Shares code-field candidates, DOM observation, and page-change notifications. |
 | `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control and render code suggestions beside a detected field. |
-| `inline/email-link-card-controller.js`, `inline/email-link-card-view.js` | Detect confirmation/reset steps and control and render the link card. Step detection returns a separate identity key and mail type. |
+| `inline/email-link-step.js` | Detect confirmation/reset waiting prompts and return a step identity and mail type. |
+| `inline/email-link-card-controller.js`, `inline/email-link-card-view.js` | Control and render the link card. |
+| `inline/mutation-inspection.js` | Share bounded mutation traversal and attribute-target deduplication; controllers supply relevance rules. |
 | `popup-entry.js`, `popup/popup-controller.js`, `popup/popup-view.js` | Start the toolbar popup, manage accounts and polling, and render controls and results. |
-| `shared/email-link-details.js`, `shared/mail-types.js`, `shared/reset-link-copy.js` | Share link-detail rows, mail-type-specific labels and guidance, and reset-link clipboard handling. |
+| `shared/email-link-details.js`, `shared/mail-presentation.js`, `shared/reset-link-copy.js` | Share link-detail rows, mail-type-specific labels and guidance, and reset-link clipboard handling. |
 | `inline/inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight scans per mail type. |
 | `shared/companion-client.js` | Handle one-off native requests and reusable native-messaging sessions. |
-| `shared/polling-lifecycle.js` | Manage polling deadlines and stale responses; share check cancellation and queued retries between on-page controllers. |
+| `shared/polling-lifecycle.js` | Manage polling deadlines, stale responses, cancellation, and queued retries. |
+| `shared/scan-schedule.js` | Decide when to collect pending workers or start a full scan and choose the next poll delay. |
 | `shared/mail-timing.js`, `shared/step-text.js`, `shared/email-link-url.js` | Share freshness, step-text and request-control parsing, and link-URL rules. |
-| `shared/code-fields.js` | Detect and fill verification inputs; helpers stay inside the injected function because Chrome serializes it. |
+| `shared/code-fields.js` | Detect and fill verification inputs and return verification-context roots for step tracking; helpers stay inside the injected function because Chrome serializes it. |
+
+### Request contract
 
 The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Mail responses include the boolean `scanPending`. Requests with `collectOnly: true` collect existing workers and cached results without starting scans. All surfaces collect pending scans every second, then resume their normal check interval. While a slower account remains pending, full checks still run at the normal interval so healthy accounts can discover new mail. Update the companion and extension together when changing this contract.
-
-Scroll and resize updates reuse cached field candidates and position the picker on the next animation frame. Relevant DOM changes refresh discovery. Mutation batches deduplicate attribute targets. Link-card attribute filtering caches descendant containment until child-list or role changes invalidate it. Hidden documents skip mutation dispatch and invalidate field candidates for rediscovery when visible. Filling always rediscovers fields and verifies the target rather than trusting cached hints.
-
-Before requesting layout or reading a link panel's `innerText`, detection walks at most 500 DOM nodes and allows at most 10,000 raw text code units. Larger panels, including the body fallback, are skipped; later short panels can still match. Explicitly hidden subtrees, scripts, styles, and templates are not traversed. The existing 2,500-character rendered-text limit still applies. This keeps extraction bounded on large pages; panels with extensive CSS-hidden markup may also be skipped.
-
-Code-picker mutation filtering bounds attribute-descendant and added/removed-subtree traversal to 500 inspected nodes per batch. Context text inspection allows 10,000 text code units across the batch, including current and previous character-data values, without aggregating element `textContent` or querying entire subtrees. Exhausting either budget schedules the existing coalesced 150 ms discovery scan.
-
-Link-card mutation filtering inspects added and removed subtrees directly, without aggregating element `textContent` or querying entire changed subtrees. One mutation batch allows at most 500 inspected nodes and 10,000 text code units, including current and previous character-data values. Exhausting either budget schedules the existing coalesced 250 ms scan so a prompt beyond the budget is still considered by bounded panel detection.
 
 ## Companion modules
 
@@ -77,6 +87,20 @@ On-page results must have arrived since the verification step began, allowing fi
 - Confirmation links require instructions such as “Verify email”, “Confirm account”, or “Activate account”; password-reset subjects are excluded. Reset links require instructions such as “Reset your password”, “Change your password”, or “Password reset”; help/support links and negated reset instructions are excluded.
 - Both link types require a visible HTML link or instructions immediately before a plain-text URL. Qualifying HTML takes precedence over plain text. Only supported HTTPS URLs are accepted; attachments, hidden links, and emails with multiple distinct qualifying links are omitted.
 - Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Tracking links show their initial destination; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
+
+## Page detection and performance
+
+Scroll and resize reuse cached field candidates and position the picker on the next animation frame. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible.
+
+| Inspection | Node budget | Text budget | Exhaustion behaviour |
+| --- | --- | --- | --- |
+| Mutation batch, either controller | 500 across the batch | 10,000 code units across the batch, including current and previous character data | Queue a coalesced discovery scan: 150 ms for codes, 250 ms for links. |
+| Link panel, before layout/text extraction | 500 per panel | 10,000 raw code units per panel | Skip the panel, including an oversized body fallback; continue with later panels. |
+| Rendered link-panel text | — | 2,500 characters per panel | Skip the panel. |
+
+Mutation inspection walks changed subtrees directly without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per batch. Code-picker attribute inspection traverses descendants under the same budget; link-card attribute containment uses the page coordinator's cache, invalidated by child-list or role changes.
+
+Link-panel detection skips explicitly hidden subtrees, scripts, styles, and templates before requesting layout or reading `innerText`. Extensive markup hidden only by CSS can still exhaust the raw-text budget.
 
 ## Installation identity and updates
 

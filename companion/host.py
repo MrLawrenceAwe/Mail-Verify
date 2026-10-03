@@ -83,7 +83,7 @@ def handle_request(request, sessions):
         if not account_credentials:
             sessions.close()
             raise UserError("Connect Yahoo Mail first.")
-        return sessions.fetch_recent_items(account_credentials, action, request.get("collectOnly") is True)
+        return sessions.poll_accounts(account_credentials, action, request.get("collectOnly") is True)
     raise UserError("Unsupported request.")
 
 

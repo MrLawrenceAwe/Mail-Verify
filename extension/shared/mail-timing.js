@@ -1,3 +1,5 @@
+export const CODE_PICKER_SCAN_INTERVAL_MS = 2_000;
+export const DEFAULT_SCAN_INTERVAL_MS = 8_000;
 export const POLL_WINDOW_MS = 120_000;
 export const PENDING_SCAN_POLL_MS = 1_000;
 export const MAX_MESSAGE_AGE_MS = 600_000;

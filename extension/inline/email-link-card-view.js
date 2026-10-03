@@ -1,9 +1,9 @@
-import { MAIL_TYPES } from "../shared/mail-types.js";
+import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
 import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
-export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse, copyLink, mailType }) {
+export function createEmailLinkCardView(document, { onClose, onRetry, validateAndPrepareSelection, copyLink, mailType }) {
   const isPasswordReset = mailType === "passwordResetLinks";
-  const { resultLabel, actionLabel, guidance, copiedLabel, copySuccessStatus } = MAIL_TYPES[mailType];
+  const { resultLabel, actionLabel, guidance, copyAgainLabel, copySuccessStatus } = MAIL_PRESENTATION[mailType];
   const title = `Mail Verify ${resultLabel}`;
   const host = document.createElement("div");
   host.dataset.mailVerify = "email-links";
@@ -34,30 +34,30 @@ export function createEmailLinkCardView(document, { onClose, onRetry, beforeUse,
       for (const item of items) {
         const card = document.createElement("article");
         appendEmailLinkDetails(document, card, item);
-        const link = document.createElement(isPasswordReset ? "button" : "a");
-        link.textContent = actionLabel;
+        const actionElement = document.createElement(isPasswordReset ? "button" : "a");
+        actionElement.textContent = actionLabel;
         if (isPasswordReset) {
-          link.addEventListener("click", async () => {
-            if (link.disabled || !beforeUse(item)) return;
-            link.disabled = true;
+          actionElement.addEventListener("click", async () => {
+            if (actionElement.disabled || !validateAndPrepareSelection(item)) return;
+            actionElement.disabled = true;
             try {
               await copyLink(item);
-              link.textContent = copiedLabel;
+              actionElement.textContent = copyAgainLabel;
               root.querySelector("#status").textContent = copySuccessStatus;
             } catch (error) {
               root.querySelector("#status").textContent = error.message;
             } finally {
-              link.disabled = false;
+              actionElement.disabled = false;
             }
           });
         } else {
-          link.href = item.url;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          link.addEventListener("click", (event) => { if (!beforeUse(item)) event.preventDefault(); });
-          link.addEventListener("auxclick", (event) => { if (!beforeUse(item)) event.preventDefault(); });
+          actionElement.href = item.url;
+          actionElement.target = "_blank";
+          actionElement.rel = "noopener noreferrer";
+          actionElement.addEventListener("click", (event) => { if (!validateAndPrepareSelection(item)) event.preventDefault(); });
+          actionElement.addEventListener("auxclick", (event) => { if (!validateAndPrepareSelection(item)) event.preventDefault(); });
         }
-        card.append(link);
+        card.append(actionElement);
         results.append(card);
       }
     },
