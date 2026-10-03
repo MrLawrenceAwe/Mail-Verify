@@ -86,7 +86,7 @@ Initial discovery starts with the latest 30 inbox messages. `discovery_cursor_ui
 
 ## Detection and freshness rules
 
-On-page results must have arrived since the verification step began, allowing five seconds for mail delivered just before it appeared. The code picker keeps the newest code per sender and account. Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. The popup can show recent emails excluded by that rule.
+On-page results must have arrived since the verification step began, allowing five seconds for mail delivered just before it appeared. The code picker keeps the newest code per sender and account. Resend countdown ticks and completion, including parenthesised countdowns, retain the same verification step. Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. The popup can show recent emails excluded by that rule.
 
 - Codes are numeric, 4–8 digits, directly labelled by common English instructions such as “Your code is”, “Security code:”, or “Sign in to Indeed with code:”. Emails with multiple candidate codes are omitted.
 - Code fields must be ordinary inputs or common split-digit forms on HTTPS pages with verification-related labels or attributes. A generic “code” label needs nearby email/sign-in instructions. Coupon and promo fields are excluded; unlabelled fields, cross-origin embedded forms, and unusual widgets may not work.
@@ -105,7 +105,7 @@ Scroll and resize reuse cached field candidates and position the picker on the n
 | Link panel, before layout/text extraction | 500 per panel | 10,000 raw code units per panel | Skip the panel, including an oversized body fallback; continue with later panels. |
 | Rendered link-panel text | — | 2,500 characters per panel | Skip the panel. |
 
-Mutation inspection walks changed subtrees directly without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per batch. Code-picker attribute inspection traverses descendants under the same budget; link-card attribute containment uses the page coordinator's cache, invalidated by child-list or role changes.
+Mutation inspection walks changed subtrees directly without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per batch. Both code-picker and link-card attribute inspection traverse descendants under the same batch node budget.
 
 Link-panel detection skips explicitly hidden subtrees, scripts, styles, and templates before requesting layout or reading `innerText`. Extensive markup hidden only by CSS can still exhaust the raw-text budget.
 
