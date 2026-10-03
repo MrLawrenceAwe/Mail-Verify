@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 import host
-import account_sessions
+import account_scan_manager
 
 
 class HostTests(unittest.TestCase):
@@ -26,8 +26,8 @@ class HostTests(unittest.TestCase):
 
     def test_collection_request_does_not_start_new_mail_scans(self):
         credentials = {"email": "test@yahoo.com", "password": "unused"}
-        sessions = account_sessions.AccountSessions()
-        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "scan_with_deadline") as fetch:
+        sessions = account_scan_manager.AccountScanManager()
+        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_scan_manager, "scan_with_deadline") as fetch:
             try:
                 response = host.handle_request({"action": "codes", "collectOnly": True}, sessions)
                 self.assertEqual(response, {"codes": [], "warnings": [], "scanPending": False})
@@ -37,9 +37,9 @@ class HostTests(unittest.TestCase):
 
     def test_reset_links_dispatches_to_reset_extractor(self):
         credentials = {"email": "test@yahoo.com", "password": "unused"}
-        sessions = account_sessions.AccountSessions()
+        sessions = account_scan_manager.AccountScanManager()
         item = {"url": "https://example.com/reset", "receivedAt": 1000, "uid": 1}
-        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_sessions, "scan_with_deadline", return_value=[item]):
+        with patch.object(host, "keychain", return_value={"accounts": [credentials]}), patch.object(account_scan_manager, "scan_with_deadline", return_value=[item]):
             result = host.handle_request({"action": "passwordResetLinks"}, sessions)
         self.assertEqual(result, {"passwordResetLinks": [{**item, "accountEmail": credentials["email"]}], "warnings": [], "scanPending": False})
         from link_extraction import extract_password_reset_link_details
@@ -48,7 +48,7 @@ class HostTests(unittest.TestCase):
     def test_non_string_actions_are_rejected_as_unsupported(self):
         for action in (None, [], {}):
             with self.subTest(action=action), self.assertRaisesRegex(host.UserError, "Unsupported request"):
-                host.handle_request({"action": action}, account_sessions.AccountSessions())
+                host.handle_request({"action": action}, account_scan_manager.AccountScanManager())
 
     def test_frame(self):
         p = json.dumps({"action": "status"}).encode()
@@ -76,14 +76,14 @@ class HostTests(unittest.TestCase):
                         "email": "test@yahoo.com",
                         "password": "abcdefghijklmnop",
                     },
-                    account_sessions.AccountSessions(),
+                    account_scan_manager.AccountScanManager(),
                 )
             keychain.assert_not_called()
 
     def test_reused_session_notices_account_removal(self):
         credentials = {"email": "test@yahoo.com", "password": "test-password"}
-        session = account_sessions.InboxSession(credentials)
-        sessions = account_sessions.AccountSessions()
+        session = account_scan_manager.InboxSession(credentials)
+        sessions = account_scan_manager.AccountScanManager()
         sessions.sessions["test@yahoo.com"] = session
         with patch.object(host, "keychain", return_value=None), patch.object(session, "close") as close:
             with self.assertRaisesRegex(host.UserError, "Connect Yahoo Mail first"):
@@ -94,10 +94,10 @@ class HostTests(unittest.TestCase):
 
     def test_reused_session_keeps_connection_for_unchanged_account(self):
         credentials = {"email": "test@yahoo.com", "password": "test-password"}
-        session = account_sessions.InboxSession(credentials)
-        sessions = account_sessions.AccountSessions()
+        session = account_scan_manager.InboxSession(credentials)
+        sessions = account_scan_manager.AccountScanManager()
         sessions.sessions["test@yahoo.com"] = session
-        with patch.object(host, "keychain", return_value={"accounts": [dict(credentials)]}), patch.object(session, "close") as close, patch.object(account_sessions, "scan_with_deadline", return_value=[]) as check:
+        with patch.object(host, "keychain", return_value={"accounts": [dict(credentials)]}), patch.object(session, "close") as close, patch.object(account_scan_manager, "scan_with_deadline", return_value=[]) as check:
             self.assertEqual(host.handle_request({"action": "codes"}, sessions), {"codes": [], "warnings": [], "scanPending": False})
             close.assert_not_called()
             check.assert_called_once_with(session)
@@ -105,7 +105,7 @@ class HostTests(unittest.TestCase):
     def test_add_second_account_preserves_first(self):
         first = {"email": "one@yahoo.com", "password": "old-password"}
         second = {"email": "two@yahoo.com", "password": "new-password"}
-        sessions = account_sessions.AccountSessions()
+        sessions = account_scan_manager.AccountScanManager()
         with patch.object(host, "keychain", return_value=first) as keychain, patch.object(host, "connect_imap") as connect:
             connect.return_value.__enter__.return_value = None
             result = host.handle_request({"action": "saveAccount", **second}, sessions)
@@ -115,7 +115,7 @@ class HostTests(unittest.TestCase):
     def test_remove_only_selected_account(self):
         accounts = [{"email": "one@yahoo.com", "password": "password-one"}, {"email": "two@yahoo.com", "password": "password-two"}]
         with patch.object(host, "keychain", return_value={"accounts": accounts}) as keychain:
-            result = host.handle_request({"action": "removeAccount", "email": "one@yahoo.com"}, account_sessions.AccountSessions())
+            result = host.handle_request({"action": "removeAccount", "email": "one@yahoo.com"}, account_scan_manager.AccountScanManager())
             self.assertEqual(result, {"accountEmails": ["two@yahoo.com"]})
             keychain.assert_any_call("set", {"accounts": [accounts[1]]})
 
@@ -145,11 +145,11 @@ class HostTests(unittest.TestCase):
                 saved = None
 
         def add():
-            results.append(host.handle_request({"action": "saveAccount", **second}, account_sessions.AccountSessions()))
+            results.append(host.handle_request({"action": "saveAccount", **second}, account_scan_manager.AccountScanManager()))
 
         def remove():
             second_started.set()
-            results.append(host.handle_request({"action": "removeAccount", "email": first["email"]}, account_sessions.AccountSessions()))
+            results.append(host.handle_request({"action": "removeAccount", "email": first["email"]}, account_scan_manager.AccountScanManager()))
 
         with patch.object(host, "keychain", side_effect=keychain), patch.object(host, "connect_imap") as connect:
             connect.return_value.__enter__.return_value = None

@@ -1,6 +1,6 @@
 import { createScanSchedule } from "../shared/scan-schedule.js";
 import { calculatePickerPosition, selectSuggestedCodes, messageKey, mutationAffectsPicker, isCodeRequestControl } from "./code-picker-policy.js";
-import { REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
+import { REQUEST_CONTROL_SELECTOR } from "../shared/request-controls.js";
 import { readCodeStepContext } from "../shared/code-step-context.js";
 import { handleCodeField } from "../shared/code-fields.js";
 import { createCodePickerView } from "./code-picker-view.js";
@@ -24,7 +24,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
   const readStepContext = (context) => readCodeStepContext(context, browser.getComputedStyle);
   function unmountPicker({ preserveStep = false } = {}) {
     scanSchedule.clearPending();
-    polling.cancelChecks();
+    polling.invalidateChecks();
     view?.host.remove();
     view = undefined;
     if (!preserveStep) {
@@ -99,7 +99,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
-      const { collectOnly } = scanSchedule.planNextCheck();
+      const { collectOnly } = scanSchedule.beginCheck();
       const response = await requestInlineCheck(chrome.runtime, "codes", collectOnly);
       if (lastURL !== location.href) {
         syncPicker();
@@ -175,12 +175,12 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       ? readStepContext(field.stepContext)
       : stepContext;
     if (anchor && anchor !== field.anchor) resetAttempt();
-    else if (stepContext && context.key !== null && stepContext.key !== null && context.key !== stepContext.key)
+    else if (stepContext && context.recipientKey !== null && stepContext.recipientKey !== null && context.recipientKey !== stepContext.recipientKey)
       resetAttempt({ preserveCutoff: true });
     else if (filledStep) return;
     if (!view && !dismissed) mountPicker(field, context);
     else {
-      stepContext = { ...context, key: context.key ?? stepContext.key };
+      stepContext = { ...context, recipientKey: context.recipientKey ?? stepContext.recipientKey };
       positionPicker(field);
     }
   }

@@ -4,7 +4,7 @@ import { detectEmailLinkStep } from "./email-link-step.js";
 import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
-import { REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
+import { REQUEST_CONTROL_SELECTOR } from "../shared/request-controls.js";
 import { initialStepCutoff, resendCutoff, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
@@ -27,7 +27,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
   }
   function unmountCard() {
     scanSchedule.clearPending();
-    polling.cancelChecks();
+    polling.invalidateChecks();
     view?.host.remove();
     view = undefined;
   }
@@ -47,7 +47,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     const requestGeneration = polling.generation;
     const checkToken = checks.start();
     try {
-      const { collectOnly } = scanSchedule.planNextCheck();
+      const { collectOnly } = scanSchedule.beginCheck();
       const response = await requestInlineCheck(chrome.runtime, mailType, collectOnly);
       if (!polling.isCurrent(requestGeneration) || !view || document.hidden) return;
       if (lastURL !== location.href || detectCode() || !isCurrentStep()) { syncLinkCard(); return; }
@@ -87,7 +87,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       hasActiveStep = false;
       stepKey = undefined;
       minReceivedAtMs = undefined;
-      polling.reset();
+      polling.stopScheduledPolling();
       return;
     }
     if (hasActiveStep && (nextStep.key !== stepKey || nextStep.mailType !== mailType)) {
@@ -98,7 +98,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       // have one-second precision, so start with the next second to exclude
       // links delivered just before this step appeared.
       minReceivedAtMs = Math.max(minReceivedAtMs ?? -Infinity, resendCutoff(clock.now()));
-      polling.reset();
+      polling.stopScheduledPolling();
     }
     if (dismissed) return;
     if (!hasActiveStep) {

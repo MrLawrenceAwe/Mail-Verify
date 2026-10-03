@@ -1,19 +1,16 @@
+import { recipientKeyFromText } from "../shared/recipient-identity.js";
+
 const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;
 const MAX_PANEL_NODES = 500;
 const MAX_PANEL_TEXT_UNITS = 10_000;
 
 function recipientIdentity(text) {
-  const recipients = new Set();
-  const addresses = text.matchAll(/[a-z0-9.!#$%&'*+/=?^_`{|}~•…-]{1,128}@[a-z0-9_*•…-]{1,63}(?:\.[a-z0-9_*•…-]{1,63}){1,8}/gi);
-  for (const match of addresses) {
-    const instruction = text.slice(Math.max(0, match.index - 180), match.index)
-      .replace(/\s+/g, " ").split(/[.!?](?:\s+|$)/).at(-1);
-    if (/\b(?:check\s+(?:your\s+)?(?:e-?mail|inbox)|sent|emailed|(?:confirmation|verification|activation|reset)\s+(?:e-?mail|link))\b/i.test(instruction) &&
-        /\b(?:to|for|at|emailed|e-?mail|inbox)\s*[:=-]?\s*$/i.test(instruction))
-      recipients.add(match[0].toLowerCase());
-  }
-  return JSON.stringify([...recipients].sort());
+  return recipientKeyFromText(text, (context) => {
+    const instruction = context.replace(/\s+/g, " ").split(/[.!?](?:\s+|$)/).at(-1);
+    return /\b(?:check\s+(?:your\s+)?(?:e-?mail|inbox)|sent|emailed|(?:confirmation|verification|activation|reset)\s+(?:e-?mail|link))\b/i.test(instruction) &&
+      /\b(?:to|for|at|emailed|e-?mail|inbox)\s*[:=-]?\s*$/i.test(instruction);
+  });
 }
 
 function isBoundedPanel(panel) {

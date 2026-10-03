@@ -137,7 +137,7 @@ button:disabled {
   text-overflow: ellipsis;
 }
 #accounts .account { padding: 4px 0; }
-#addAccount { margin-top: 8px; }
+#showAccountSetup { margin-top: 8px; }
 .destination {
   margin: 18px 0 5px;
   overflow-wrap: anywhere;

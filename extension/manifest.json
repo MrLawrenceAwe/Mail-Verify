@@ -52,7 +52,8 @@
         "shared/polling-lifecycle.js",
         "shared/reset-link-copy.js",
         "shared/scan-schedule.js",
-        "shared/step-text.js"
+        "shared/request-controls.js",
+        "shared/recipient-identity.js"
       ],
       "matches": [
         "https://*/*"

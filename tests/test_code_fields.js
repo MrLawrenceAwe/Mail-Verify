@@ -3,7 +3,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { handleCodeField } from "../extension/shared/code-fields.js";
 
-const contextStyle = node => node.reviewStyle || { display: "block", visibility: "visible", opacity: "1" };
+const contextStyle = node => node.fakeComputedStyle || { display: "block", visibility: "visible", opacity: "1" };
 
 // Chrome serializes this function into the page; evaluate the exported function
 // in an isolated DOM context to verify it has no module-scope dependencies.
@@ -612,9 +612,9 @@ test("hidden instructions and non-rendered content cannot qualify a generic code
   for (const [tagName, props] of [
     ["P", { hidden: true }], ["P", { getAttribute: () => "true" }],
     ["SCRIPT", {}], ["STYLE", {}], ["TEMPLATE", {}],
-    ["P", { reviewStyle: { display: "none" } }],
-    ["P", { reviewStyle: { visibility: "hidden" } }],
-    ["P", { reviewStyle: { opacity: "0" } }],
+    ["P", { fakeComputedStyle: { display: "none" } }],
+    ["P", { fakeComputedStyle: { visibility: "hidden" } }],
+    ["P", { fakeComputedStyle: { opacity: "0" } }],
   ]) {
     const form = contextElement("FORM", [
       contextElement(tagName, [contextText("We sent a verification code to your email.")], props),

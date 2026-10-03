@@ -14,7 +14,7 @@ from pathlib import Path
 from errors import UserError
 from keychain import keychain
 from inbox_session import MAIL_EXTRACTORS, connect_imap
-from account_sessions import AccountSessions
+from account_scan_manager import AccountScanManager
 
 MAX_FRAME_BYTES = 16_384
 ACCOUNT_LOCK_PATH = Path.home() / "Library/Application Support/Yahoo Code Fill/accounts.lock"
@@ -103,7 +103,7 @@ def read_message(stream):
 
 
 def main():
-    sessions = AccountSessions()
+    sessions = AccountScanManager()
     try:
         while True:
             try:

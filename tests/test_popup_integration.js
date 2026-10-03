@@ -54,14 +54,14 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       "checkConfirmationLinks",
       "checkPasswordResetLinks",
       "accounts",
-      "addAccount",
+      "showAccountSetup",
       "results",
       "status",
       "accountSetup",
       "companionSetup",
       "connectedAccountPanel",
-      "addAccountForm",
-      "addAccountSubmit",
+      "accountForm",
+      "saveAccountSubmit",
       "password",
       "email",
       "destination",
@@ -367,10 +367,10 @@ test("does not remove an account while another account is being added", async ()
   const { controls, state } = await setup();
   let finishAdd;
   state.sendOneOff = () => new Promise((resolve) => { finishAdd = resolve; });
-  controls.addAccount.trigger();
+  controls.showAccountSetup.trigger();
   controls.email.value = "two@yahoo.com";
   controls.password.value = "new-password";
-  const adding = controls.addAccountForm.trigger("submit");
+  const adding = controls.accountForm.trigger("submit");
   assert.equal(controls.accounts.querySelectorAll("button")[0].disabled, true);
   await controls.accounts.querySelectorAll("button")[0].trigger();
   assert.equal(state.requests.length, 1);
@@ -385,7 +385,7 @@ test("connects an account without retaining the form password", async () => {
   assert.equal(controls.accountSetup.hidden, false);
   controls.email.value = "test@yahoo.com";
   controls.password.value = "app-password";
-  await controls.addAccountForm.trigger("submit");
+  await controls.accountForm.trigger("submit");
   await settle();
   assert.equal(controls.password.value, "");
   assert.deepEqual(state.requests[0], {
@@ -403,7 +403,7 @@ test("shows multiple accounts and labels codes with their inbox", async () => {
   });
   assert.equal(controls.accounts.children.length, 1);
   assert.equal(controls.results.children[0].children[1].textContent, "test@yahoo.com");
-  controls.addAccount.trigger();
+  controls.showAccountSetup.trigger();
   assert.equal(controls.accountSetup.hidden, false);
   assert.equal(controls.connectedAccountPanel.hidden, false);
 });

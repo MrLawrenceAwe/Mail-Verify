@@ -137,3 +137,26 @@ test("step detection reads each visible panel once and returns its purpose separ
   assert.equal(step.mailType, "passwordResetLinks");
   assert.doesNotMatch(step.key, /^passwordResetLinks:/);
 });
+
+test("unrelated password navigation cannot override explicit confirmation instructions", () => {
+  for (const text of [
+    "Check your email to confirm your account. Sign in. Forgot password?",
+    "Check your inbox to verify your email. Forgot password?",
+    "We sent an activation email. Sign in. Forgot password?",
+  ]) {
+    assert.equal(matchesPasswordResetWaitingPrompt(text), false, text);
+    assert.equal(detectedMailType(text), "confirmationLinks", text);
+  }
+});
+
+test("line-separated headings and continuation lines retain reset intent", () => {
+  for (const text of [
+    "Forgot password?\nCheck your inbox\nSign in",
+    "Check your email\nWe have sent you a link to\nreset your password",
+    "Check your inbox\nWe sent you a\nlink to\nreset your\npassword",
+    "Check your email\nWe sent you a link\nto reset your password",
+  ]) {
+    assert.equal(matchesPasswordResetWaitingPrompt(text), true, text);
+    assert.equal(detectedMailType(text), "passwordResetLinks", text);
+  }
+});

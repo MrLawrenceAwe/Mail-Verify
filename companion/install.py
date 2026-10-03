@@ -16,7 +16,7 @@ HOST_MANIFEST_PATH = (
     / "Library/Application Support/Google/Chrome/NativeMessagingHosts/local.yahoo_code_fill.json"
 )
 
-OBSOLETE_COMPANION_FILES = ("mail_session.py",)
+OBSOLETE_COMPANION_FILES = ("mail_session.py", "account_sessions.py")
 
 
 def companion_files():

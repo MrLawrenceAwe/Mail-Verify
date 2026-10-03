@@ -20,7 +20,7 @@ MAIL_EXTRACTORS = {
 MAX_MESSAGE_AGE_SECONDS = 600
 MAX_FUTURE_SKEW_SECONDS = 120
 MESSAGE_BATCH_SIZE = 5
-MAX_MESSAGES = 30
+MAX_CANDIDATE_MESSAGES = 30
 NEWEST_OVERALL_COUNT = 5
 DISTINCT_SENDER_LIMIT = 5
 MAX_MESSAGE_BYTES = 1_000_000
@@ -138,7 +138,7 @@ class InboxSession:
             if not self.message_count:
                 self.discovery_cursor_uid = 0
                 return []
-            first = max(1, self.message_count - MAX_MESSAGES + 1)
+            first = max(1, self.message_count - MAX_CANDIDATE_MESSAGES + 1)
             status, metadata = self.connection.fetch(
                 f"{first}:{self.message_count}", "(UID INTERNALDATE RFC822.SIZE)"
             )
@@ -163,11 +163,11 @@ class InboxSession:
             raise UserError("Yahoo could not search your inbox.")
         # UID ranges ending in * can return the previous last UID.
         all_uids = [uid for value in data[0].split() if (uid := int(value)) > self.discovery_cursor_uid]
-        self.pending_metadata_uids.update(all_uids[-MAX_MESSAGES:])
+        self.pending_metadata_uids.update(all_uids[-MAX_CANDIDATE_MESSAGES:])
         # A successful UID FETCH may omit a message temporarily. Keep those
         # UIDs queued so advancing discovery_cursor_uid cannot make them disappear.
         self.pending_metadata_uids = set(
-            sorted(self.pending_metadata_uids, reverse=True)[:MAX_MESSAGES]
+            sorted(self.pending_metadata_uids, reverse=True)[:MAX_CANDIDATE_MESSAGES]
         )
         if all_uids:
             self.discovery_cursor_uid = all_uids[-1]
@@ -252,7 +252,7 @@ class InboxSession:
             for uid, received in eligible
             if 0 <= now - received <= MAX_MESSAGE_AGE_SECONDS
             and (cutoff is None or (int(received * 1000), uid) > cutoff)
-        ][:MAX_MESSAGES]
+        ][:MAX_CANDIDATE_MESSAGES]
         self.pending_body_timestamps = dict(pending)
         return [uid for uid, _ in pending]
 

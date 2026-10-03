@@ -1,7 +1,7 @@
 import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
 import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
-export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink, onCheckMail, onAddAccount }) {
+export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink, onCheckMail, onSaveAccount }) {
   const getElement = (id) => document.getElementById(id);
   const checkButtonMailTypes = [
     ["checkCodes", "codes"],
@@ -36,8 +36,8 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     getElement("codePageHelp").hidden = !!targetTab;
   }
 
-  function setAccountSubmitDisabled(disabled) {
-    getElement("addAccountSubmit").disabled = disabled;
+  function setAccountSaveDisabled(disabled) {
+    getElement("saveAccountSubmit").disabled = disabled;
   }
 
   function readCredentialsAndClearPassword() {
@@ -145,14 +145,14 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
   }
 
   for (const [id, mailType] of checkButtonMailTypes) getElement(id).addEventListener("click", () => onCheckMail(mailType));
-  getElement("addAccountForm").addEventListener("submit", (event) => {
+  getElement("accountForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    return onAddAccount();
+    return onSaveAccount();
   });
-  getElement("addAccount").addEventListener("click", showAccountSetup);
+  getElement("showAccountSetup").addEventListener("click", showAccountSetup);
 
   return { setStatus, showAccountSetup, showCompanionSetup,
-    setMailType, setCodeDestination, setAccountSubmitDisabled, readCredentialsAndClearPassword,
+    setMailType, setCodeDestination, setAccountSaveDisabled, readCredentialsAndClearPassword,
     clearAccountEmail, setCheckAndRemoveButtonsDisabled, setResultButtonsDisabled,
     markCodeFilled, markLinkOpened, markLinkCopied, renderAccounts, clearResults, renderCodes, renderLinks };
 }
