@@ -1,17 +1,13 @@
 import { createScanSchedule } from "../shared/scan-schedule.js";
 import { calculatePickerPosition, selectSuggestedCodes, messageKey, mutationAffectsPicker, isCodeRequestControl } from "./code-picker-policy.js";
-import { normalizeStepText, REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
+import { REQUEST_CONTROL_SELECTOR } from "../shared/step-text.js";
+import { readCodeStepContext } from "../shared/code-step-context.js";
 import { handleCodeField } from "../shared/code-fields.js";
 import { createCodePickerView } from "./code-picker-view.js";
 import { initialStepCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
-
-function verificationStepContext({ roots, parent }) {
-  const key = roots.map((root) => normalizeStepText(root.textContent || "")).join("\n");
-  return { roots, parent, key };
-}
 
 export function startCodePicker({ browser = globalThis, handleField = handleCodeField, page = getPageCoordinator(browser, handleField) } = {}) {
   const { document, window, location, chrome, requestAnimationFrame,
@@ -52,7 +48,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
-  function mountPicker(field, context = verificationStepContext(field.stepContext)) {
+  function mountPicker(field, context = readCodeStepContext(field.stepContext)) {
     const mountedAnchor = field.anchor;
     minReceivedAtMs ??= initialStepCutoff(clock.now());
     anchor = field.anchor;
@@ -171,14 +167,17 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       return;
     }
     const context = refreshCandidates || !view || anchor !== field.anchor
-      ? verificationStepContext(field.stepContext)
+      ? readCodeStepContext(field.stepContext)
       : stepContext;
     if (anchor && anchor !== field.anchor) resetAttempt();
-    else if (stepContext && context.key !== stepContext.key)
+    else if (stepContext && context.key !== null && stepContext.key !== null && context.key !== stepContext.key)
       resetAttempt({ preserveCutoff: true });
     else if (filledStep) return;
     if (!view && !dismissed) mountPicker(field, context);
-    else positionPicker(field);
+    else {
+      stepContext = { ...context, key: context.key ?? stepContext.key };
+      positionPicker(field);
+    }
   }
   let discoveryTimer;
   const scheduleDiscovery = () => {
@@ -195,7 +194,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     });
   };
   page.onMutation((records) => {
-    if (mutationAffectsPicker(records, view?.host, page.candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent)) scheduleDiscovery();
+    if (mutationAffectsPicker(records, view?.host, page.candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent, page.candidateCache?.labelRoots)) scheduleDiscovery();
   });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);

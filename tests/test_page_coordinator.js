@@ -12,10 +12,10 @@ test("page interfaces share one observer, navigation listener and code-field cac
     addEventListener(name, callback) { events.set(name, callback); },
     navigation: { addEventListener(name, callback) { events.set(name, callback); } },
   };
-  let observers = 0, discoveries = 0, observed;
+  let observers = 0, discoveries = 0, observed, observationOptions;
   const browser = { document, window, MutationObserver: class {
     constructor(callback) { observers++; observed = callback; }
-    observe() {}
+    observe(_target, options) { observationOptions = options; }
   } };
   const detect = ({ candidateCache }) => {
     if (!candidateCache) discoveries++;
@@ -41,6 +41,8 @@ test("page interfaces share one observer, navigation listener and code-field cac
   events.get("popstate")();
   assert.deepEqual([pickerChanges, cardChanges], [2, 2]);
   assert.equal(observers, 1);
+  assert.ok(observationOptions.attributeFilter.includes("aria-labelledby"));
+  assert.ok(observationOptions.attributeFilter.includes("aria-hidden"));
 });
 
 

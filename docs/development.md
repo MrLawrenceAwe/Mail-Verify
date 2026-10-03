@@ -54,6 +54,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `shared/scan-schedule.js` | Decide when to collect pending workers or start a full scan and choose the next poll delay. |
 | `shared/mail-timing.js`, `shared/step-text.js`, `shared/email-link-url.js` | Share freshness, step-text and request-control parsing, and link-URL rules. |
 | `shared/code-fields.js` | Detect and fill verification inputs and return verification-context roots for step tracking; helpers stay inside the injected function because Chrome serializes it. |
+| `shared/code-step-context.js` | Read bounded verification-context text and identify recipient changes without treating incidental status messages as new requests. |
 
 ### Request contract
 
@@ -97,11 +98,14 @@ On-page results must have arrived since the verification step began, allowing fi
 
 ## Page detection and performance
 
-Scroll and resize reuse cached field candidates and position the picker on the next animation frame. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Supported split-digit groups use a stable labelled anchor so moving focus between digits preserves suggestions; selecting a separate group starts a new attempt. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
+Scroll and resize reuse cached field candidates and position the picker on the next animation frame. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Code inputs can use HTML labels, `aria-label`, or an accessible name assembled from `aria-labelledby` references; changes to referenced labels refresh detection. Supported split-digit groups use a stable labelled anchor so moving focus between digits preserves suggestions; selecting a separate group starts a new attempt. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
+
+Code-step tracking identifies email recipients (including masked addresses) in nearby code-delivery instructions. Recipient changes, field changes, navigation, and explicit resend clicks start new attempts; incidental status messages retain valid codes. Step tracking never reads aggregate element `textContent`, and skips explicitly hidden content, scripts, styles, and templates. An incomplete context retains the last known recipient identity instead of guessing from truncated text.
 
 | Inspection | Node budget | Text budget | Exhaustion behaviour |
 | --- | --- | --- | --- |
 | Mutation batch, either controller | 500 across the batch | 10,000 code units across the batch, including current and previous character data | Queue a coalesced discovery scan: 150 ms for codes, 250 ms for links. |
+| Code-step context | 500 across all context roots | 10,000 code units across all context roots | Retain the last known recipient identity. |
 | Link panel, before layout/text extraction | 500 per panel | 10,000 raw code units per panel | Skip the panel, including an oversized body fallback; continue with later panels. |
 | Rendered link-panel text | — | 2,500 characters per panel | Skip the panel. |
 

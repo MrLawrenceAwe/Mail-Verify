@@ -26,12 +26,22 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   };
   const isUsableInput = (input) => inputVisibility(input) === "visible";
 
+  const contextRoots = new Set();
+  const labelRoots = new Set();
+  const referencedLabels = (input) => {
+    const ids = (input.getAttribute("aria-labelledby") || "").trim().split(/\s+/).filter(Boolean);
+    return ids.map((id) => document.getElementById(id)).filter(Boolean).map((label) => {
+      labelRoots.add(label);
+      return label.textContent;
+    }).join(" ");
+  };
   const getInputHints = (input) => [
     input.autocomplete,
     input.name,
     input.id,
     input.placeholder,
     input.getAttribute("aria-label"),
+    referencedLabels(input),
     ...[...(input.labels || [])].map((label) => label.textContent),
   ];
   const verificationContext = (input) => {
@@ -45,7 +55,6 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     return { roots, parent: container.parentElement };
   };
   const contextMatches = new Map();
-  const contextRoots = new Set();
   // A bare "code" may mean a coupon, referral, or product code.
   const hasContextualCodeHint = (input, hints) => {
     const hintText = hints.filter(Boolean).join(" ");
@@ -108,6 +117,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
       inputs: inputs.filter((input) => hasSupportedType(input) && hasCodeHint(input)),
       digitInputs: inputs.filter(isPotentialDigitInput),
       contextRoots: [...contextRoots],
+      labelRoots: [...labelRoots],
     };
   }
   const visibleCodeInputs = candidates.inputs.filter(isUsableInput);
