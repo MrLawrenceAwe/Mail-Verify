@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mail Verify independent numeric fields preview</title>
+<style>
+  body { font:18px system-ui; margin:60px; }
+  input { display:block; margin:10px 0 24px; padding:8px; font:inherit; }
+</style>
+<form>
+  <h1>Verify email and phone</h1>
+  <p>We sent a security code to your email.</p>
+  <label>Email verification code<input type="number" autocomplete="one-time-code"></label>
+  <label>Phone verification code<input type="number" autocomplete="one-time-code" value="654321"></label>
+</form>
+<p id="feedback" aria-live="polite"></p>
+<script type="module">
+  import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
+  import { inlineRuntime } from '../mock_inline_port.js';
+  const inputs = document.querySelectorAll('input');
+  window.chrome = { runtime:inlineRuntime(() => ({ ok:true, codes:[{
+    uid:1, accountEmail:'preview@yahoo.com', code:'331519', sender:'auth@example.test',
+    subject:'Your email security code', receivedAt:Date.now(),
+  }], scanPending:false })) };
+  inputs[0].focus();
+  inputs[0].addEventListener('input', () => {
+    document.querySelector('#feedback').textContent = inputs[0].value === '331519' && inputs[1].value === '654321'
+      ? 'Email code filled successfully; phone code unchanged.' : 'Unexpected field values.';
+  });
+  startCodePicker();
+</script>
