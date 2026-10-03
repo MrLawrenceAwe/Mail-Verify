@@ -106,10 +106,13 @@ Code-step tracking identifies email recipients (including masked addresses) in n
 | --- | --- | --- | --- |
 | Mutation batch, either controller | 500 across the batch | 10,000 code units across the batch, including current and previous character data | Queue a coalesced discovery scan: 150 ms for codes, 250 ms for links. |
 | Code-step context | 500 across all context roots | 10,000 code units across all context roots | Retain the last known recipient identity. |
+| Generic code-field context | 500 per context root | 10,000 code units per context root | Skip the incomplete root; explicit field hints remain supported. |
 | Link panel, before layout/text extraction | 500 per panel | 10,000 raw code units per panel | Skip the panel, including an oversized body fallback; continue with later panels. |
 | Rendered link-panel text | — | 2,500 characters per panel | Skip the panel. |
 
 Mutation inspection walks changed subtrees directly without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per batch. Both code-picker and link-card attribute inspection traverse descendants under the same batch node budget.
+
+Generic code-field context reads individual visible text nodes and skips hidden content, scripts, styles, and templates. Each context root is read once per discovery or fill. Focus on an unlabelled digit selects its validated OTP group, using a labelled digit as the stable suggestion anchor.
 
 Link-panel detection skips explicitly hidden subtrees, scripts, styles, and templates before requesting layout or reading `innerText`. Extensive markup hidden only by CSS can still exhaust the raw-text budget.
 

@@ -3,6 +3,8 @@ import test from "node:test";
 import vm from "node:vm";
 import { handleCodeField } from "../extension/shared/code-fields.js";
 
+const contextStyle = node => node.reviewStyle || { display: "block", visibility: "visible", opacity: "1" };
+
 // Chrome serializes this function into the page; evaluate the exported function
 // in an isolated DOM context to verify it has no module-scope dependencies.
 class FakeInput {
@@ -53,6 +55,7 @@ function run(inputs, activeElement = null, expectedAnchor = null, labelElements 
   const ctx = {
     expectedAnchor,
     document: { querySelectorAll: () => inputs, activeElement, getElementById: id => labelElements.get(id) },
+    getComputedStyle: contextStyle,
     HTMLInputElement: FakeInput,
     innerHeight: 800,
     innerWidth: 1200,
@@ -333,23 +336,24 @@ test("stops if a rerender inserts another digit in the verification group", () =
 test("Indeed's Enter code requires email verification context", () => {
   const input = new FakeInput({
     labels: [{ textContent: "Enter code *" }],
-    form: { textContent: "Check your email for a code. We sent a code to you. Enter code *" },
+    form: contextElement("FORM", [contextText("Check your email for a code. We sent a code to you. Enter code *")]),
   });
   assert.equal(run([input]).ok, true);
-  input.form.textContent = "Enter code to redeem a discount";
+  input.form.firstChild.data = "Enter code to redeem a discount";
   assert.equal(run([input]).ok, false);
-  input.form.textContent = "We sent a code to your email";
+  input.form.firstChild.data = "We sent a code to your email";
   input.labels = [{ textContent: "Promo code" }];
   assert.equal(run([input]).ok, false);
 });
 
 test("generic code field uses verification context outside its form", () => {
-  const instructions = { textContent: "We sent a code to your email." };
+  const instructions = contextElement("P", [contextText("We sent a code to your email.")]);
   const main = { textContent: "We sent a code to your email. Enter code" };
-  const form = { textContent: "Enter code", parentElement: main, previousElementSibling: instructions };
+  const form = contextElement("FORM", [contextText("Enter code")], { parentElement: main, previousElementSibling: instructions });
   const input = new FakeInput({ name: "code", form });
   const context = vm.createContext({
     document: { querySelectorAll: () => [input], activeElement: input, body: main },
+    getComputedStyle: contextStyle,
     innerHeight: 800,
     innerWidth: 1200,
   });
@@ -360,21 +364,22 @@ test("generic code field uses verification context outside its form", () => {
   assert.equal(result.candidateCache.contextRoots.includes(instructions), true);
   assert.deepEqual(Array.from(result.stepContext.roots), [form, instructions]);
   assert.equal(result.stepContext.parent, main);
-  instructions.textContent = "Enter code to redeem a discount";
+  instructions.firstChild.data = "Enter code to redeem a discount";
   assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
 });
 
 test("unrelated verification text elsewhere in main does not identify a generic field", () => {
   const main = { textContent: "Verification code for account settings. Redeem your gift code." };
-  const couponInstructions = { textContent: "Redeem your gift code." };
-  const form = { textContent: "Code", parentElement: main, previousElementSibling: couponInstructions };
+  const couponInstructions = contextElement("P", [contextText("Redeem your gift code.")]);
+  const form = contextElement("FORM", [contextText("Code")], { parentElement: main, previousElementSibling: couponInstructions });
   const input = new FakeInput({ name: "code", form });
   const context = vm.createContext({
     document: { querySelectorAll: () => [input], activeElement: input, body: main },
+    getComputedStyle: contextStyle,
     innerHeight: 800, innerWidth: 1200,
   });
   assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
-  couponInstructions.textContent = "We sent a code to your email.";
+  couponInstructions.firstChild.data = "We sent a code to your email.";
   assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, true);
 });
 
@@ -384,7 +389,10 @@ test("explicit hints skip page text and generic hints read shared context once",
   } });
   assert.equal(run([explicit]).ok, true);
   let reads = 0;
-  const form = { get textContent() { reads++; return "We sent a code to your email"; } };
+  const text = { nodeType: 3, get data() { reads++; return "We sent a code to your email"; } };
+  const form = { nodeType: 1, tagName: "FORM", firstChild: text,
+    get textContent() { throw new Error("aggregate context read"); } };
+  text.parentNode = form;
   const inputs = [new FakeInput({ name: "code", form }), new FakeInput({ name: "code", form })];
   run(inputs);
   assert.equal(reads, 1);
@@ -484,4 +492,108 @@ test("detects and fills fields named by multiple aria-labelledby references", ()
   input.value = "";
   assert.equal(run([input], input, input, labels).ok, false);
   assert.equal(input.value, "");
+});
+
+function contextElement(tagName, children = [], props = {}) {
+  const node = { nodeType: 1, tagName, ...props };
+  node.firstChild = children[0] || null;
+  children.forEach((child, index) => {
+    child.parentNode = node;
+    child.nextSibling = children[index + 1] || null;
+  });
+  Object.defineProperty(node, "textContent", {
+    get: () => children.map(child => child.textContent).join(""),
+  });
+  return node;
+}
+function contextText(data) { return { nodeType: 3, data, get textContent() { return this.data; } }; }
+
+function detectWith(inputs, activeElement = null) {
+  return vm.runInNewContext(`(${handleCodeField.toString()})`, {
+    document: { querySelectorAll: () => inputs, activeElement },
+    getComputedStyle: contextStyle,
+    HTMLInputElement: FakeInput,
+    innerHeight: 800, innerWidth: 1200,
+    Event: class { constructor(type) { this.type = type; } },
+  });
+}
+
+test("focusing an unlabelled digit selects its own OTP group for detection and fill", () => {
+  const form = {};
+  const groups = Array.from({ length: 2 }, () => {
+    const parentElement = { parentElement: form };
+    return Array.from({ length: 6 }, (_, index) => new FakeInput({
+      maxLength: 1, form, parentElement,
+      name: index === 0 ? "verification_code" : "",
+    }));
+  });
+  const inputs = groups.flat();
+  const initial = detectWith(inputs)({ action: "detect" });
+  assert.equal(initial.anchor, groups[0][0]);
+  const focusedDetect = detectWith(inputs, groups[1][2]);
+  for (const candidateCache of [undefined, initial.candidateCache]) {
+    const selected = focusedDetect({ action: "detect", candidateCache, trackedAnchor: initial.anchor });
+    assert.equal(selected.anchor, groups[1][0]);
+    assert.equal(focusedDetect({ action: "fill", code: "123456", expectedAnchor: selected.anchor }).ok, true);
+    assert.equal(groups[0].every(input => input.value === undefined), true);
+    assert.equal(groups[1].map(input => input.value).join(""), "123456");
+  }
+  // The popup has no expected anchor and must also respect the focused group.
+  groups[1].forEach(input => { input.value = ""; });
+  assert.equal(focusedDetect({ action: "fill", code: "654321" }).ok, true);
+  assert.equal(groups[1].map(input => input.value).join(""), "654321");
+});
+
+test("hidden instructions and non-rendered content cannot qualify a generic code field", () => {
+  for (const [tagName, props] of [
+    ["P", { hidden: true }], ["P", { getAttribute: () => "true" }],
+    ["SCRIPT", {}], ["STYLE", {}], ["TEMPLATE", {}],
+    ["P", { reviewStyle: { display: "none" } }],
+    ["P", { reviewStyle: { visibility: "hidden" } }],
+    ["P", { reviewStyle: { opacity: "0" } }],
+  ]) {
+    const form = contextElement("FORM", [
+      contextElement(tagName, [contextText("We sent a verification code to your email.")], props),
+      contextText("Code"),
+    ]);
+    const input = new FakeInput({ name: "code", form });
+    const detect = detectWith([input], input);
+    assert.equal(detect({ action: "detect" }).ok, false, tagName);
+    assert.equal(detect({ action: "fill", code: "123456" }).ok, false, tagName);
+    assert.equal(input.value, undefined);
+  }
+});
+
+test("generic context retains visible instructions and rejects incomplete traversal", () => {
+  const instruction = "We sent a verification code to your email.";
+  for (const children of [
+    [contextText(instruction), ...Array.from({ length: 500 }, () => contextText("x"))],
+    [contextText(instruction), contextText("x".repeat(10_000))],
+  ]) {
+    const input = new FakeInput({ name: "code", form: contextElement("FORM", children) });
+    const detect = detectWith([input]);
+    assert.equal(detect({ action: "detect" }).ok, false);
+    assert.equal(detect({ action: "fill", code: "123456" }).ok, false);
+    assert.equal(input.value, undefined);
+    input.autocomplete = "one-time-code";
+    assert.equal(detect({ action: "detect" }).ok, true);
+  }
+  const form = contextElement("FORM", [
+    contextElement("P", [contextText("Verification code")], { hidden: true }),
+    contextElement("P", [contextText("We sent a "), contextElement("SPAN", [contextText("code")]), contextText(" to your email.")]),
+  ]);
+  const input = new FakeInput({ name: "code", form });
+  assert.equal(detectWith([input])({ action: "detect" }).ok, true);
+  assert.equal(run([input]).ok, true);
+});
+
+test("unlabelled numeric fields need a validated OTP group to take focus", () => {
+  const parentElement = {};
+  const code = new FakeInput({ name: "verification_code" });
+  const unrelated = Array.from({ length: 6 }, () => new FakeInput({ maxLength: 1, parentElement }));
+  const detect = detectWith([code, ...unrelated], unrelated[2]);
+  assert.equal(detect({ action: "detect" }).anchor, code);
+  assert.equal(detect({ action: "fill", code: "123456" }).ok, true);
+  assert.equal(code.value, "123456");
+  assert.equal(unrelated.every(input => input.value === undefined), true);
 });
