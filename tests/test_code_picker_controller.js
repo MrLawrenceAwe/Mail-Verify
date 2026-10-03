@@ -410,7 +410,11 @@ test("retry during an active check ignores its response and checks again immedia
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
 });
 
-test("resend input clears the old suggestion and waits for newer mail", async () => {
+for (const resend of [
+  { tagName: "INPUT", value: "Resend code", getAttribute: () => null },
+  { textContent: "Resend email" },
+  { textContent: "Send again" },
+]) test(`${resend.value || resend.textContent} clears the old suggestion and waits for newer mail`, async () => {
   let now = 9500;
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let codes = [oldCode];
@@ -422,7 +426,6 @@ test("resend input clears the old suggestion and waits for newer mail", async ()
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
   assert.equal(results.childElementCount, 1);
-  const resend = { tagName: "INPUT", value: "Resend code", getAttribute: () => null };
   events.get("click")({ target: {
     closest: selector => selector.includes("input[type=submit]") ? resend : null,
   } });
@@ -434,6 +437,35 @@ test("resend input clears the old suggestion and waits for newer mail", async ()
   timers.takeNewest()();
   await flush();
   assert.equal(results.childElementCount, 1);
+  assert.equal(results.children[0].strong.textContent, "Fill code 222222");
+});
+
+for (const textContent of ["Resend email", "Send again"])
+test(`${textContent} restarts checking after the polling deadline`, async () => {
+  let now = 9500, checks = 0;
+  const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
+  let codes = [oldCode];
+  const { events, timers, results } = pickerBrowser({
+    handleField: () => ({ ok: true, anchor: {}, rect: { top: 100, bottom: 130, left: 20 } }),
+    now: () => now,
+    check: async () => { checks++; return { ok: true, codes }; },
+  });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  await flush();
+  now = 130_000;
+  timers.takeNewest()();
+  await flush();
+  assert.equal(timers.length, 0);
+  const beforeResend = checks;
+  events.get("click")({ target: { closest: () => ({ textContent }) } });
+  assert.equal(results.childElementCount, 0);
+  await flush();
+  assert.equal(checks, beforeResend + 1);
+  assert.equal(results.childElementCount, 0);
+  now = 132_000;
+  codes = [oldCode, { ...oldCode, uid: 8, code: "222222", receivedAt: 131_000 }];
+  timers.takeNewest()();
+  await flush();
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
 });
 
