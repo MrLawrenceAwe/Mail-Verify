@@ -17,7 +17,7 @@ function setup(panel = null, mailType = "confirmationLinks", modal = null) {
   const document = { hidden: false, documentElement: { append() {} }, querySelector: selector => selector === 'dialog:modal' ? modal : ({}), addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
   startEmailLinkCard({
-    browser: { navigator: { clipboard: { async writeText(value) { state.copied = value; } } }, document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
+    environment: { navigator: { clipboard: { async writeText(value) { state.copied = value; } } }, document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
       chrome: { runtime: inlineRuntime(async (mailType, collectOnly) => { assert.equal(mailType, state.mailType); state.collectionModes.push(collectOnly); state.requests++; return state.respond(); }) },
       Date: { now: () => state.now },
       setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
@@ -439,5 +439,22 @@ test("parenthesised countdown ticks retain links without restarting the attempt"
     assert.equal(f.state.views.length, 1);
     assert.deepEqual(view.links, [item]);
     assert.equal(f.state.requests, 1);
+  }
+});
+
+test("partial account failures retain healthy links and clear after recovery", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const f = setup(null, mailType);
+    await settle();
+    const view = f.state.views[0];
+    f.state.respond = async () => ({ ok: true, [mailType]: [item],
+      warnings: ["other@yahoo.com: Yahoo took too long to respond."], scanPending: false });
+    await f.run(8000);
+    assert.deepEqual(view.links, [item]);
+    assert.equal(view.status, "Some accounts could not be checked: other@yahoo.com: Yahoo took too long to respond.");
+    f.state.respond = async () => ({ ok: true, [mailType]: [item], warnings: [], scanPending: false });
+    await f.run(8000);
+    assert.doesNotMatch(view.status, /could not be checked/);
+    assert.equal(view.callbacks.onSelectLink(item), true);
   }
 });

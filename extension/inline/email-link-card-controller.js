@@ -2,7 +2,7 @@ import { createScanSchedule } from "../shared/scan-schedule.js";
 import { selectEmailLinks, isEmailLinkRequestControl, mutationAffectsEmailLinkCard } from "./email-link-card-policy.js";
 import { detectEmailLinkStep } from "./email-link-step.js";
 import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
-import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
+import { MAIL_PRESENTATION, formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
 import { REQUEST_CONTROL_SELECTOR } from "../shared/request-controls.js";
 import { initialStepCutoff, resendCutoff, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
@@ -11,19 +11,19 @@ import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
 import { mountSuggestion } from "./suggestion-mount.js";
 
-export function startEmailLinkCard({ browser = globalThis, detectStep = detectEmailLinkStep,
-  page = getPageCoordinator(browser), detectCode = () => page.detectCodeField().ok, createView = createEmailLinkCardView } = {}) {
-  const { document, location, chrome, setTimeout, clearTimeout, Date: clock = Date } = browser;
-  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: DEFAULT_SCAN_INTERVAL_MS });
+export function startEmailLinkCard({ environment = globalThis, detectStep = detectEmailLinkStep,
+  page = getPageCoordinator(environment), detectCode = () => page.detectCodeField().ok, createView = createEmailLinkCardView } = {}) {
+  const { document, location, chrome, setTimeout, clearTimeout, Date: clock = Date } = environment;
+  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout });
   const { checks } = polling;
   let view, discoveryTimer;
   const scanSchedule = createScanSchedule({ clock, intervalMs: DEFAULT_SCAN_INTERVAL_MS });
-  let lastURL = location.href, dismissed = false, minReceivedAtMs, hasActiveStep = false, stepKey;
+  let lastURL = location.href, dismissed = false, minReceivedAtMs;
+  let activeStep = null;
   let currentLinks = [];
-  let mailType = "confirmationLinks";
   function isCurrentStep() {
     const step = detectStep(document);
-    return step?.key === stepKey && step?.mailType === mailType;
+    return activeStep !== null && step?.key === activeStep.key && step?.mailType === activeStep.mailType;
   }
   function unmountCard() {
     scanSchedule.clearPending();
@@ -44,6 +44,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       view.setStatus("Checking finished. Click ↻ to check again.");
       return;
     }
+    const { mailType } = activeStep;
     const requestGeneration = polling.generation;
     const checkToken = checks.start();
     try {
@@ -55,7 +56,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       scanSchedule.recordResponse(response.scanPending);
       currentLinks = selectEmailLinks(response[mailType] || [], minReceivedAtMs, clock.now());
       view.renderLinks(currentLinks);
-      view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
+      view.setStatus(response.warnings?.length ? formatAccountCheckWarnings(response.warnings) :
         currentLinks.length ? MAIL_PRESENTATION[mailType].foundStatus : MAIL_PRESENTATION[mailType].waitingStatus);
     } catch (error) {
       if (polling.isCurrent(requestGeneration) && view) {
@@ -77,23 +78,22 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       unmountCard();
       lastURL = location.href;
       dismissed = false;
-      hasActiveStep = false;
+      activeStep = null;
       minReceivedAtMs = undefined;
     }
     if (document.hidden) { unmountCard(); return; }
     const nextStep = detectCode() ? null : detectStep(document);
     if (nextStep === null) {
       unmountCard();
-      hasActiveStep = false;
-      stepKey = undefined;
+      activeStep = null;
       minReceivedAtMs = undefined;
       polling.stopScheduledPolling();
       return;
     }
-    if (hasActiveStep && (nextStep.key !== stepKey || nextStep.mailType !== mailType)) {
+    if (activeStep && (nextStep.key !== activeStep.key || nextStep.mailType !== activeStep.mailType)) {
       unmountCard();
       dismissed = false;
-      hasActiveStep = false;
+      activeStep = null;
       // A changed panel can represent a different signup. IMAP arrival times
       // have one-second precision, so start with the next second to exclude
       // links delivered just before this step appeared.
@@ -101,19 +101,18 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       polling.stopScheduledPolling();
     }
     if (dismissed) return;
-    if (!hasActiveStep) {
-      hasActiveStep = true;
-      stepKey = nextStep.key;
-      mailType = nextStep.mailType;
+    if (!activeStep) {
+      activeStep = nextStep;
       minReceivedAtMs ??= initialStepCutoff(clock.now());
       polling.renewDeadline();
     }
     if (view) return;
     currentLinks = [];
+    const { mailType } = activeStep;
     view = createView(document, {
       onClose: dismissCard, onRetry: restartPolling, mailType,
       async copyLink(item) {
-        await copyPasswordResetLink(browser.navigator?.clipboard, item.url,
+        await copyPasswordResetLink(environment.navigator?.clipboard, item.url,
           "Clipboard unavailable. Use Find password reset links in the toolbar popup.");
       },
       onSelectLink(item) {
@@ -137,12 +136,12 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     discoveryTimer = setTimeout(() => { discoveryTimer = undefined; syncLinkCard(); }, 250);
   }
   page.onMutation((records) => {
-    if (mutationAffectsEmailLinkCard(records, view?.host, document, hasActiveStep)) scheduleDiscovery();
+    if (mutationAffectsEmailLinkCard(records, view?.host, document, activeStep !== null)) scheduleDiscovery();
   });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismissCard(); });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
-    if (!hasActiveStep || !isEmailLinkRequestControl(control)) return;
+    if (!activeStep || !isEmailLinkRequestControl(control)) return;
     minReceivedAtMs = resendCutoff(clock.now());
     dismissed = false;
     unmountCard();

@@ -2,11 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { startCodePicker } from "../extension/inline/code-picker-controller.js";
-import { handleCodeField } from "../extension/shared/code-fields.js";
+import { handleVerificationFields } from "../extension/shared/code-fields.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createTimerQueue } from "./timer_queue.js";
 
-function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
+function pickerEnvironment({ handleVerificationFields, now = Date.now, check, onMount = () => {},
   onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn() }) {
   const events = new Map(), timers = createTimerQueue();
   const results = {
@@ -16,7 +16,7 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
     append(child) { this.children.push(child); },
   };
   const elements = { "#results": results, "#status": {}, "#close": {}, "#retry": {} };
-  const browser = {
+  const environment = {
     Date: { now },
     location: { href: "https://example.test", hostname: "example.test" },
     innerWidth: 1200, innerHeight: 800,
@@ -52,7 +52,7 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
     chrome: { runtime: inlineRuntime(check) },
   };
   const detectOrFill = (request) => {
-    const result = handleField(request);
+    const result = handleVerificationFields(request);
     for (const root of result.stepContext?.roots || []) {
       // Model text nodes so production traversal never needs a mock-only fallback.
       if (Object.hasOwn(root, "textContent") && !Object.hasOwn(root, "nodeType")) {
@@ -67,15 +67,15 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
       ? { stepContext: { roots: [], parent: undefined }, ...result }
       : result;
   };
-  startCodePicker({ browser, handleField: detectOrFill });
-  return { browser, events, timers, results, elements };
+  startCodePicker({ environment, handleVerificationFields: detectOrFill });
+  return { environment, events, timers, results, elements };
 }
 
 test("code suggestions mount beside their field inside a modal dialog", async () => {
   let mounted;
   const modal = { append(host) { mounted = host; } };
   const anchor = { closest: selector => selector === 'dialog:modal' ? modal : null };
-  const f = pickerBrowser({ handleField: () => ({ ok: true, anchor,
+  const f = pickerEnvironment({ handleVerificationFields: () => ({ ok: true, anchor,
     rect: { top:100, bottom:130, left:20, right:200 } }),
     check: async () => ({ ok: true, codes: [] }),
     onMount: () => assert.fail('must not mount in the inert background'),
@@ -106,10 +106,10 @@ test("focus moves within split digits preserve suggestions, but another group st
       document: { activeElement: first[0], querySelectorAll: () => { queries++; return [...first, ...second]; } },
       innerHeight: 800, innerWidth: 1200,
     });
-    const detect = vm.runInContext(`(${handleCodeField.toString()})`, context);
+    const detect = vm.runInContext(`(${handleVerificationFields.toString()})`, context);
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-    const { events, timers, results } = pickerBrowser({
-      handleField: detect, now: () => 10000,
+    const { events, timers, results } = pickerEnvironment({
+      handleVerificationFields: detect, now: () => 10000,
       onMount: () => { mounts++; },
       check: async () => { requests++; return { ok: true, codes: [code] }; },
     });
@@ -148,8 +148,8 @@ test("code picker collects pending scans quickly then resumes normal checks", as
   const modes = [];
   const anchor = {};
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-  const { timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { timers, results } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => 10000,
     check: async (_mailType, collectOnly) => {
       modes.push(collectOnly);
@@ -171,8 +171,8 @@ test("a slow account does not suppress normal code scans for healthy accounts", 
   const modes = [];
   const anchor = {};
   let now = 10000;
-  const { timers } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { timers } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     check: async (_mailType, collectOnly) => {
       modes.push(collectOnly);
@@ -192,8 +192,8 @@ test("picker repositions using the current viewport after resize", () => {
   const frames = [];
   const anchor = {};
   let mounted;
-  const { browser, events } = pickerBrowser({
-    handleField: () => ({
+  const { environment, events } = pickerEnvironment({
+    handleVerificationFields: () => ({
       ok: true, anchor,
       rect: { left: 900, top: 100, bottom: 130 },
     }),
@@ -202,8 +202,8 @@ test("picker repositions using the current viewport after resize", () => {
     check: () => new Promise(() => {}),
   });
   assert.equal(mounted.style.left, "900px");
-  browser.innerWidth = 1000;
-  browser.innerHeight = 150;
+  environment.innerWidth = 1000;
+  environment.innerHeight = 150;
   events.get("resize")();
   frames.shift()();
   assert.equal(mounted.style.left, "752px");
@@ -214,8 +214,8 @@ test("picker passes its mounted field to the fill action", async () => {
   const anchor = {};
   const fills = [];
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9_000 };
-  const { results } = pickerBrowser({
-    handleField: (request) => {
+  const { results } = pickerEnvironment({
+    handleVerificationFields: (request) => {
       if (request.action === "fill") {
         fills.push(request);
         return { ok: true };
@@ -237,8 +237,8 @@ test("selection revalidates the verification step before the queued discovery ru
     const form = { textContent: "We sent a code to alice@example.test. Resend in 30 seconds", contains: () => true };
     const anchor = { form };
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
-    const { timers, results } = pickerBrowser({
-      handleField: ({ action }) => {
+    const { timers, results } = pickerEnvironment({
+      handleVerificationFields: ({ action }) => {
         if (action === "fill") { fills++; return { ok: true }; }
         return { ok: true, anchor, stepContext: { roots: [form] },
           candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } };
@@ -280,8 +280,8 @@ test("switching CSS-hidden recipients blocks the previous code before discovery 
     const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
     const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20000 };
     let codes = [oldCode];
-    const { results, timers } = pickerBrowser({
-      handleField: ({ action }) => {
+    const { results, timers } = pickerEnvironment({
+      handleVerificationFields: ({ action }) => {
         if (action === "fill") { fills++; return { ok: true }; }
         return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 }, stepContext: { roots: [form] } };
       },
@@ -318,8 +318,8 @@ test("a successful fill allows a new code field on the same URL", async () => {
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20_000 };
   let codes = [oldCode];
-  const { timers, results } = pickerBrowser({
-    handleField: (request) => request.action === "fill"
+  const { timers, results } = pickerEnvironment({
+    handleVerificationFields: (request) => request.action === "fill"
       ? { ok: true }
       : { ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } },
     now: () => now,
@@ -346,8 +346,8 @@ test("a successful fill keeps the same field closed until a resend", async () =>
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 22_000 };
   let codes = [oldCode], mounts = 0;
-  const { events, timers, results } = pickerBrowser({
-    handleField: (request) => request.action === "fill"
+  const { events, timers, results } = pickerEnvironment({
+    handleVerificationFields: (request) => request.action === "fill"
       ? { ok: true }
       : { ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } },
     now: () => now,
@@ -373,8 +373,8 @@ test("a successful fill keeps the same field closed until a resend", async () =>
 test("a failed inbox check removes previously offered codes", async () => {
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9_000 };
   let connected = true;
-  const { timers, results, elements } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { timers, results, elements } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => 10_000,
     check: async () => connected
       ? { ok: true, codes: [code] }
@@ -395,8 +395,8 @@ test("retry during an active check ignores its response and checks again immedia
   let checks = 0;
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 10_000 };
-  const { results, elements } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { results, elements } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => 10_000,
     check: () => ++checks === 1
       ? new Promise(resolve => { resolveFirst = resolve; })
@@ -418,8 +418,8 @@ for (const resend of [
   let now = 9500;
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let codes = [oldCode];
-  const { events, timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { events, timers, results } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     check: async () => ({ ok: true, codes }),
   });
@@ -445,8 +445,8 @@ test(`${textContent} restarts checking after the polling deadline`, async () => 
   let now = 9500, checks = 0;
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let codes = [oldCode];
-  const { events, timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor: {}, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { events, timers, results } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor: {}, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     check: async () => { checks++; return { ok: true, codes }; },
   });
@@ -472,8 +472,8 @@ test(`${textContent} restarts checking after the polling deadline`, async () => 
 test("resend before the first check returns does not revive an unseen old code", async () => {
   const requests = [];
   let now = 9500;
-  const { events, timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { events, timers, results } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     check: () => new Promise(resolve => requests.push(resolve)),
   });
@@ -500,8 +500,8 @@ test("new route clears suggestions even when the code field is reused", async ()
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let responses = [oldCode];
   const anchor = {};
-  const { browser, events, timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { environment, events, timers, results } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     check: async () => ({ ok: true, codes: responses }),
   });
@@ -509,7 +509,7 @@ test("new route clears suggestions even when the code field is reused", async ()
   await flush();
   assert.equal(results.childElementCount, 1);
   now = 10_500;
-  browser.location.href = "https://example.test/second-step";
+  environment.location.href = "https://example.test/second-step";
   events.get("navigation:currententrychange")();
   await flush();
   assert.equal(results.childElementCount, 0);
@@ -532,8 +532,8 @@ test("scrolling away and back keeps a code from the same verification step", asy
       : { left: 20, right: 120, top: -130, bottom: -100 },
   };
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
-  const { events, results } = pickerBrowser({
-    handleField: () => ({ ok: visible, anchor, trackedAnchorOffscreen: !visible,
+  const { events, results } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: visible, anchor, trackedAnchorOffscreen: !visible,
       candidateCache: { inputs: [anchor], contextRoots: [] }, rect: anchor.getBoundingClientRect() }),
     now: () => now,
     check: async () => ({ ok: true, codes: [code] }),
@@ -554,16 +554,16 @@ test("scrolling away and back keeps a code from the same verification step", asy
 test("returning to a hidden tab starts a check while the old one is pending", async () => {
   const requests = [];
   const anchor = {};
-  const { browser, events, timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { left: 20, top: 100, bottom: 130 } }),
+  const { environment, events, timers, results } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { left: 20, top: 100, bottom: 130 } }),
     now: () => 10_000,
     check: () => new Promise(resolve => requests.push(resolve)),
   });
   assert.equal(requests.length, 1);
-  browser.document.hidden = true;
+  environment.document.hidden = true;
   events.get("visibilitychange")();
   timers.takeOldest()();
-  browser.document.hidden = false;
+  environment.document.hidden = false;
   events.get("visibilitychange")();
   timers.takeOldest()();
   assert.equal(requests.length, 2);
@@ -583,8 +583,8 @@ test("countdown completion retains codes without starting a new attempt", async 
     const anchor = { form };
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
     let requests = 0;
-    const { timers, results, elements } = pickerBrowser({
-      handleField: () => ({ ok: true, anchor, stepContext: { roots: [form, form.previousElementSibling].filter(Boolean), parent: form.parentElement }, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+    const { timers, results, elements } = pickerEnvironment({
+      handleVerificationFields: () => ({ ok: true, anchor, stepContext: { roots: [form, form.previousElementSibling].filter(Boolean), parent: form.parentElement }, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
       now: () => now,
       check: async () => { requests++; return { ok: true, codes: [code] }; },
       onObserve: callback => { observer = callback; },
@@ -611,8 +611,8 @@ test("changed verification instructions reset codes on the same field and URL", 
   const anchor = { form };
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let responses = [oldCode];
-  const { timers, results } = pickerBrowser({
-    handleField: () => ({ ok: true, anchor, stepContext: { roots: [form, form.previousElementSibling].filter(Boolean), parent: form.parentElement }, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { timers, results } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor, stepContext: { roots: [form, form.previousElementSibling].filter(Boolean), parent: form.parentElement }, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     check: async () => ({ ok: true, codes: responses }),
     onObserve: callback => { observer = callback; },
@@ -654,8 +654,8 @@ test("changed verification instructions reset codes on the same field and URL", 
 test("a new verification field on the same URL starts a fresh code window", async () => {
   let observer, now = 10_000, visible = true, anchor = {}, responses = [], warnings = [];
   responses = [{ uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 }];
-  const { events, timers, results, elements } = pickerBrowser({
-    handleField: () => ({ ok: visible, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
+  const { events, timers, results, elements } = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: visible, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20 } }),
     now: () => now,
     check: async () => ({ ok: true, codes: responses, warnings }),
     onObserve: callback => { observer = callback; },
@@ -670,13 +670,13 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   warnings = ["one@yahoo.com: Yahoo took too long to respond."];
   timers.takeNewest()();
   await flush();
-  assert.match(elements["#status"].textContent, /Could not check: one@yahoo\.com/);
+  assert.match(elements["#status"].textContent, /Some accounts could not be checked: one@yahoo\.com/);
   const originalResponses = responses;
   responses = [];
   now = 131_000;
   timers.takeNewest()();
   await flush();
-  assert.match(elements["#status"].textContent, /Could not check: one@yahoo\.com/);
+  assert.match(elements["#status"].textContent, /Some accounts could not be checked: one@yahoo\.com/);
   responses = originalResponses;
   warnings = [];
   now = 9500;
@@ -713,8 +713,8 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   let observer, discoveries = 0, detections = 0, visible = false, mounted;
   const anchor = {};
   const cached = { inputs: [], contextRoots: [] };
-  const { events, timers, elements } = pickerBrowser({
-    handleField: ({ candidateCache: candidates }) => {
+  const { events, timers, elements } = pickerEnvironment({
+    handleVerificationFields: ({ candidateCache: candidates }) => {
       detections++;
       if (!candidates) discoveries++;
       return { ok: visible, anchor, trackedAnchorOffscreen: !visible && !!candidates,
@@ -757,8 +757,8 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
 test("oversized picker mutations coalesce into one deferred discovery", async () => {
   let observer, discoveries = 0;
   const contextRoots = [{ contains: () => true }];
-  const { timers } = pickerBrowser({
-    handleField: () => { discoveries++; return { ok: false, candidateCache: { inputs: [], contextRoots } }; },
+  const { timers } = pickerEnvironment({
+    handleVerificationFields: () => { discoveries++; return { ok: false, candidateCache: { inputs: [], contextRoots } }; },
     onObserve: callback => { observer = callback; },
     check: () => { assert.fail("no field should start a mail check"); },
   });
@@ -774,8 +774,8 @@ test("oversized picker mutations coalesce into one deferred discovery", async ()
 test("failed fills retain specific field guidance and use a fallback when absent", async () => {
   for (const error of ["The verification-code fields changed while filling them. Try again.", undefined]) {
     const anchor = {};
-    const { results, elements } = pickerBrowser({
-      handleField: ({ action }) => action === "fill" ? { ok: false, error }
+    const { results, elements } = pickerEnvironment({
+      handleVerificationFields: ({ action }) => action === "fill" ? { ok: false, error }
         : { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 } },
       now: () => 10000,
       check: async () => ({ ok: true, codes: [{ uid: 1, accountEmail: "test@yahoo.com",
@@ -793,8 +793,8 @@ test("incidental form messages retain codes through discovery, retry and selecti
   const form = { textContent: "Enter your verification code", contains: () => true };
   const anchor = {};
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-  const { timers, results, elements } = pickerBrowser({
-    handleField: ({ action }) => {
+  const { timers, results, elements } = pickerEnvironment({
+    handleVerificationFields: ({ action }) => {
       if (action === "fill") { fills++; return { ok: true }; }
       return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 }, stepContext: { roots: [form] } };
     },
@@ -824,8 +824,8 @@ test("an oversized step keeps the last known recipient and remains selectable", 
   const form = { textContent: "We sent a code to alice@example.test", contains: () => true };
   const anchor = {};
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-  const { timers, results } = pickerBrowser({
-    handleField: ({ action }) => {
+  const { timers, results } = pickerEnvironment({
+    handleVerificationFields: ({ action }) => {
       if (action === "fill") { fills++; return { ok: true }; }
       return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 }, stepContext: { roots: [form] } };
     },

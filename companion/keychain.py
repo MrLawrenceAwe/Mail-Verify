@@ -8,7 +8,7 @@ KEYCHAIN_SERVICE = b"local.yahoo_code_fill"
 KEYCHAIN_ACCOUNT = b"mailbox"
 
 
-def keychain(action, value=None):
+def access_saved_credentials(action, credentials_record=None):
     lib = ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
     void = ctypes.c_void_p
     uint = ctypes.c_uint32
@@ -63,7 +63,7 @@ def keychain(action, value=None):
         if action == "delete":
             result = lib.SecKeychainItemDelete(item) if status == 0 else 0
         elif action == "set":
-            payload = json.dumps(value).encode()
+            payload = json.dumps(credentials_record).encode()
             result = (
                 lib.SecKeychainItemModifyAttributesAndData(
                     item, None, len(payload), payload

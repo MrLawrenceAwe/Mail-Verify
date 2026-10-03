@@ -18,11 +18,11 @@ To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 1
 
 `tests/fixtures/inline-regression-preview.html` supplies synthetic mail for modal and link-step checks. Use `?mode=modal-code` to fill a code in a native modal, `?mode=modal-reset` to copy a reset link in a modal, or `?mode=status` for a normal waiting panel. Add `&transform=1` to test a scaled, clipped dialog. **Update connection status** must retain the offered link; **Change recipient** and **Resend email** must clear it. These fixtures do not access Yahoo. When testing edits, serve with caching disabled or use a fresh local port so Chrome reloads imported modules.
 
-`tests/fixtures/numeric-code-preview.html` checks two independent full-length numeric verification fields in one form. Selecting the email-code suggestion must fill the email field and retain the phone field’s existing value. Numeric split-digit groups with a mismatched code length must still refuse filling.
+`tests/fixtures/numeric-code-preview.html` checks two independent full-length numeric verification fields in one form. Selecting the email-code suggestion must fill the email field and retain the phone field’s existing value.
 
 `tests/fixtures/mixed-numeric-code-preview.html` combines six numeric email-code boxes with a full-length numeric phone-code field. The initial suggestion must fill only the phone field. **Test split email fields** focuses an unlabelled email digit; the next suggestion must fill those six boxes and preserve the phone field.
 
-The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle. `test_popup_integration.js` covers the popup controller and its real view together.
+The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle. `test_popup_integration.js` covers the popup controller and its real view together. [Code-field tests](../tests/test_code_fields.js) verify that numeric split-digit groups reject mismatched code lengths.
 
 `tests/timer_queue.js` stores callbacks for explicit execution by insertion order or requested delay; it does not advance a clock. `tests/email_messages.py` shares the raw-email builder used by code-extraction and inbox-scanning tests.
 
@@ -48,8 +48,8 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `content-entry.js` | Starts the code picker and email-link card with one page coordinator. |
 | `inline/page-coordinator.js` | Shares code-field candidates, DOM observation, and page-change notifications. |
 | `inline/suggestion-mount.js` | Mounts suggestions inside the active native modal so they remain clickable above its backdrop. |
-| `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control and render code suggestions beside a detected field. |
-| `inline/code-picker-policy.js`, `inline/email-link-card-policy.js` | Filter suggestions and classify request controls and mutations; code policy also positions the picker. |
+| `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control, position, and render code suggestions beside a detected field. |
+| `inline/code-picker-policy.js`, `inline/email-link-card-policy.js` | Filter suggestions and classify request controls and mutations. |
 | `inline/email-link-step.js` | Detect confirmation/reset waiting prompts and return a step identity and mail type. |
 | `inline/email-link-card-controller.js`, `inline/email-link-card-view.js` | Control and render the link card. |
 | `inline/mutation-inspection.js` | Share bounded mutation traversal and attribute-target deduplication; picker and link policies supply relevance rules. |
@@ -60,7 +60,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `shared/polling-lifecycle.js` | Manage polling deadlines, stale responses, scheduled checks, and queued retries. |
 | `shared/scan-schedule.js` | Decide when to collect pending workers or start a full scan and choose the next poll delay. |
 | `shared/mail-timing.js`, `shared/request-controls.js`, `shared/email-link-url.js` | Share freshness, request-control labels and selectors, and link-URL rules. |
-| `shared/code-fields.js` | Detect and fill verification inputs and return verification-context roots for step tracking; helpers stay inside the injected function because Chrome serializes it. |
+| `shared/code-fields.js` | Detect and fill verification inputs through `handleVerificationFields()` and return verification-context roots for step tracking; helpers stay inside the injected function because Chrome serializes it. |
 | `shared/code-step-context.js` | Read bounded verification-context text and return `recipientKey`: `null` for an incomplete read, or a serialised recipient list (including `"[]"` when no recipient is recognised). |
 | `shared/recipient-identity.js` | Match ordinary and masked email addresses and serialise recipient identities; code and link detectors supply their own instruction classifiers. |
 
@@ -68,7 +68,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 
 The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Mail responses include the boolean `scanPending`. Requests with `collectOnly: true` collect existing workers and cached results without starting scans. All surfaces collect pending scans every second, then resume their normal check interval. While a slower account remains pending, full checks still run at the normal interval so healthy accounts can discover new mail. Update the companion and extension together when changing this contract.
 
-Automatic checking runs for up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. `beginCheck()` returns `{ collectOnly }` and updates the next full-scan time; `pollDelayMs` gives the delay before the next check. `stopScheduledPolling()` clears the timer and deadline; `invalidateChecks()` invalidates inline check bookkeeping and responses and clears the timer. Neither method cancels companion workers already running.
+Automatic checking runs for up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. `beginCheck()` returns `{ collectOnly }` and updates the next full-scan time; `pollDelayMs` gives the delay before the next check. Polling lifecycle `schedule(callback, delay)` requires an explicit delay; scan cadence belongs to the scan schedule. `stopScheduledPolling()` clears the timer and deadline; `invalidateChecks()` invalidates inline check bookkeeping and responses and clears the timer. Neither method cancels companion workers already running.
 
 ## Companion modules
 
@@ -80,7 +80,7 @@ Automatic checking runs for up to two minutes. Code suggestions normally check t
 | `code_extraction.py` | Extract one unambiguous verification code. |
 | `link_extraction.py` | Extract confirmation and password-reset links. |
 | `email_content.py` | Traverse MIME parts and parse visible HTML for both extractors. |
-| `keychain.py`, `errors.py` | Store credentials and define user-facing errors. |
+| `keychain.py`, `errors.py` | Access the saved credential record through `access_saved_credentials()` and define user-facing errors. |
 | `install.py` | Discover, install, and remove companion runtime modules. |
 
 Up to four account scans run concurrently in a thread pool. Each request waits at most 250 ms for scans, returns completed results and pending status, and retains pending work for later collection polls without overlapping scans for the same session. Collection polls do not rescan accounts that already finished. Cached results expire after ten minutes. Removing an account or changing credentials or mail type discards its results immediately and closes its connection after any active worker finishes.

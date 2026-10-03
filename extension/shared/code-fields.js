@@ -1,4 +1,4 @@
-export function handleCodeField({ action, code, candidateCache, expectedAnchor, trackedAnchor } = {}) {
+export function handleVerificationFields({ action, code, candidateCache, expectedAnchor, trackedAnchor } = {}) {
   if (action !== "detect" && action !== "fill")
     return { ok: false, error: "Unsupported code field action." };
   const detectOnly = action === "detect";

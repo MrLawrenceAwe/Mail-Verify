@@ -13,7 +13,7 @@ test("page interfaces share one observer, navigation listener and code-field cac
     navigation: { addEventListener(name, callback) { events.set(name, callback); } },
   };
   let observers = 0, discoveries = 0, observed, observationOptions;
-  const browser = { document, window, MutationObserver: class {
+  const environment = { document, window, MutationObserver: class {
     constructor(callback) { observers++; observed = callback; }
     observe(_target, options) { observationOptions = options; }
   } };
@@ -21,8 +21,8 @@ test("page interfaces share one observer, navigation listener and code-field cac
     if (!candidateCache) discoveries++;
     return { ok: true, candidateCache: { inputs: [] } };
   };
-  const picker = getPageCoordinator(browser, detect);
-  const card = getPageCoordinator(browser);
+  const picker = getPageCoordinator(environment, detect);
+  const card = getPageCoordinator(environment);
   assert.equal(picker, card);
   picker.detectCodeField();
   card.detectCodeField();
@@ -50,11 +50,11 @@ test("page interfaces share one observer, navigation listener and code-field cac
 test("hidden mutations skip dispatch and invalidate code candidates", () => {
   let observe, mutations = 0, discoveries = 0;
   const document = { documentElement: {}, hidden: false, addEventListener() {} };
-  const browser = { document, window: { addEventListener() {} }, MutationObserver: class {
+  const environment = { document, window: { addEventListener() {} }, MutationObserver: class {
     constructor(callback) { observe = callback; }
     observe() {}
   } };
-  const page = getPageCoordinator(browser, ({ candidateCache }) => {
+  const page = getPageCoordinator(environment, ({ candidateCache }) => {
     if (!candidateCache) discoveries++;
     return { ok: false, candidateCache: { inputs: [] } };
   });
