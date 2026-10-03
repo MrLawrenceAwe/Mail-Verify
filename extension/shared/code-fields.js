@@ -199,10 +199,9 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   if (!fields && (
     !targetInput ||
     targetInput.maxLength === 1 ||
-    (targetInput.type === "number" && digitInputs.filter((input) =>
-      input.form === targetInput.form &&
-      (input === targetInput || hasCodeHint(input) || !getInputHints(input).some(Boolean))
-    ).length > 1) ||
+    // Reject a numeric split group with the wrong digit count, but do not
+    // mistake separate full-length numeric code fields for a split group.
+    (targetInput.type === "number" && findDigitGroup(targetInput, digitInputs)) ||
     (targetInput.maxLength > 0 && targetInput.maxLength < code.length)
   )) {
     return {

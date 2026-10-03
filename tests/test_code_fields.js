@@ -239,6 +239,20 @@ test("fills a numeric code field beside an unrelated numeric field", () => {
   assert.equal(age.value, undefined);
 });
 
+test("fills only the selected independent numeric verification field", () => {
+  for (const inline of [false, true]) {
+    const form = {};
+    const email = new FakeInput({ type: "number", name: "verification_code", form });
+    const phone = new FakeInput({ type: "number", name: "security_code", form });
+    phone.value = "654321";
+    const inputs = [email, phone];
+    assert.equal(run(inputs, inline ? phone : email, inline ? email : null).ok, true);
+    assert.equal(email.value, "123456");
+    assert.equal(phone.value, "654321");
+    assert.deepEqual(phone.events, []);
+  }
+});
+
 test("does not spread a code across unrelated numeric fields in the same form", () => {
   const form = {};
   const inputs = [

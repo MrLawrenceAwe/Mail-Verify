@@ -12,6 +12,8 @@ Find email verification codes, account confirmation links, and password reset li
 
 For an existing installation, rerun **Install Companion.command** after companion changes and click **Reload** on Chrome’s Extensions page after extension changes. Saved accounts are retained.
 
+If a mail check reports **Unsupported request**, the installed companion is out of date. Close the popup, rerun **Install Companion.command**, then reopen the popup and check again. Reloading the extension alone does not update the companion.
+
 If suggestions do not appear after refreshing a website, open Mail Verify’s **Details** on `chrome://extensions` and check that **Site access** allows it on that site. Yahoo may restrict app-password generation; an account without an app password cannot use this connection method.
 
 ## Use
