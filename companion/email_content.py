@@ -7,7 +7,8 @@ from email.utils import parseaddr
 VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 
 
-def message_headers(message):
+def extract_message_metadata(message):
+    """Return the full matching subject and bounded metadata for display."""
     subject = str(message.get("Subject", ""))
     return subject, {
         "sender": parseaddr(str(message.get("From", "")))[1][:200],

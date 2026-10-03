@@ -4,12 +4,14 @@ from email import policy
 import re
 from urllib.parse import urlsplit
 
-from email_content import VisibleEmailHTMLParser, iter_text_parts, message_headers
+from email_content import VisibleEmailHTMLParser, iter_text_parts, extract_message_metadata
+
+EXCLUDED_ACTIONS_REGEX = r"unsubscribe|delete|cancel|payment|purchase"
 
 CONFIRMATION_LABEL_PATTERN = re.compile(r"\b(?:verify|confirm|activate)\s+(?:(?:your|my|the|this|new)\s+)?(?:e-?mail(?:\s+address)?|account|registration)\b", re.I)
-EXCLUDED_LABEL_PATTERN = re.compile(r"\b(?:unsubscribe|password|reset|delete|cancel|payment|purchase)\b", re.I)
-EXCLUDED_SUBJECT_PATTERN = re.compile(
-    r"\b(?:unsubscribe|delete|cancel|payment|purchase)\b|"
+CONFIRMATION_EXCLUDED_LABEL_PATTERN = re.compile(rf"\b(?:{EXCLUDED_ACTIONS_REGEX}|password|reset)\b", re.I)
+CONFIRMATION_EXCLUDED_SUBJECT_PATTERN = re.compile(
+    rf"\b(?:{EXCLUDED_ACTIONS_REGEX})\b|"
     r"\b(?:reset|forgot|change|update|recover)\b.{0,35}\bpassword\b|"
     r"\bpassword\b.{0,35}\b(?:reset|recovery)\b",
     re.I,
@@ -60,11 +62,11 @@ RESET_UNRELATED_LABEL_PATTERN = re.compile(
     r"\b(?:help|support|contact|troubleshoot(?:ing)?|faq|documentation|learn|not|never)\b|"
     r"\b(?:didn|don|wasn|isn)['’]t\b", re.I,
 )
-RESET_EXCLUDED_PATTERN = re.compile(r"\b(?:unsubscribe|delete|cancel|payment|purchase)\b", re.I)
+RESET_EXCLUDED_PATTERN = re.compile(rf"\b(?:{EXCLUDED_ACTIONS_REGEX})\b", re.I)
 
 
 def extract_confirmation_link_details(raw_message):
-    return extract_labelled_link(raw_message, CONFIRMATION_LABEL_PATTERN.search, EXCLUDED_LABEL_PATTERN, EXCLUDED_SUBJECT_PATTERN)
+    return extract_labelled_link(raw_message, CONFIRMATION_LABEL_PATTERN.search, CONFIRMATION_EXCLUDED_LABEL_PATTERN, CONFIRMATION_EXCLUDED_SUBJECT_PATTERN)
 
 
 def extract_password_reset_link_details(raw_message):
@@ -79,7 +81,7 @@ def is_password_reset_label(label):
 
 def extract_labelled_link(raw_message, label_matches, excluded_label_pattern, excluded_subject_pattern):
     message = email.message_from_bytes(raw_message, policy=policy.default)
-    subject, headers = message_headers(message)
+    subject, display_metadata = extract_message_metadata(message)
     if excluded_subject_pattern.search(subject):
         return None
     # HTML and plain text are alternative renderings of one message. Prefer
@@ -120,4 +122,4 @@ def extract_labelled_link(raw_message, label_matches, excluded_label_pattern, ex
     candidates = html_candidates if html_candidates else plain_candidates
     if len(candidates) != 1:
         return None
-    return {"url": candidates.pop(), **headers}
+    return {"url": candidates.pop(), **display_metadata}
