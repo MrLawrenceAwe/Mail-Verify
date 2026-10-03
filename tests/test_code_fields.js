@@ -358,6 +358,8 @@ test("generic code field uses verification context outside its form", () => {
   assert.equal(result.candidateCache.contextRoots.length, 3);
   assert.equal(result.candidateCache.contextRoots.includes(form), true);
   assert.equal(result.candidateCache.contextRoots.includes(instructions), true);
+  assert.deepEqual(Array.from(result.stepContext.roots), [form, instructions]);
+  assert.equal(result.stepContext.parent, main);
   instructions.textContent = "Enter code to redeem a discount";
   assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
 });
@@ -438,4 +440,24 @@ test("cached detection tracks offscreen candidates without rescanning unrelated 
   vm.runInContext('field = detect({ action: "detect" });', context);
   assert.equal(context.field.ok, false);
   assert.equal(queries, 2);
+});
+
+test("cached detection returns current step roots for explicit code fields", () => {
+  const older = { textContent: "Older unrelated instructions" };
+  const previous = { textContent: "Email verification", previousElementSibling: older };
+  const instructions = { textContent: "We sent a code", previousElementSibling: previous };
+  const parent = {};
+  const form = { previousElementSibling: instructions, parentElement: parent };
+  const input = new FakeInput({ autocomplete: "one-time-code", form });
+  const context = vm.createContext({
+    document: { querySelectorAll: () => [input], activeElement: input },
+    innerHeight: 800, innerWidth: 1200,
+  });
+  vm.runInContext(`var detect = (${handleCodeField.toString()}); var field = detect({ action: "detect" });`, context);
+  assert.deepEqual(Array.from(context.field.stepContext.roots), [form, instructions, previous]);
+  assert.equal(context.field.stepContext.parent, parent);
+  const replacement = { textContent: "Code for a different signup" };
+  form.previousElementSibling = replacement;
+  const next = vm.runInContext('detect({ action: "detect", candidateCache: field.candidateCache })', context);
+  assert.deepEqual(Array.from(next.stepContext.roots), [form, replacement]);
 });

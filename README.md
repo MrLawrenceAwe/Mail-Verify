@@ -24,7 +24,7 @@ If suggestions do not appear after refreshing a website, open Mail Verify’s **
 
 Request the email on the website, then choose its matching result. Review the account, sender, subject, and destination before using it. Hover over a code to see its sender and subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.
 
-Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion for that page. The toolbar popup handles account setup and manual checks. A **Copied** message confirms a successful reset-link copy; links can be copied again. If a website blocks clipboard access, use the popup.
+Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion for that page. The toolbar popup handles account setup and manual checks. A status message confirms a successful reset-link copy; use **Copy again** to repeat it. If a website blocks clipboard access, use the popup.
 
 ## Checking and freshness
 

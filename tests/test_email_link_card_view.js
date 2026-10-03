@@ -16,7 +16,7 @@ function setup(mailType, callbacks = {}) {
     node.attachShadow = () => root;
     return node;
   } };
-  const view = createEmailLinkCardView(document, { mailType, beforeUse: () => true, ...callbacks });
+  const view = createEmailLinkCardView(document, { mailType, validateAndPrepareSelection: () => true, ...callbacks });
   const item = { accountEmail: "me@yahoo.com", sender: "sender@example.com", subject: "Your email", url: "https://example.com/action" };
   view.renderLinks([item]);
   const card = controls["#results"].children[0];
@@ -46,7 +46,7 @@ test("reset-card action copies only an approved selection and reports success", 
   let approved = false;
   const copied = [];
   const { action, item, controls } = setup("passwordResetLinks", {
-    beforeUse: () => approved,
+    validateAndPrepareSelection: () => approved,
     copyLink: async item => copied.push(item.url),
   });
   await action.listeners.click();
@@ -54,9 +54,12 @@ test("reset-card action copies only an approved selection and reports success", 
   approved = true;
   await action.listeners.click();
   assert.deepEqual(copied, [item.url]);
-  assert.equal(action.textContent, "Copied");
+  assert.equal(action.textContent, "Copy again");
   assert.equal(action.disabled, false);
   assert.match(controls["#status"].textContent, /copied to clipboard/);
+  await action.listeners.click();
+  assert.deepEqual(copied, [item.url, item.url]);
+  assert.equal(action.textContent, "Copy again");
 });
 
 

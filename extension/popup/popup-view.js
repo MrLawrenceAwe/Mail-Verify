@@ -1,7 +1,7 @@
-import { MAIL_TYPES } from "../shared/mail-types.js";
+import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
 import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
-export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink, onSelectMailType, onAddAccount }) {
+export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLink, onCheckMail, onAddAccount }) {
   const getElement = (id) => document.getElementById(id);
   const checkButtonMailTypes = [
     ["checkCodes", "codes"],
@@ -27,7 +27,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
   function setMailType(mailType) {
     getElement("codeContext").hidden = mailType !== "codes";
     getElement("linkGuidance").hidden = mailType === "codes";
-    getElement("linkGuidance").textContent = MAIL_TYPES[mailType].guidance || "";
+    getElement("linkGuidance").textContent = MAIL_PRESENTATION[mailType].guidance || "";
   }
 
   function setDestination(text) {
@@ -49,7 +49,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     getElement("email").value = "";
   }
 
-  function setAccountAndCheckButtonsDisabled(disabled) {
+  function setCheckAndRemoveButtonsDisabled(disabled) {
     for (const [id] of checkButtonMailTypes) getElement(id).disabled = disabled;
     for (const button of getElement("accounts").querySelectorAll("button")) button.disabled = disabled;
   }
@@ -67,7 +67,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
   }
 
   function markLinkCopied(button) {
-    button.textContent = MAIL_TYPES.passwordResetLinks.copiedLabel;
+    button.textContent = MAIL_PRESENTATION.passwordResetLinks.copyAgainLabel;
   }
 
   function renderAccounts(accounts) {
@@ -135,14 +135,14 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
       card.className = "card";
       appendEmailLinkDetails(document, card, item, "result-detail");
       const button = document.createElement("button");
-      button.textContent = MAIL_TYPES[mailType].actionLabel;
+      button.textContent = MAIL_PRESENTATION[mailType].actionLabel;
       button.addEventListener("click", () => onUseLink(item, button));
       card.append(button);
       getElement("results").append(card);
     }
   }
 
-  for (const [id, mailType] of checkButtonMailTypes) getElement(id).addEventListener("click", () => onSelectMailType(mailType));
+  for (const [id, mailType] of checkButtonMailTypes) getElement(id).addEventListener("click", () => onCheckMail(mailType));
   getElement("addAccountForm").addEventListener("submit", (event) => {
     event.preventDefault();
     return onAddAccount();
@@ -151,6 +151,6 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
 
   return { setStatus, showAccountSetup, showCompanionSetup,
     setMailType, setDestination, setAddAccountDisabled, readCredentialsAndClearPassword,
-    clearAccountEmail, setAccountAndCheckButtonsDisabled, setResultButtonsDisabled,
+    clearAccountEmail, setCheckAndRemoveButtonsDisabled, setResultButtonsDisabled,
     markCodeFilled, markLinkOpened, markLinkCopied, renderAccounts, clearResults, renderCodes, renderLinks };
 }

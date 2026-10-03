@@ -476,7 +476,7 @@ test("password reset links are copied only on click without opening a tab", asyn
   await button.trigger();
   assert.deepEqual(state.copied, [link.url]);
   assert.deepEqual(state.opened, []);
-  assert.equal(button.textContent, "Copied");
+  assert.equal(button.textContent, "Copy again");
   assert.match(controls.status.textContent, /copied to clipboard/);
   assert.equal(timers.length, 0);
 });

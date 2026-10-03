@@ -1,9 +1,8 @@
-import { MAIL_TYPES } from "./shared/mail-types.js";
 import { createCompanionClient } from "./shared/companion-client.js";
 
 export function registerInlineRequests(chrome, timers = globalThis) {
   // Keep independent scans so code and link requests cannot consume each other’s results.
-  const scans = Object.fromEntries(Object.keys(MAIL_TYPES).map(mailType => [mailType, { client: createCompanionClient(chrome.runtime) }]));
+  const scans = Object.fromEntries(["codes", "confirmationLinks", "passwordResetLinks"].map(mailType => [mailType, { client: createCompanionClient(chrome.runtime) }]));
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== "mail-verify-inline") return;
     const reply = (message) => {
