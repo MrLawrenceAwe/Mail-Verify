@@ -55,6 +55,30 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     return { roots, parent: container.parentElement };
   };
   const contextMatches = new Map();
+  // Keep bounded traversal inside the function Chrome serializes for popup fills.
+  const readVisibleContextText = (root) => {
+    let remainingNodes = 500, remainingText = 10_000;
+    const parts = [];
+    for (let node = root; node;) {
+      if (--remainingNodes < 0) return null;
+      const style = node.nodeType === 1 ? getComputedStyle(node) : null;
+      const skip = node.hidden || node.getAttribute?.("aria-hidden") === "true" ||
+        /^(SCRIPT|STYLE|TEMPLATE)$/.test(node.tagName) ||
+        (style && (style.display === "none" || /^(hidden|collapse)$/.test(style.visibility) || style.opacity === "0"));
+      if (!skip && node.nodeType === 3) {
+        const value = node.data;
+        if (value.length > remainingText) return null;
+        remainingText -= value.length;
+        parts.push(value);
+      } else if (!skip && /^(P|DIV|FORM|BR|LI|SECTION|H[1-6])$/.test(node.tagName)) {
+        parts.push(" ");
+      }
+      if (!skip && node.firstChild) { node = node.firstChild; continue; }
+      while (node !== root && !node.nextSibling) node = node.parentNode;
+      node = node === root ? null : node.nextSibling;
+    }
+    return parts.join("");
+  };
   // A bare "code" may mean a coupon, referral, or product code.
   const hasContextualCodeHint = (input, hints) => {
     const hintText = hints.filter(Boolean).join(" ");
@@ -66,7 +90,7 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
       if (!root) continue;
       contextRoots.add(root);
       if (!contextMatches.has(root))
-        contextMatches.set(root, verificationText.test(root.textContent || ""));
+        contextMatches.set(root, verificationText.test(readVisibleContextText(root) || ""));
       if (contextMatches.get(root)) return true;
     }
     return false;
@@ -123,7 +147,12 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
   const visibleCodeInputs = candidates.inputs.filter(isUsableInput);
   if (!detectOnly && expectedAnchor && !visibleCodeInputs.includes(expectedAnchor))
     return { ok: false, error: "The verification-code field changed. Select it and try again." };
-  const focusedCodeInput = visibleCodeInputs.includes(focused) ? focused : null;
+  // A digit need not carry its own label, but its group must have a code hint.
+  const focusedGroup = candidates.digitInputs.includes(focused) && isUsableInput(focused)
+    ? findDigitGroup(focused, candidates.digitInputs.filter(isUsableInput)) : null;
+  const focusedCodeInput = focusedGroup
+    ? focusedGroup.find((input) => visibleCodeInputs.includes(input))
+    : visibleCodeInputs.includes(focused) ? focused : null;
   // Focus alone does not identify a code field; it may be a search or account input.
   // An inline suggestion is bound to the field beside which it was mounted.
   const targetInput =
