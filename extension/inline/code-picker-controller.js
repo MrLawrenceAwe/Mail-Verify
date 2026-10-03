@@ -57,10 +57,14 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     minReceivedAtMs ??= initialStepCutoff(clock.now());
     anchor = field.anchor;
     stepContext = context;
-    view = createCodePickerView(document, {
+    const mountedView = createCodePickerView(document, {
       onClose: dismissPicker,
       onRetry: restartPolling,
       onFill: (item, button) => {
+        if (view !== mountedView) return;
+        // Page changes may still be waiting for the throttled discovery scan.
+        syncPicker();
+        if (view !== mountedView) return;
         if (!isFreshMessage(item.receivedAt, clock.now(), minReceivedAtMs)) {
           view.setStatus("This code is too old to suggest. Request a new one.");
           view.disableCodeButton(button);
@@ -77,6 +81,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
         }
       },
     });
+    view = mountedView;
     document.documentElement.append(view.host);
     restartPolling();
     positionPicker(field);
