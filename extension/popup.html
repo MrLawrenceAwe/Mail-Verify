@@ -19,9 +19,9 @@
         Connecting to your Mac companion…
       </p>
       <section id="accountSetup" hidden>
-        <h2>Add Yahoo account</h2>
+        <h2>Add or update Yahoo account</h2>
         <p>Use a Yahoo-generated app password, stored in your Mac’s Keychain.</p>
-        <form id="addAccountForm">
+        <form id="accountForm">
           <label for="email">Yahoo email address</label
           ><input
             id="email"
@@ -44,12 +44,12 @@
             rel="noreferrer"
             >Create an app password in Yahoo ↗</a
           >
-          <button id="addAccountSubmit" type="submit">Add account</button>
+          <button id="saveAccountSubmit" type="submit">Save account</button>
         </form>
       </section>
       <section id="connectedAccountPanel" hidden>
         <div id="accounts"></div>
-        <button id="addAccount" class="quiet">Add another Yahoo account</button>
+        <button id="showAccountSetup" class="quiet">Add or update Yahoo account</button>
         <div id="codeContext">
           <p class="destination">Fill on <strong id="destination"></strong></p>
           <p id="codePageHelp" class="hint" hidden>
@@ -70,7 +70,7 @@
         </p>
       </section>
       <section id="companionSetup" hidden>
-        <h2>One-time Mac setup</h2>
+        <h2>Install Mac companion</h2>
         <p>Run <strong>Install Companion.command</strong> from the project folder,
           then reopen this popup.</p>
       </section>

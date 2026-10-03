@@ -53,10 +53,12 @@ class InstallerTests(unittest.TestCase):
                 io.StringIO()
             ):
                 destination.mkdir(parents=True)
-                obsolete = destination / "mail_session.py"
-                obsolete.write_text("old installed module")
+                obsolete_paths = [destination / name for name in ("mail_session.py", "account_sessions.py")]
+                for obsolete in obsolete_paths:
+                    obsolete.write_text("old installed module")
                 install.main()
-                self.assertFalse(obsolete.exists())
+                for obsolete in obsolete_paths:
+                    self.assertFalse(obsolete.exists())
                 manifest = json.loads(manifest_path.read_text())
                 self.assertEqual(
                     manifest["allowed_origins"],
@@ -80,9 +82,13 @@ class InstallerTests(unittest.TestCase):
                 )
                 unrelated = destination / "personal-note.txt"
                 unrelated.write_text("Keep this file.")
+                for obsolete in obsolete_paths:
+                    obsolete.write_text("old installed module")
                 with patch.object(sys, "argv", ["install.py", "--uninstall"]):
                     install.main()
                 self.assertFalse(manifest_path.exists())
+                for obsolete in obsolete_paths:
+                    self.assertFalse(obsolete.exists())
                 self.assertFalse((destination / "launch-host").exists())
                 for filename in install.companion_files():
                     self.assertFalse((destination / filename).exists())

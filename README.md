@@ -7,7 +7,7 @@ Find email verification codes, account confirmation links, and password reset li
 1. Double-click **Install Companion.command** in the project folder. Python 3.9+ is required. If Python is moved or removed later, restore it and rerun the installer.
 2. Open `chrome://extensions` in Chrome, enable **Developer mode**, choose **Load unpacked**, and select this project's `extension` folder.
 3. Pin **Mail Verify** from Chrome’s Extensions menu and open it.
-4. Enter your Yahoo email and a **Yahoo-generated app password**, then click **Add account**. Create the app password in [Yahoo Account Security](https://login.yahoo.com/account/security); enter it in the extension. Your normal Yahoo password cannot be used. Use **Add another Yahoo account** for additional inboxes.
+4. Enter your Yahoo email and a **Yahoo-generated app password**, then click **Save account**. Create the app password in [Yahoo Account Security](https://login.yahoo.com/account/security); enter it in the extension. Your normal Yahoo password cannot be used. Use **Add or update Yahoo account** for additional inboxes or to update an existing account’s app password.
 5. If macOS requests Keychain access, approve access for the companion’s Python process.
 
 For an existing installation, rerun **Install Companion.command** after companion changes and click **Reload** on Chrome’s Extensions page after extension changes. Saved accounts are retained.

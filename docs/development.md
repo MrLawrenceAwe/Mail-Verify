@@ -57,24 +57,25 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `shared/email-link-details.js`, `shared/mail-presentation.js`, `shared/reset-link-copy.js` | Share link-detail rows, mail-type-specific labels and guidance, and reset-link clipboard handling. |
 | `inline/inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight native requests per mail type. |
 | `shared/companion-client.js` | Handle one-off native requests and reusable native-messaging sessions. |
-| `shared/polling-lifecycle.js` | Manage polling deadlines, stale responses, cancellation, and queued retries. |
+| `shared/polling-lifecycle.js` | Manage polling deadlines, stale responses, scheduled checks, and queued retries. |
 | `shared/scan-schedule.js` | Decide when to collect pending workers or start a full scan and choose the next poll delay. |
-| `shared/mail-timing.js`, `shared/step-text.js`, `shared/email-link-url.js` | Share freshness, step-text and request-control parsing, and link-URL rules. |
+| `shared/mail-timing.js`, `shared/request-controls.js`, `shared/email-link-url.js` | Share freshness, request-control labels and selectors, and link-URL rules. |
 | `shared/code-fields.js` | Detect and fill verification inputs and return verification-context roots for step tracking; helpers stay inside the injected function because Chrome serializes it. |
-| `shared/code-step-context.js` | Read bounded verification-context text and identify recipient changes without treating incidental status messages as new requests. |
+| `shared/code-step-context.js` | Read bounded verification-context text and return `recipientKey`: `null` for an incomplete read, or a serialised recipient list (including `"[]"` when no recipient is recognised). |
+| `shared/recipient-identity.js` | Match ordinary and masked email addresses and serialise recipient identities; code and link detectors supply their own instruction classifiers. |
 
 ### Request contract
 
 The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Mail responses include the boolean `scanPending`. Requests with `collectOnly: true` collect existing workers and cached results without starting scans. All surfaces collect pending scans every second, then resume their normal check interval. While a slower account remains pending, full checks still run at the normal interval so healthy accounts can discover new mail. Update the companion and extension together when changing this contract.
 
-Automatic checking runs for up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. `planNextCheck()` returns `{ collectOnly }` and updates the next full-scan time; `pollDelayMs` gives the delay before the next check.
+Automatic checking runs for up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. `beginCheck()` returns `{ collectOnly }` and updates the next full-scan time; `pollDelayMs` gives the delay before the next check. `stopScheduledPolling()` clears the timer and deadline; `invalidateChecks()` invalidates inline check bookkeeping and responses and clears the timer. Neither method cancels companion workers already running.
 
 ## Companion modules
 
 | Module | Responsibility |
 | --- | --- |
 | `host.py` | Dispatch requests, frame native messages, and serialize credential updates. |
-| `account_sessions.py` | Coordinate connected accounts and collect results and warnings. |
+| `account_scan_manager.py` | Manage account scan workers, pending scans, connections, cached results, and warnings. |
 | `inbox_session.py` | Reuse IMAP connections and manage bounded incremental inbox scans. |
 | `code_extraction.py` | Extract one unambiguous verification code. |
 | `link_extraction.py` | Extract confirmation and password-reset links. |
@@ -90,7 +91,7 @@ Background sessions close after 15 seconds without a new check; the popup reuses
 
 A scan downloads eligible messages in batches of at most five, newest first. It processes every returned body in a batch and returns as soon as that batch yields results. Older candidates remain unfetched and queued for later polls, behind newly arrived mail; empty batches continue through remaining candidates within the scan budget. Missing metadata and bodies are retried. Each check reloads credentials so removed or changed accounts cannot retain an active connection.
 
-Initial discovery starts with the latest 30 inbox messages. `discovery_cursor_uid` tracks discovered UIDs even when their metadata or bodies still need fetching; `pending_body_timestamps` maps queued body UIDs to arrival times in seconds. Each inbox retains the union of its five newest results (`NEWEST_OVERALL_COUNT`) and its newest result from each of five distinct senders. These groups overlap, so an inbox can retain up to nine results.
+Initial discovery starts with the latest 30 inbox messages. `MAX_CANDIDATE_MESSAGES` also bounds the metadata and body candidate queues; it is separate from download batch size and retained result limits. `discovery_cursor_uid` tracks discovered UIDs even when their metadata or bodies still need fetching; `pending_body_timestamps` maps queued body UIDs to arrival times in seconds. Each inbox retains the union of its five newest results (`NEWEST_OVERALL_COUNT`) and its newest result from each of five distinct senders. These groups overlap, so an inbox can retain up to nine results.
 
 ## Detection and freshness rules
 

@@ -25,21 +25,21 @@ export function createPopupController({
   let checking = false,
     usingResult = false,
     removingAccount = false,
-    addingAccount = false;
+    savingAccount = false;
   const scanSchedule = createScanSchedule({ clock, intervalMs: DEFAULT_SCAN_INTERVAL_MS });
   const view = createPopupView(document, {
     onRemoveAccount: removeAccount,
     onFillCode: fillSelectedCode,
     onUseLink: useSelectedLink,
     onCheckMail: startMailCheck,
-    onAddAccount: addAccount,
+    onSaveAccount: saveAccount,
   });
   function applyConnectedAccounts(accountEmails) {
     abortCheck();
     view.renderAccounts(accountEmails);
     view.clearResults();
     if (!accountEmails.length) {
-      polling.reset();
+      polling.stopScheduledPolling();
       view.setStatus("No email accounts connected.");
       return;
     }
@@ -57,21 +57,21 @@ export function createPopupController({
     closeSession();
   }
   async function useSelectedResult(action, { reusable = false } = {}) {
-    if (usingResult || removingAccount || addingAccount) return;
+    if (usingResult || removingAccount || savingAccount) return;
     usingResult = true;
     abortCheck();
     view.setCheckAndRemoveButtonsDisabled(true);
     view.setResultButtonsDisabled(true);
     try {
       await action();
-      polling.reset();
+      polling.stopScheduledPolling();
     } catch (error) {
       view.setStatus(error.message, true);
       view.setResultButtonsDisabled(false);
     } finally {
       usingResult = false;
       if (reusable) view.setResultButtonsDisabled(false);
-      view.setCheckAndRemoveButtonsDisabled(addingAccount);
+      view.setCheckAndRemoveButtonsDisabled(savingAccount);
       if (polling.deadline) scheduleCheck();
       else closeSession();
     }
@@ -147,7 +147,7 @@ export function createPopupController({
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
-      const { collectOnly } = scanSchedule.planNextCheck();
+      const { collectOnly } = scanSchedule.beginCheck();
       const response = await sendSessionRequest(mailType, collectOnly);
       const results = response[mailType];
       if (!usingResult && polling.isCurrent(requestGeneration)) {
@@ -171,7 +171,7 @@ export function createPopupController({
     } finally {
       if (polling.isCurrent(requestGeneration)) {
         checking = false;
-        view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount || addingAccount);
+        view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount || savingAccount);
         scheduleCheck(
           failed
             ? DEFAULT_SCAN_INTERVAL_MS
@@ -184,7 +184,7 @@ export function createPopupController({
     }
   }
   function startMailCheck(nextMailType) {
-    if (usingResult || removingAccount || addingAccount) return;
+    if (usingResult || removingAccount || savingAccount) return;
     abortCheck();
     if (mailType !== nextMailType) view.clearResults();
     mailType = nextMailType;
@@ -194,10 +194,10 @@ export function createPopupController({
     view.setMailType(mailType);
     startPolling();
   }
-  async function addAccount() {
-    if (addingAccount || removingAccount) return;
-    addingAccount = true;
-    view.setAccountSubmitDisabled(true);
+  async function saveAccount() {
+    if (savingAccount || removingAccount) return;
+    savingAccount = true;
+    view.setAccountSaveDisabled(true);
     view.setCheckAndRemoveButtonsDisabled(true);
     view.setStatus("Checking your Yahoo connection…");
     const { email, password } = view.readCredentialsAndClearPassword();
@@ -212,14 +212,14 @@ export function createPopupController({
     } catch (error) {
       view.setStatus(error.message, true);
     } finally {
-      addingAccount = false;
-      view.setAccountSubmitDisabled(false);
+      savingAccount = false;
+      view.setAccountSaveDisabled(false);
       view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount);
     }
   }
   async function removeAccount(email) {
-    if (addingAccount || removingAccount) return;
-    polling.reset();
+    if (savingAccount || removingAccount) return;
+    polling.stopScheduledPolling();
     removingAccount = true;
     abortCheck();
     view.setCheckAndRemoveButtonsDisabled(true);

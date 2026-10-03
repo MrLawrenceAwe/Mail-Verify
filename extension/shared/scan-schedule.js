@@ -7,7 +7,7 @@ export function createScanSchedule({ clock, intervalMs }) {
   return {
     get pending() { return pending; },
     get pollDelayMs() { return pending ? PENDING_SCAN_POLL_MS : intervalMs; },
-    planNextCheck() {
+    beginCheck() {
       const now = clock.now();
       const collectOnly = pending && now < nextScanAt;
       if (!collectOnly) nextScanAt = now + intervalMs;

@@ -29,7 +29,7 @@ def scan_with_deadline(session):
             session.connection.deadline = None
 
 
-class AccountSessions:
+class AccountScanManager:
     def __init__(self):
         self.sessions = {}
         self.pending_scans = {}

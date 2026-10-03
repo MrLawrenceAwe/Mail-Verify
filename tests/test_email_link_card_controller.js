@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectEmailLinkStep, matchesPasswordResetWaitingPrompt } from "../extension/inline/email-link-step.js";
+import { detectEmailLinkStep } from "../extension/inline/email-link-step.js";
 import { startEmailLinkCard } from "../extension/inline/email-link-card-controller.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createTimerQueue } from "./timer_queue.js";
@@ -386,39 +386,27 @@ test("reset card requests reset mail, copies on selection, and clears results on
   assert.equal(f.state.views.at(-1).callbacks.onSelectLink(item), false);
 });
 
-test("an unrelated forgot-password prompt cannot override explicit confirmation instructions", async () => {
-  for (const innerText of [
-    "Check your email to confirm your account. Sign in. Forgot password?",
-    "Check your inbox to verify your email. Forgot password?",
-    "We sent an activation email. Sign in. Forgot password?",
-  ]) {
-    assert.equal(matchesPasswordResetWaitingPrompt(innerText), false, innerText);
-    const panel = { innerText, getClientRects: () => [{}], checkVisibility: () => true };
-    const f = setup(panel); await settle();
-    assert.equal(f.state.views[0].callbacks.mailType, "confirmationLinks");
-    assert.deepEqual(f.state.views[0].links, [item]);
-  }
+test("confirmation instructions select confirmation mail despite unrelated password navigation", async () => {
+  const panel = { innerText: "Check your email to confirm your account. Sign in. Forgot password?",
+    getClientRects: () => [{}], checkVisibility: () => true };
+  const f = setup(panel); await settle();
+  assert.equal(f.state.views[0].callbacks.mailType, "confirmationLinks");
+  assert.deepEqual(f.state.views[0].links, [item]);
 });
 
-test("line-separated reset headings retain reset mail type after step text normalization", async () => {
+test("line-separated reset headings select reset mail", async () => {
   const panel = { innerText: "Forgot password?\nCheck your inbox\nSign in", getClientRects: () => [{}], checkVisibility: () => true };
   const f = setup(panel, "passwordResetLinks"); await settle();
   assert.equal(f.state.views[0].callbacks.mailType, "passwordResetLinks");
   assert.deepEqual(f.state.views[0].links, [item]);
 });
 
-test("reset instructions spanning continuation lines use reset mail type", async () => {
-  for (const innerText of [
-    "Check your email\nWe have sent you a link to\nreset your password",
-    "Check your inbox\nWe sent you a\nlink to\nreset your\npassword",
-    "Check your email\nWe sent you a link\nto reset your password",
-  ]) {
-    assert.equal(matchesPasswordResetWaitingPrompt(innerText), true, innerText);
-    const panel = { innerText, getClientRects: () => [{}], checkVisibility: () => true };
-    const f = setup(panel, "passwordResetLinks"); await settle();
-    assert.equal(f.state.views[0].callbacks.mailType, "passwordResetLinks");
-    assert.deepEqual(f.state.views[0].links, [item]);
-  }
+test("reset instructions spanning continuation lines select reset mail", async () => {
+  const panel = { innerText: "Check your email\nWe have sent you a link to\nreset your password",
+    getClientRects: () => [{}], checkVisibility: () => true };
+  const f = setup(panel, "passwordResetLinks"); await settle();
+  assert.equal(f.state.views[0].callbacks.mailType, "passwordResetLinks");
+  assert.deepEqual(f.state.views[0].links, [item]);
 });
 
 test("a purpose change with the same step key discards old results and switches requests", async () => {

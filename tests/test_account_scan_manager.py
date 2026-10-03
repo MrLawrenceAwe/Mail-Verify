@@ -8,18 +8,18 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
-import account_sessions
+import account_scan_manager
 
 
-class AccountSessionsTests(unittest.TestCase):
+class AccountScanManagerTests(unittest.TestCase):
     def test_pending_scan_is_reported_until_completed_results_are_collected(self):
         release = threading.Event()
-        sessions = account_sessions.AccountSessions()
+        sessions = account_scan_manager.AccountScanManager()
         accounts = [{"email": "test@yahoo.com", "password": "unused"}]
         def fetch(_session):
             release.wait(2)
             return [{"code": "123456", "receivedAt": int(time.time() * 1000), "uid": 1}]
-        with patch.object(account_sessions, "scan_with_deadline", side_effect=fetch):
+        with patch.object(account_scan_manager, "scan_with_deadline", side_effect=fetch):
             try:
                 response = sessions.poll_accounts(accounts)
                 self.assertEqual(response["codes"], [])
@@ -35,7 +35,7 @@ class AccountSessionsTests(unittest.TestCase):
 
     def test_collection_polls_do_not_restart_completed_accounts(self):
         release = threading.Event()
-        sessions = account_sessions.AccountSessions()
+        sessions = account_scan_manager.AccountScanManager()
         accounts = [{"email": "slow@yahoo.com", "password": "unused"},
                     {"email": "healthy@yahoo.com", "password": "unused"}]
         calls = []
@@ -44,7 +44,7 @@ class AccountSessionsTests(unittest.TestCase):
             if session.credentials["email"].startswith("slow"):
                 release.wait(2)
             return [{"code": "123456", "receivedAt": int(time.time() * 1000), "uid": 1}]
-        with patch.object(account_sessions, "scan_with_deadline", side_effect=fetch):
+        with patch.object(account_scan_manager, "scan_with_deadline", side_effect=fetch):
             try:
                 first = sessions.poll_accounts(accounts)
                 self.assertTrue(first["scanPending"])
@@ -65,9 +65,9 @@ class AccountSessionsTests(unittest.TestCase):
                 sessions.close()
 
     def test_collecting_without_pending_work_does_not_start_a_scan(self):
-        sessions = account_sessions.AccountSessions()
+        sessions = account_scan_manager.AccountScanManager()
         accounts = [{"email": "test@yahoo.com", "password": "unused"}]
-        with patch.object(account_sessions, "scan_with_deadline") as fetch:
+        with patch.object(account_scan_manager, "scan_with_deadline") as fetch:
             try:
                 response = sessions.poll_accounts(accounts, collect_only=True)
                 self.assertEqual(response, {"codes": [], "warnings": [], "scanPending": False})
@@ -80,11 +80,11 @@ class AccountSessionsTests(unittest.TestCase):
             {"email": "one@yahoo.com", "password": "old-password"},
             {"email": "two@yahoo.com", "password": "new-password"},
         ]
-        with patch.object(account_sessions, "scan_with_deadline", side_effect=[
+        with patch.object(account_scan_manager, "scan_with_deadline", side_effect=[
             [{"code": "111111", "receivedAt": 1000, "uid": 1}],
             [{"code": "222222", "receivedAt": 2000, "uid": 1}],
         ]):
-            result = account_sessions.AccountSessions().poll_accounts(accounts)
+            result = account_scan_manager.AccountScanManager().poll_accounts(accounts)
         self.assertEqual(
             [item["accountEmail"] for item in result["codes"]],
             ["two@yahoo.com", "one@yahoo.com"],
@@ -92,8 +92,8 @@ class AccountSessionsTests(unittest.TestCase):
 
     def test_switching_to_links_discards_code_scan_state(self):
         accounts = [{"email": "one@yahoo.com", "password": "unused"}]
-        sessions = account_sessions.AccountSessions()
-        with patch.object(account_sessions, "scan_with_deadline", return_value=[]):
+        sessions = account_scan_manager.AccountScanManager()
+        with patch.object(account_scan_manager, "scan_with_deadline", return_value=[]):
             sessions.poll_accounts(accounts)
             old = sessions.sessions["one@yahoo.com"]
             with patch.object(old, "close") as close:
@@ -104,8 +104,8 @@ class AccountSessionsTests(unittest.TestCase):
 
     def test_reset_mail_type_discards_confirmation_scan_state(self):
         accounts = [{"email": "one@yahoo.com", "password": "unused"}]
-        sessions = account_sessions.AccountSessions()
-        with patch.object(account_sessions, "scan_with_deadline", return_value=[]):
+        sessions = account_scan_manager.AccountScanManager()
+        with patch.object(account_scan_manager, "scan_with_deadline", return_value=[]):
             sessions.poll_accounts(accounts, "confirmationLinks")
             old = sessions.sessions["one@yahoo.com"]
             with patch.object(old, "close") as close:
@@ -115,11 +115,11 @@ class AccountSessionsTests(unittest.TestCase):
             self.assertIs(sessions.sessions["one@yahoo.com"].extract_item, extract_password_reset_link_details)
 
     def test_account_scan_times_out(self):
-        with patch.object(account_sessions, "ACCOUNT_CHECK_TIMEOUT_SECONDS", 0.01), patch.object(
-            account_sessions.InboxSession, "scan_inbox", side_effect=lambda: time.sleep(0.2)
+        with patch.object(account_scan_manager, "ACCOUNT_CHECK_TIMEOUT_SECONDS", 0.01), patch.object(
+            account_scan_manager.InboxSession, "scan_inbox", side_effect=lambda: time.sleep(0.2)
         ):
-            with self.assertRaisesRegex(account_sessions.UserError, "too long"):
-                account_sessions.scan_with_deadline(account_sessions.InboxSession({}))
+            with self.assertRaisesRegex(account_scan_manager.UserError, "too long"):
+                account_scan_manager.scan_with_deadline(account_scan_manager.InboxSession({}))
 
     def test_slow_account_does_not_delay_healthy_results_or_overlap_scans(self):
         release = threading.Event()
@@ -134,8 +134,8 @@ class AccountSessionsTests(unittest.TestCase):
                 started.set()
                 release.wait(2)
             return [{"code": "123456", "receivedAt": int(time.time() * 1000), "uid": 1}]
-        sessions = account_sessions.AccountSessions()
-        with patch.object(account_sessions, "scan_with_deadline", side_effect=fetch):
+        sessions = account_scan_manager.AccountScanManager()
+        with patch.object(account_scan_manager, "scan_with_deadline", side_effect=fetch):
             try:
                 first = sessions.poll_accounts(accounts)
                 self.assertTrue(started.is_set())
@@ -155,9 +155,9 @@ class AccountSessionsTests(unittest.TestCase):
 
     def test_removal_defers_close_until_worker_finishes_and_discards_results(self):
         release = threading.Event()
-        sessions = account_sessions.AccountSessions()
+        sessions = account_scan_manager.AccountScanManager()
         account = {"email": "test@yahoo.com", "password": "unused"}
-        with patch.object(account_sessions, "scan_with_deadline", side_effect=lambda _: release.wait(2)):
+        with patch.object(account_scan_manager, "scan_with_deadline", side_effect=lambda _: release.wait(2)):
             try:
                 sessions.poll_accounts([account])
                 session = sessions.sessions[account["email"]]
@@ -179,7 +179,7 @@ class AccountSessionsTests(unittest.TestCase):
         release = threading.Event()
         started = threading.Condition()
         calls = []
-        sessions = account_sessions.AccountSessions()
+        sessions = account_scan_manager.AccountScanManager()
         accounts = [{"email": f"{index}@yahoo.com", "password": "unused"} for index in range(6)]
         def fetch(session):
             with started:
@@ -187,7 +187,7 @@ class AccountSessionsTests(unittest.TestCase):
                 started.notify_all()
             release.wait(2)
             return [{"code": "123456", "receivedAt": int(time.time() * 1000), "uid": 1}]
-        with patch.object(account_sessions, "scan_with_deadline", side_effect=fetch):
+        with patch.object(account_scan_manager, "scan_with_deadline", side_effect=fetch):
             try:
                 self.assertEqual(sessions.poll_accounts(accounts)["codes"], [])
                 with started:

@@ -20,7 +20,7 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
     Date: { now },
     location: { href: "https://example.test", hostname: "example.test" },
     innerWidth: 1200, innerHeight: 800,
-    getComputedStyle: node => node.reviewStyle || {},
+    getComputedStyle: node => node.fakeComputedStyle || {},
     document: {
       hidden: false,
       documentElement: { append: onMount },
@@ -270,8 +270,8 @@ test("switching CSS-hidden recipients blocks the previous code before discovery 
   for (const hiddenStyle of [{ display: "none" }, { visibility: "hidden" }, { opacity: "0" }]) {
     let fills = 0, observer, now = 10000;
     const form = { nodeType: 1, tagName: "FORM", contains: () => true };
-    const alice = { nodeType: 1, tagName: "P", parentNode: form, reviewStyle: {} };
-    const bob = { nodeType: 1, tagName: "P", parentNode: form, reviewStyle: hiddenStyle };
+    const alice = { nodeType: 1, tagName: "P", parentNode: form, fakeComputedStyle: {} };
+    const bob = { nodeType: 1, tagName: "P", parentNode: form, fakeComputedStyle: hiddenStyle };
     form.firstChild = alice;
     alice.nextSibling = bob;
     alice.firstChild = { nodeType: 3, data: "We sent a code to alice@example.test", parentNode: alice };
@@ -295,8 +295,8 @@ test("switching CSS-hidden recipients blocks the previous code before discovery 
     assert.ok(button);
     now = 20000;
     codes = [oldCode, newCode];
-    alice.reviewStyle = hiddenStyle;
-    bob.reviewStyle = {};
+    alice.fakeComputedStyle = hiddenStyle;
+    bob.fakeComputedStyle = {};
     observer([{ type: "attributes", attributeName: "class", target: { matches: () => true } }]);
     button.onclick();
     assert.equal(fills, 0, "selection must revalidate the visible recipient immediately");

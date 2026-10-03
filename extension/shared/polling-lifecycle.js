@@ -6,7 +6,7 @@ export function createPollingLifecycle({ clock, setTimeout, clearTimeout, interv
     get deadline() { return deadline; },
     get generation() { return generation; },
     renewDeadline() { deadline = clock.now() + POLL_WINDOW_MS; },
-    reset() { this.cancelScheduledCheck(); deadline = 0; },
+    stopScheduledPolling() { this.cancelScheduledCheck(); deadline = 0; },
     cancelScheduledCheck() { clearTimeout(timer); timer = undefined; },
     invalidateResponses() { generation++; },
     isCurrent(value) { return value === generation; },
@@ -48,7 +48,7 @@ export function createInlinePollingLifecycle(options) {
   const checks = createCheckGate();
   return Object.assign(polling, {
     checks,
-    cancelChecks() {
+    invalidateChecks() {
       polling.invalidateResponses();
       checks.invalidate();
       polling.cancelScheduledCheck();

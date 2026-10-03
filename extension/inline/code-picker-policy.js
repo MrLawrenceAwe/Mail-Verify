@@ -1,5 +1,5 @@
 import { createMutationInspection } from "./mutation-inspection.js";
-import { getRequestControlLabel } from "../shared/step-text.js";
+import { getRequestControlLabel } from "../shared/request-controls.js";
 import { isFreshMessage } from "../shared/mail-timing.js";
 
 export function calculatePickerPosition(rect, width, height, viewportWidth, viewportHeight) {
