@@ -30,19 +30,20 @@ export function messageKey(item) {
   return `${item.accountEmail.toLowerCase()}:${item.uid}`;
 }
 
-export function mutationAffectsPicker(records, host, contextRoots = [], stepRoots = [], stepParent) {
+export function mutationAffectsPicker(records, host, contextRoots = [], stepRoots = [], stepParent, labelRoots = []) {
   const { consumeNodeBudget, textNeedsRescan, subtreeNeedsRescan, shouldInspectRecord } = createMutationInspection(
     (value) => /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value),
   );
   return records.some((record) => {
     const target = record.target;
     if (!shouldInspectRecord(record, host)) return false;
+    if (labelRoots.some((root) => root === target || root.contains?.(target))) return true;
     if (record.type === "childList" && target === stepParent) return true;
     if (stepRoots.some((root) => root.contains?.(target)) &&
         (record.type === "characterData" || record.type === "childList")) return true;
-    if (record.type === "attributes")
-      return target?.matches?.("input, label") || subtreeNeedsRescan(target, "input");
     const inContext = contextRoots.some((root) => root.contains?.(target));
+    if (record.type === "attributes")
+      return record.attributeName === "id" || target?.matches?.("input, label") || subtreeNeedsRescan(target, "input");
     if (record.type === "characterData") {
       if (inContext && (!consumeNodeBudget() ||
           textNeedsRescan(target.textContent || "") || textNeedsRescan(record.oldValue || ""))) return true;

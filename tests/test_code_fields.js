@@ -49,10 +49,10 @@ class FakeInput {
     this.focused = true;
   }
 }
-function run(inputs, activeElement = null, expectedAnchor = null) {
+function run(inputs, activeElement = null, expectedAnchor = null, labelElements = new Map()) {
   const ctx = {
     expectedAnchor,
-    document: { querySelectorAll: () => inputs, activeElement },
+    document: { querySelectorAll: () => inputs, activeElement, getElementById: id => labelElements.get(id) },
     HTMLInputElement: FakeInput,
     innerHeight: 800,
     innerWidth: 1200,
@@ -460,4 +460,28 @@ test("cached detection returns current step roots for explicit code fields", () 
   form.previousElementSibling = replacement;
   const next = vm.runInContext('detect({ action: "detect", candidateCache: field.candidateCache })', context);
   assert.deepEqual(Array.from(next.stepContext.roots), [form, replacement]);
+});
+
+test("detects and fills fields named by multiple aria-labelledby references", () => {
+  const labels = new Map([
+    ["purpose", { textContent: "Verification" }],
+    ["field", { textContent: "code" }],
+  ]);
+  const input = new FakeInput();
+  input.getAttribute = name => name === "aria-labelledby" ? "missing purpose field" : null;
+  const context = vm.createContext({
+    document: { querySelectorAll: () => [input], activeElement: input, getElementById: id => labels.get(id) },
+    innerHeight: 800, innerWidth: 1200,
+  });
+  const detect = vm.runInContext(`(${handleCodeField.toString()})`, context);
+  // The accessible name joins references in their specified order.
+  assert.equal(detect({ action: "detect" }).ok, true);
+  assert.equal(run([input], input, input, labels).ok, true);
+  assert.equal(input.value, "123456");
+  assert.deepEqual(Array.from(detect({ action: "detect" }).candidateCache.labelRoots), [...labels.values()]);
+  labels.get("purpose").textContent = "Product";
+  assert.equal(detect({ action: "detect" }).ok, false);
+  input.value = "";
+  assert.equal(run([input], input, input, labels).ok, false);
+  assert.equal(input.value, "");
 });

@@ -50,6 +50,16 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
   };
   const detectOrFill = (request) => {
     const result = handleField(request);
+    for (const root of result.stepContext?.roots || []) {
+      // Model text nodes so production traversal never needs a mock-only fallback.
+      if (Object.hasOwn(root, "textContent") && !Object.hasOwn(root, "nodeType")) {
+        root.nodeType = 1;
+        root.tagName = "FORM";
+        Object.defineProperty(root, "firstChild", { get: () => ({
+          nodeType: 3, data: root.textContent, parentNode: root,
+        }) });
+      }
+    }
     return request.action === "detect"
       ? { stepContext: { roots: [], parent: undefined }, ...result }
       : result;
@@ -681,4 +691,61 @@ test("failed fills retain specific field guidance and use a fallback when absent
     assert.equal(elements["#status"].textContent, error || "Select the code field and try again.");
     assert.equal(results.childElementCount, 1);
   }
+});
+
+test("incidental form messages retain codes through discovery, retry and selection", async () => {
+  let observer, fills = 0;
+  const form = { textContent: "Enter your verification code", contains: () => true };
+  const anchor = {};
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
+  const { timers, results, elements } = pickerBrowser({
+    handleField: ({ action }) => {
+      if (action === "fill") { fills++; return { ok: true }; }
+      return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 }, stepContext: { roots: [form] } };
+    },
+    now: () => 10000,
+    check: async () => ({ ok: true, codes: [code] }),
+    onObserve: callback => { observer = callback; },
+  });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  const button = results.children[0];
+  for (const status of ["Caps lock is on", "Please enter all six digits", "Code field focused"]) {
+    form.textContent = `Enter your verification code ${status}`;
+    observer([{ type: "characterData", target: {} }]);
+    await timers.runWithDelay(150);
+    await settle();
+    assert.equal(results.children[0], button);
+  }
+  elements["#retry"].onclick();
+  await settle();
+  assert.equal(results.children[0], button);
+  button.onclick();
+  assert.equal(fills, 1);
+});
+
+test("an oversized step keeps the last known recipient and remains selectable", async () => {
+  let observer, fills = 0;
+  const form = { textContent: "We sent a code to alice@example.test", contains: () => true };
+  const anchor = {};
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
+  const { timers, results } = pickerBrowser({
+    handleField: ({ action }) => {
+      if (action === "fill") { fills++; return { ok: true }; }
+      return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20 }, stepContext: { roots: [form] } };
+    },
+    now: () => 10000, check: async () => ({ ok: true, codes: [code] }),
+    onObserve: callback => { observer = callback; },
+  });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  const button = results.children[0];
+  for (const text of ["x".repeat(5_000_000), "We sent a code to alice@example.test"]) {
+    form.textContent = text;
+    observer([{ type: "characterData", target: {} }]);
+    await timers.runWithDelay(150); await settle();
+    assert.equal(results.children[0], button);
+  }
+  button.onclick();
+  assert.equal(fills, 1);
 });

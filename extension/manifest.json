@@ -43,6 +43,7 @@
         "inline/mutation-inspection.js",
         "inline/page-coordinator.js",
         "shared/code-fields.js",
+        "shared/code-step-context.js",
         "shared/email-link-details.js",
         "shared/email-link-url.js",
         "shared/mail-presentation.js",

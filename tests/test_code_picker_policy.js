@@ -139,3 +139,13 @@ test("picker bounded traversal preserves nested fields and split context prompts
   span.matches = selector => selector.includes("input");
   assert.equal(mutationAffectsPicker([record]), true);
 });
+
+test("referenced accessible labels invalidate detection for any text change", () => {
+  const text = { nodeType: 3, textContent: "Username" };
+  const root = { contains: node => node === text };
+  for (const record of [
+    { type: "characterData", target: text, oldValue: "OTP" },
+    { type: "childList", target: root, addedNodes: [], removedNodes: [] },
+    { type: "attributes", attributeName: "id", target: root },
+  ]) assert.equal(mutationAffectsPicker([record], null, [], [], undefined, [root]), true);
+});
