@@ -253,6 +253,35 @@ test("fills only the selected independent numeric verification field", () => {
   }
 });
 
+test("keeps a full numeric code field separate from a split group in the same form", () => {
+  for (const digitCount of [5, 6]) {
+    const form = {};
+    const parentElement = { parentElement: form };
+    const digits = Array.from({ length: digitCount }, (_, index) => new FakeInput({
+      type: "number", form, parentElement,
+      name: index === 0 ? "verification_code" : "",
+    }));
+    const phone = new FakeInput({
+      type: "number", name: "security_code", form,
+      parentElement: { parentElement: form },
+    });
+    const handle = detectWith([...digits, phone], phone);
+    const selected = handle({ action: "detect" });
+    assert.equal(selected.anchor, phone);
+    for (const expectedAnchor of [undefined, selected.anchor]) {
+      phone.value = "";
+      assert.equal(handle({ action: "fill", code: "123456", expectedAnchor }).ok, true);
+      assert.equal(phone.value, "123456");
+      assert.equal(digits.every(input => input.value === undefined), true);
+    }
+    const splitHandle = detectWith([...digits, phone], digits[1]);
+    assert.equal(splitHandle({ action: "detect" }).anchor, digits[0]);
+    assert.equal(splitHandle({ action: "fill", code: "654321" }).ok, digitCount === 6);
+    assert.equal(phone.value, "123456");
+    assert.equal(digits.map(input => input.value || "").join(""), digitCount === 6 ? "654321" : "");
+  }
+});
+
 test("does not spread a code across unrelated numeric fields in the same form", () => {
   const form = {};
   const inputs = [
