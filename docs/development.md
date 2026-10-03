@@ -97,7 +97,7 @@ On-page results must have arrived since the verification step began, allowing fi
 
 ## Page detection and performance
 
-Scroll and resize reuse cached field candidates and position the picker on the next animation frame. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
+Scroll and resize reuse cached field candidates and position the picker on the next animation frame. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Supported split-digit groups use a stable labelled anchor so moving focus between digits preserves suggestions; selecting a separate group starts a new attempt. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
 
 | Inspection | Node budget | Text budget | Exhaustion behaviour |
 | --- | --- | --- | --- |
