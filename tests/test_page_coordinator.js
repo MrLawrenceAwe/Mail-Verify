@@ -43,6 +43,7 @@ test("page interfaces share one observer, navigation listener and code-field cac
   assert.equal(observers, 1);
   assert.ok(observationOptions.attributeFilter.includes("aria-labelledby"));
   assert.ok(observationOptions.attributeFilter.includes("aria-hidden"));
+  assert.ok(observationOptions.attributeFilter.includes("open"));
 });
 
 

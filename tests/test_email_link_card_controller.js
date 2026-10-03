@@ -10,11 +10,11 @@ const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const stepMutation = () => [{ type: "characterData", target: { nodeType: 3, textContent: "Check your email" } }];
 
-function setup(panel = null, mailType = "confirmationLinks") {
+function setup(panel = null, mailType = "confirmationLinks", modal = null) {
   const timers = createTimerQueue(), events = {}, windowEvents = {};
   const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, collectionModes: [], stepReads: 0, views: [], respond: async () => ({ ok: true, [mailType]: [item], scanPending: false }) };
   state.mailType = mailType;
-  const document = { hidden: false, documentElement: { append() {} }, querySelector: () => ({}), addEventListener(name, fn) { events[name] = fn; } };
+  const document = { hidden: false, documentElement: { append() {} }, querySelector: selector => selector === 'dialog:modal' ? modal : ({}), addEventListener(name, fn) { events[name] = fn; } };
   const location = { href: "https://example.com/verify" };
   startEmailLinkCard({
     browser: { navigator: { clipboard: { async writeText(value) { state.copied = value; } } }, document, location, window: { addEventListener(name, fn) { windowEvents[name] = fn; } },
@@ -26,7 +26,9 @@ function setup(panel = null, mailType = "confirmationLinks") {
       ? (state.panel ? detectEmailLinkStep({ querySelectorAll: () => [state.panel] }) : { key: state.screenKey, mailType: state.mailType })
       : null; }, detectCode: () => state.code,
     createView(_document, callbacks) {
-      const view = { callbacks, removed: false, links: [], host: { remove() { view.removed = true; }, contains() { return false; } },
+      const view = { callbacks, removed: false, links: [], host: { style: {},
+        hasAttribute: () => false, setAttribute() {}, showPopover() {},
+        remove() { view.removed = true; }, contains() { return false; } },
         setStatus(text) { view.status = text; }, renderLinks(items) { view.links = items; } };
       state.views.push(view); return view;
     },
@@ -125,6 +127,39 @@ test("countdown completion retains confirmation and reset links and the deadline
       assert.deepEqual(f.state.views.at(-1).links, [item], "retry retains the current link");
     }
   }
+});
+
+test("incidental panel status preserves links, selection, dismissal and the polling deadline", async () => {
+  for (const mailType of ['confirmationLinks', 'passwordResetLinks']) {
+    const prompt = mailType === 'passwordResetLinks' ? 'Password reset. Check your email.' : 'Check your email.';
+    const panel = { innerText: `${prompt} We sent a link to me@yahoo.com.`,
+      getClientRects: () => [{}], checkVisibility: () => true };
+    const f = setup(panel, mailType); await settle();
+    const view = f.state.views[0];
+    f.state.now = 20000;
+    panel.innerText += '\nConnection restored.';
+    f.state.mutate(stepMutation()); await f.run(250);
+    assert.equal(f.state.views.length, 1);
+    assert.deepEqual(view.links, [item]);
+    assert.equal(f.state.requests, 1);
+    f.state.now = 130000;
+    await f.run(8000);
+    assert.equal(f.state.requests, 1);
+    assert.match(view.status, /Checking finished/);
+    assert.equal(view.callbacks.onSelectLink(item), true);
+    view.callbacks.onClose();
+    panel.innerText += '\nStatus updated.';
+    f.state.mutate(stepMutation()); await f.run(250);
+    assert.equal(f.state.views.length, 1);
+  }
+});
+
+test("modal link cards mount in the active dialog rather than the inert document", async () => {
+  let mounted;
+  const modal = { append(host) { mounted = host; } };
+  const f = setup(null, 'passwordResetLinks', modal); await settle();
+  assert.equal(mounted, f.state.views[0].host);
+  assert.deepEqual(f.state.views[0].links, [item]);
 });
 
 test("unrelated mutations do not schedule a confirmation scan", async () => {

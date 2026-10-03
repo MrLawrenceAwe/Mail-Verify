@@ -42,6 +42,7 @@
         "inline/inline-client.js",
         "inline/mutation-inspection.js",
         "inline/page-coordinator.js",
+        "inline/suggestion-mount.js",
         "shared/code-fields.js",
         "shared/code-step-context.js",
         "shared/email-link-details.js",

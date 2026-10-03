@@ -36,6 +36,8 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
           querySelector: selector => selector === "small" ? small : strong,
           addEventListener() {},
           setAttribute() {},
+          hasAttribute: () => false,
+          showPopover() {},
         };
       },
     },
@@ -68,6 +70,20 @@ function pickerBrowser({ handleField, now = Date.now, check, onMount = () => {},
   startCodePicker({ browser, handleField: detectOrFill });
   return { browser, events, timers, results, elements };
 }
+
+test("code suggestions mount beside their field inside a modal dialog", async () => {
+  let mounted;
+  const modal = { append(host) { mounted = host; } };
+  const anchor = { closest: selector => selector === 'dialog:modal' ? modal : null };
+  const f = pickerBrowser({ handleField: () => ({ ok: true, anchor,
+    rect: { top:100, bottom:130, left:20, right:200 } }),
+    check: async () => ({ ok: true, codes: [] }),
+    onMount: () => assert.fail('must not mount in the inert background'),
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(mounted.dataset.mailVerify, 'suggestion');
+  assert.match(f.elements['#status'].textContent, /Waiting/);
+});
 
 
 test("focus moves within split digits preserve suggestions, but another group starts a new attempt", async () => {

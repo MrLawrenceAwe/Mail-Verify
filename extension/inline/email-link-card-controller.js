@@ -9,6 +9,7 @@ import { initialStepCutoff, resendCutoff, DEFAULT_SCAN_INTERVAL_MS } from "../sh
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
+import { mountSuggestion } from "./suggestion-mount.js";
 
 export function startEmailLinkCard({ browser = globalThis, detectStep = detectEmailLinkStep,
   page = getPageCoordinator(browser), detectCode = () => page.detectCodeField().ok, createView = createEmailLinkCardView } = {}) {
@@ -127,7 +128,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
         return true;
       },
     });
-    document.documentElement.append(view.host);
+    mountSuggestion(document, view.host);
     view.setStatus(MAIL_PRESENTATION[mailType].waitingStatus);
     checkForLinks();
   }

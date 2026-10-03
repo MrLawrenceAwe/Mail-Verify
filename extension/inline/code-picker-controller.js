@@ -8,6 +8,7 @@ import { initialStepCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTER
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
+import { mountSuggestion, suggestionMountRoot } from "./suggestion-mount.js";
 
 export function startCodePicker({ browser = globalThis, handleField = handleCodeField, page = getPageCoordinator(browser, handleField) } = {}) {
   const { document, window, location, chrome, requestAnimationFrame,
@@ -44,6 +45,9 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
   }
   function positionPicker(field = detectCodeField()) {
     if (!view || !field.ok) return;
+    const mountRoot = suggestionMountRoot(document, field.anchor);
+    if (view.host.parentNode && view.host.parentNode !== mountRoot)
+      mountSuggestion(document, view.host, field.anchor);
     const bounds = view.host.getBoundingClientRect();
     const { left, top } = calculatePickerPosition(field.rect, bounds.width, bounds.height, browser.innerWidth, browser.innerHeight);
     view.host.style.left = `${left}px`;
@@ -79,7 +83,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       },
     });
     view = mountedView;
-    document.documentElement.append(view.host);
+    mountSuggestion(document, view.host, field.anchor);
     restartPolling();
     positionPicker(field);
   }

@@ -74,6 +74,28 @@ test("countdown changes keep the same confirmation step", () => {
   assert.deepEqual(detectEmailLinkStep(document), first);
 });
 
+test("status messages and unrelated contact addresses retain the email request identity", () => {
+  for (const prompt of ["Check your email", "Reset your password. Check your email"]) {
+    const panel = { innerText: `${prompt}\nWe sent a link to preview@yahoo.com.`,
+      getClientRects: () => [{}], checkVisibility: () => true };
+    const document = { querySelectorAll: () => [panel] };
+    const first = detectEmailLinkStep(document);
+    panel.innerText += '\nConnection restored.\nContact support@example.test for help. Email help@example.test.';
+    assert.deepEqual(detectEmailLinkStep(document), first);
+    panel.innerText = panel.innerText.replace('preview@yahoo.com', 'another@yahoo.com');
+    assert.notEqual(detectEmailLinkStep(document).key, first.key);
+  }
+});
+
+test("an active native modal takes precedence over background waiting panels", () => {
+  const modal = { innerText: 'Password reset. Check your email.',
+    getClientRects: () => [{}], checkVisibility: () => true };
+  const background = { innerText: 'Check your email',
+    getClientRects: () => [{}], checkVisibility: () => true };
+  assert.equal(detectEmailLinkStep({ querySelector: () => modal,
+    querySelectorAll: () => [background] }).mailType, 'passwordResetLinks');
+});
+
 test("detects reset email waiting screens while excluding request and new-password forms", () => {
   for (const text of ["Reset your password. Check your inbox", "Password reset link sent to your email", "We sent a link to reset your password", "Follow the link in your email to change your password"])
     assert.equal(matchesPasswordResetWaitingPrompt(text), true, text);
