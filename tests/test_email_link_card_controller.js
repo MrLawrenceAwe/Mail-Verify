@@ -133,7 +133,7 @@ test("renders matching mail, validates open and remains dismissed", async () => 
   const f = setup(); await settle();
   const view = f.state.views[0];
   assert.deepEqual(view.links, [item]);
-  assert.equal(view.callbacks.validateAndPrepareSelection(item), true);
+  assert.equal(view.callbacks.onSelectLink(item), true);
   assert.equal(view.removed, true);
   f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(f.state.views.length, 1);
@@ -148,7 +148,7 @@ test("a failed inbox check removes previously offered links", async () => {
   await f.run(8000);
   assert.deepEqual(view.links, []);
   assert.match(view.status, /Connect Yahoo Mail first/);
-  assert.equal(view.callbacks.validateAndPrepareSelection(item), false);
+  assert.equal(view.callbacks.onSelectLink(item), false);
 });
 
 test("hides when tab is hidden and does not reset the polling deadline", async () => {
@@ -183,7 +183,7 @@ test("resend clears old links and expiry prevents opening", async () => {
   await settle();
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now += 700000;
-  assert.equal(f.state.views.at(-1).callbacks.validateAndPrepareSelection(item), false);
+  assert.equal(f.state.views.at(-1).callbacks.onSelectLink(item), false);
 });
 
 test("input-button resends invalidate old confirmation and reset links", async () => {
@@ -201,7 +201,7 @@ test("input-button resends invalidate old confirmation and reset links", async (
     await settle();
     assert.equal(oldView.removed, true);
     assert.deepEqual(f.state.views.at(-1).links, []);
-    assert.equal(oldView.callbacks.validateAndPrepareSelection(item), false);
+    assert.equal(oldView.callbacks.onSelectLink(item), false);
     f.state.now = 12000;
     const newer = { ...item, uid: 2, receivedAt: 12000 };
     f.state.respond = async () => ({ ok: true, [mailType]: [item, newer] });
@@ -219,7 +219,7 @@ test("a text update after resend cannot restore an earlier link", async () => {
   f.state.screenKey = "Confirmation email sent again";
   f.state.mutate(stepMutation()); await f.run(250);
   assert.deepEqual(f.state.views.at(-1).links, []);
-  assert.equal(f.state.views.at(-1).callbacks.validateAndPrepareSelection(item), false);
+  assert.equal(f.state.views.at(-1).callbacks.onSelectLink(item), false);
 });
 
 test("a send confirmation control clears old links on the same screen", async () => {
@@ -227,7 +227,7 @@ test("a send confirmation control clears old links on the same screen", async ()
   f.events.click({ target: { closest: () => ({ textContent: "Send confirmation email", getAttribute: () => "" }) } });
   await settle();
   assert.deepEqual(f.state.views.at(-1).links, []);
-  assert.equal(f.state.views[0].callbacks.validateAndPrepareSelection(item), false);
+  assert.equal(f.state.views[0].callbacks.onSelectLink(item), false);
 });
 
 test("a new confirmation step on the same URL clears links from the previous step", async () => {
@@ -238,7 +238,7 @@ test("a new confirmation step on the same URL clears links from the previous ste
   f.state.screenKey = "second signup";
   f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(oldView.removed, true);
-  assert.equal(oldView.callbacks.validateAndPrepareSelection(item), false);
+  assert.equal(oldView.callbacks.onSelectLink(item), false);
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now = 21_000;
   f.state.respond = async () => ({ ok: true, confirmationLinks: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
@@ -255,7 +255,7 @@ test("a confirmation step change excludes a link received moments before it", as
   f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(oldView.removed, true);
   assert.deepEqual(f.state.views.at(-1).links, []);
-  assert.equal(f.state.views.at(-1).callbacks.validateAndPrepareSelection(item), false);
+  assert.equal(f.state.views.at(-1).callbacks.onSelectLink(item), false);
 });
 
 test("a reused confirmation panel resets links when its signup changes", async () => {
@@ -267,7 +267,7 @@ test("a reused confirmation panel resets links when its signup changes", async (
   panel.innerText = "Check your email for bob@example.test";
   f.state.mutate(stepMutation()); await f.run(250);
   assert.equal(oldView.removed, true);
-  assert.equal(oldView.callbacks.validateAndPrepareSelection(item), false);
+  assert.equal(oldView.callbacks.onSelectLink(item), false);
   assert.deepEqual(f.state.views.at(-1).links, []);
   f.state.now = 21_000;
   f.state.respond = async () => ({ ok: true, confirmationLinks: [item, { ...item, uid: 2, receivedAt: 21_000 }] });
@@ -319,14 +319,14 @@ test("reset card requests reset mail, copies on selection, and clears results on
   assert.equal(view.callbacks.mailType, "passwordResetLinks");
   assert.deepEqual(view.links, [item]);
   assert.equal(f.state.copied, undefined);
-  assert.equal(view.callbacks.validateAndPrepareSelection(item), true);
+  assert.equal(view.callbacks.onSelectLink(item), true);
   await view.callbacks.copyLink(item);
   assert.equal(f.state.copied, item.url);
   assert.equal(view.removed, false);
   f.events.click({ target: { closest: () => ({ textContent: "Send password reset link" }) } });
   await settle();
   assert.deepEqual(f.state.views.at(-1).links, []);
-  assert.equal(f.state.views.at(-1).callbacks.validateAndPrepareSelection(item), false);
+  assert.equal(f.state.views.at(-1).callbacks.onSelectLink(item), false);
 });
 
 test("an unrelated forgot-password prompt cannot override explicit confirmation instructions", async () => {

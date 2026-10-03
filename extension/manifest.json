@@ -33,8 +33,10 @@
     {
       "resources": [
         "inline/code-picker-controller.js",
+        "inline/code-picker-policy.js",
         "inline/code-picker-view.js",
         "inline/email-link-card-controller.js",
+        "inline/email-link-card-policy.js",
         "inline/email-link-card-view.js",
         "inline/email-link-step.js",
         "inline/inline-client.js",

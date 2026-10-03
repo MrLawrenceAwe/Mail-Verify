@@ -1,7 +1,9 @@
 import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
 import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
-export function createEmailLinkCardView(document, { onClose, onRetry, validateAndPrepareSelection, copyLink, mailType }) {
+// onSelectLink returns true to accept a selection; false prevents its action.
+// Acceptance may dismiss the card and cancel checks before a confirmation link opens.
+export function createEmailLinkCardView(document, { onClose, onRetry, onSelectLink, copyLink, mailType }) {
   const isPasswordReset = mailType === "passwordResetLinks";
   const { resultLabel, actionLabel, guidance, copyAgainLabel, copySuccessStatus } = MAIL_PRESENTATION[mailType];
   const title = `Mail Verify ${resultLabel}`;
@@ -38,7 +40,7 @@ export function createEmailLinkCardView(document, { onClose, onRetry, validateAn
         actionElement.textContent = actionLabel;
         if (isPasswordReset) {
           actionElement.addEventListener("click", async () => {
-            if (actionElement.disabled || !validateAndPrepareSelection(item)) return;
+            if (actionElement.disabled || !onSelectLink(item)) return;
             actionElement.disabled = true;
             try {
               await copyLink(item);
@@ -54,8 +56,8 @@ export function createEmailLinkCardView(document, { onClose, onRetry, validateAn
           actionElement.href = item.url;
           actionElement.target = "_blank";
           actionElement.rel = "noopener noreferrer";
-          actionElement.addEventListener("click", (event) => { if (!validateAndPrepareSelection(item)) event.preventDefault(); });
-          actionElement.addEventListener("auxclick", (event) => { if (!validateAndPrepareSelection(item)) event.preventDefault(); });
+          actionElement.addEventListener("click", (event) => { if (!onSelectLink(item)) event.preventDefault(); });
+          actionElement.addEventListener("auxclick", (event) => { if (!onSelectLink(item)) event.preventDefault(); });
         }
         card.append(actionElement);
         results.append(card);

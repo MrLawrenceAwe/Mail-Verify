@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isEmailLinkRequestControl, mutationAffectsEmailLinkCard, selectEmailLinks } from "../extension/inline/email-link-card-controller.js";
+import { isEmailLinkRequestControl, mutationAffectsEmailLinkCard, selectEmailLinks } from "../extension/inline/email-link-card-policy.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
 

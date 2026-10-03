@@ -16,7 +16,7 @@ function setup(mailType, callbacks = {}) {
     node.attachShadow = () => root;
     return node;
   } };
-  const view = createEmailLinkCardView(document, { mailType, validateAndPrepareSelection: () => true, ...callbacks });
+  const view = createEmailLinkCardView(document, { mailType, onSelectLink: () => true, ...callbacks });
   const item = { accountEmail: "me@yahoo.com", sender: "sender@example.com", subject: "Your email", url: "https://example.com/action" };
   view.renderLinks([item]);
   const card = controls["#results"].children[0];
@@ -46,7 +46,7 @@ test("reset-card action copies only an approved selection and reports success", 
   let approved = false;
   const copied = [];
   const { action, item, controls } = setup("passwordResetLinks", {
-    validateAndPrepareSelection: () => approved,
+    onSelectLink: () => approved,
     copyLink: async item => copied.push(item.url),
   });
   await action.listeners.click();

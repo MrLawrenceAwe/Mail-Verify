@@ -157,7 +157,7 @@ export function createPopupController({
         view.setStatus(
           response.warnings?.length
             ? `Some accounts could not be checked: ${response.warnings.join("; ")}`
-            : results.length ? (MAIL_PRESENTATION[mailType].popupFoundStatus || MAIL_PRESENTATION[mailType].foundStatus)
+            : results.length ? MAIL_PRESENTATION[mailType].popupFoundStatus
               : scanSchedule.pending ? "Checking your connected inboxes…" : MAIL_PRESENTATION[mailType].popupEmptyStatus,
         );
       }
@@ -197,7 +197,7 @@ export function createPopupController({
   async function addAccount() {
     if (addingAccount || removingAccount) return;
     addingAccount = true;
-    view.setAddAccountDisabled(true);
+    view.setAccountSubmitDisabled(true);
     view.setCheckAndRemoveButtonsDisabled(true);
     view.setStatus("Checking your Yahoo connection…");
     const { email, password } = view.readCredentialsAndClearPassword();
@@ -213,7 +213,7 @@ export function createPopupController({
       view.setStatus(error.message, true);
     } finally {
       addingAccount = false;
-      view.setAddAccountDisabled(false);
+      view.setAccountSubmitDisabled(false);
       view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount);
     }
   }
@@ -245,7 +245,7 @@ export function createPopupController({
     if (tab?.url?.startsWith("https://")) targetTab = tab;
     view.setDestination(targetTab
       ? new URL(targetTab.url).hostname
-      : "an HTTPS sign-in page");
+      : "an HTTPS page with a verification-code field");
     try {
       const result = await sendSessionRequest("status");
       if (result.accountEmails?.length) applyConnectedAccounts(result.accountEmails);

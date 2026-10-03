@@ -2,7 +2,7 @@
 
 import email
 from email import policy
-from email_content import VisibleEmailHTMLParser, iter_text_parts, message_headers
+from email_content import VisibleEmailHTMLParser, iter_text_parts, extract_message_metadata
 import re
 
 # Reject the first group of a longer, formatted number rather than showing
@@ -62,7 +62,7 @@ def extract_code_details(raw_message):
                 EmailHTMLTextParser.INLINE_BREAK, " "
             )
         texts.append(value)
-    subject, headers = message_headers(message)
+    subject, display_metadata = extract_message_metadata(message)
     codes = set()
     # Keep subject and body separate: a subject such as "Sign in" must not
     # turn an unrelated order number in the body into a verification code.
@@ -82,4 +82,4 @@ def extract_code_details(raw_message):
     # Ambiguous messages are deliberately omitted instead of guessing.
     if len(codes) != 1:
         return None
-    return {"code": codes.pop(), **headers}
+    return {"code": codes.pop(), **display_metadata}

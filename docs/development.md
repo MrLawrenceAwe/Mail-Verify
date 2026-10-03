@@ -40,9 +40,10 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `content-entry.js` | Starts the code picker and email-link card with one page coordinator. |
 | `inline/page-coordinator.js` | Shares code-field candidates, DOM observation, and page-change notifications. |
 | `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control and render code suggestions beside a detected field. |
+| `inline/code-picker-policy.js`, `inline/email-link-card-policy.js` | Filter suggestions and classify request controls and mutations; code policy also positions the picker. |
 | `inline/email-link-step.js` | Detect confirmation/reset waiting prompts and return a step identity and mail type. |
 | `inline/email-link-card-controller.js`, `inline/email-link-card-view.js` | Control and render the link card. |
-| `inline/mutation-inspection.js` | Share bounded mutation traversal and attribute-target deduplication; controllers supply relevance rules. |
+| `inline/mutation-inspection.js` | Share bounded mutation traversal and attribute-target deduplication; picker and link policies supply relevance rules. |
 | `popup-entry.js`, `popup/popup-controller.js`, `popup/popup-view.js` | Start the toolbar popup, manage accounts and polling, and render controls and results. |
 | `shared/email-link-details.js`, `shared/mail-presentation.js`, `shared/reset-link-copy.js` | Share link-detail rows, mail-type-specific labels and guidance, and reset-link clipboard handling. |
 | `inline/inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight scans per mail type. |
@@ -90,7 +91,7 @@ On-page results must have arrived since the verification step began, allowing fi
 
 ## Page detection and performance
 
-Scroll and resize reuse cached field candidates and position the picker on the next animation frame. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible.
+Scroll and resize reuse cached field candidates and position the picker on the next animation frame. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
 
 | Inspection | Node budget | Text budget | Exhaustion behaviour |
 | --- | --- | --- | --- |
