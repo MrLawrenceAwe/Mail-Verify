@@ -117,19 +117,30 @@ export function handleCodeField({ action, code, candidateCache, expectedAnchor, 
     !hint || /^(?:(?:enter )?(?:digit|character|box|cell|otp|pin|code)[\s_-]*\d*|\d)$/i.test(hint.trim()));
   const findDigitGroup = (anchor, digitInputs, length) => {
     const matchesGroup = (group) =>
-      (length === undefined ? group.length >= 4 && group.length <= 8 : group.length === length) &&
+      group.length >= 4 && group.length <= 8 &&
       group.some(hasCodeHint) && group.every(isCodeDigit);
-    for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
-      const group = digitInputs.filter((input) =>
-        input.form === anchor.form && isInside(input, parent));
-      if (matchesGroup(group)) return group;
-    }
-    // A form can own inputs placed outside its DOM subtree via the form attribute.
-    if (anchor.form) {
-      const group = digitInputs.filter((input) => input.form === anchor.form);
-      if (matchesGroup(group)) return group;
-    }
-    return null;
+    const groupsByParent = new Map();
+    const formGroup = digitInputs.filter((input) => input.form === anchor.form);
+    const smallestGroup = (input) => {
+      for (let parent = input.parentElement; parent; parent = parent.parentElement) {
+        if (!groupsByParent.has(parent)) {
+          const group = formGroup.filter((digit) => isInside(digit, parent));
+          groupsByParent.set(parent, matchesGroup(group) ? group : null);
+        }
+        const group = groupsByParent.get(parent);
+        if (group) return group;
+      }
+      // A form can own inputs outside its DOM subtree via the form attribute.
+      return anchor.form && matchesGroup(formGroup) ? formGroup : null;
+    };
+    const group = smallestGroup(anchor);
+    if (!group || (length !== undefined && group.length !== length)) return null;
+    // Do not combine a nested OTP group with a separate full-code field or
+    // another group. Establish boundaries before checking the code length.
+    return group.every((input) => {
+      const ownGroup = smallestGroup(input);
+      return ownGroup?.length === group.length && ownGroup.every((digit, index) => digit === group[index]);
+    }) ? group : null;
   };
   const focused = document.activeElement;
   const scope = document.querySelector?.('dialog:modal') || document;

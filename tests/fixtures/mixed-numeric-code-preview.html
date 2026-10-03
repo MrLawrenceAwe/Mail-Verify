@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mail Verify mixed numeric fields preview</title>
+<style>
+  body { font:18px system-ui; margin:40px; }
+  input { font:inherit; padding:8px; }
+  .digits input { width:30px; }
+</style>
+<form>
+  <h1>Verify email and phone</h1>
+  <p>We sent a security code to your email.</p>
+  <div class="digits">
+    Email verification code<br>
+    <input type="number" aria-label="Email verification code">
+    <input type="number"><input type="number"><input type="number">
+    <input type="number"><input type="number">
+  </div>
+  <p><label>Phone verification code <input type="number" autocomplete="one-time-code"></label></p>
+</form>
+<button id="testEmail">Test split email fields</button>
+<p id="feedback" aria-live="polite"></p>
+<script type="module">
+  import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
+  import { inlineRuntime } from '../mock_inline_port.js';
+  const digits = [...document.querySelectorAll('.digits input')];
+  const phone = document.querySelector('input[autocomplete]');
+  const feedback = document.querySelector('#feedback');
+  let testingEmail = false;
+  window.chrome = { runtime:inlineRuntime(() => ({ ok:true, codes:[{
+    uid:testingEmail ? 2 : 1, accountEmail:'preview@yahoo.com', code:'331519', sender:'auth@example.test',
+    subject:'Your security code', receivedAt:Date.now(),
+  }], scanPending:false })) };
+  phone.addEventListener('input', () => {
+    feedback.textContent = !testingEmail && phone.value === '331519' && digits.every(input => input.value === '')
+      ? 'Phone code filled successfully; email digits unchanged.' : 'Unexpected field values.';
+  });
+  digits.at(-1).addEventListener('input', () => {
+    feedback.textContent = testingEmail && digits.map(input => input.value).join('') === '331519' && phone.value === '654321'
+      ? 'Email code filled successfully; phone code unchanged.' : 'Unexpected field values.';
+  });
+  document.querySelector('#testEmail').addEventListener('click', () => {
+    testingEmail = true;
+    phone.value = '654321';
+    digits.forEach(input => { input.value = ''; });
+    feedback.textContent = 'Select the suggestion for the email digits.';
+    digits[1].focus();
+  });
+  phone.focus();
+  startCodePicker();
+</script>
