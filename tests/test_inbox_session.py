@@ -115,7 +115,7 @@ class InboxSessionTests(unittest.TestCase):
             session = inbox_session.InboxSession({})
             self.assertEqual([x["code"] for x in session.scan_inbox()], ["100012"])
             self.assertEqual(connection.batches, [[b"12", b"11", b"10", b"9", b"8"]])
-            self.assertEqual(len(session.pending_body_timestamps), 7)
+            self.assertEqual(len(session.pending_body_timestamps_seconds), 7)
             connection.count = 13
             self.assertEqual([x["code"] for x in session.scan_inbox()], ["100013", "100012", "100006"])
             self.assertEqual(connection.batches[1], [b"13", b"7", b"6", b"5", b"4"])
@@ -123,9 +123,9 @@ class InboxSessionTests(unittest.TestCase):
             self.assertEqual(connection.batches[2], [b"3", b"2", b"1"])
             session.scan_inbox()
             self.assertEqual(len(connection.batches), 3)
-            session.pending_body_timestamps[99] = time.time()
+            session.pending_body_timestamps_seconds[99] = time.time()
             session.close()
-            self.assertEqual(session.pending_body_timestamps, {})
+            self.assertEqual(session.pending_body_timestamps_seconds, {})
 
     def test_expired_deferred_mail_is_not_downloaded(self):
         class FakeConnection:
@@ -137,9 +137,9 @@ class InboxSessionTests(unittest.TestCase):
         session = inbox_session.InboxSession({})
         session.connection = FakeConnection()
         session.discovery_cursor_uid = 10
-        session.pending_body_timestamps[9] = time.time() - 601
+        session.pending_body_timestamps_seconds[9] = time.time() - 601
         self.assertEqual(session.scan_inbox(), [])
-        self.assertEqual(session.pending_body_timestamps, {})
+        self.assertEqual(session.pending_body_timestamps_seconds, {})
 
     def test_initial_scan_is_bounded_to_newest_30_messages(self):
         class FakeConnection:
@@ -203,7 +203,7 @@ class InboxSessionTests(unittest.TestCase):
             [int(uid) for batch in connection.body_batches for uid in batch],
             list(range(30, 0, -1)),
         )
-        self.assertFalse(session.pending_body_timestamps)
+        self.assertFalse(session.pending_body_timestamps_seconds)
 
     def test_result_in_later_batch_defers_unfetched_bodies_without_redownloading(self):
         class FakeConnection:
@@ -224,13 +224,13 @@ class InboxSessionTests(unittest.TestCase):
         session = inbox_session.InboxSession({})
         connection = session.connection = FakeConnection()
         session.discovery_cursor_uid = 30
-        session.pending_body_timestamps = {
+        session.pending_body_timestamps_seconds = {
             uid: time.time() - 60 for uid in range(1, 31)
         }
 
         self.assertEqual([item["uid"] for item in session.scan_inbox()], [25, 24, 23, 22, 21])
         self.assertEqual(connection.body_batches, [[30, 29, 28, 27, 26], [25, 24, 23, 22, 21]])
-        self.assertEqual(set(session.pending_body_timestamps), set(range(1, 21)))
+        self.assertEqual(set(session.pending_body_timestamps_seconds), set(range(1, 21)))
 
         session.scan_inbox()
         self.assertEqual(connection.body_batches[-1], [20, 19, 18, 17, 16])
@@ -285,13 +285,13 @@ class InboxSessionTests(unittest.TestCase):
         session = inbox_session.InboxSession({})
         connection = session.connection = FakeConnection()
         session.discovery_cursor_uid = 10
-        session.pending_body_timestamps[9] = time.time() - 60
+        session.pending_body_timestamps_seconds[9] = time.time() - 60
 
         self.assertEqual(session.scan_inbox(), [])
-        self.assertIn(9, session.pending_body_timestamps)
+        self.assertIn(9, session.pending_body_timestamps_seconds)
         self.assertEqual(session.scan_inbox()[0]["code"], "482913")
         self.assertEqual(connection.body_fetches, 2)
-        self.assertNotIn(9, session.pending_body_timestamps)
+        self.assertNotIn(9, session.pending_body_timestamps_seconds)
 
     def test_missing_metadata_is_retried_after_discovery_cursor_uid_advances(self):
         now = time.time()
@@ -335,7 +335,7 @@ class InboxSessionTests(unittest.TestCase):
         session = inbox_session.InboxSession({})
         session.connection = FakeConnection()
         session.discovery_cursor_uid = 10
-        session.pending_body_timestamps[1] = now - 10
+        session.pending_body_timestamps_seconds[1] = now - 10
         session.items_by_uid = {
             uid: {"uid": uid, "code": str(uid), "receivedAt": int((now - 60) * 1000)}
             for uid in range(2, 7)
@@ -366,12 +366,12 @@ class InboxSessionTests(unittest.TestCase):
             }
             for uid in range(6, 11)
         }
-        session.pending_body_timestamps[5] = now - 7
+        session.pending_body_timestamps_seconds[5] = now - 7
 
         results = session.scan_inbox()
         self.assertEqual([item["uid"] for item in results], [10, 9, 8, 7, 6, 5])
         self.assertEqual(results[-1]["sender"], "other@example.com")
-        self.assertEqual(session.pending_body_timestamps, {})
+        self.assertEqual(session.pending_body_timestamps_seconds, {})
 
     def test_blocked_imap_read_uses_remaining_scan_deadline(self):
         client, server = socket.socketpair()

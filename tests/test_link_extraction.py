@@ -1,19 +1,12 @@
 """Confirmation and password-reset link extraction and URL rejection cases."""
 from email.message import EmailMessage
+from email_messages import make_raw_email
 from pathlib import Path
 import json
 import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 from link_extraction import extract_confirmation_link_details, extract_password_reset_link_details, is_supported_email_link_url
-
-def make_email(body, subtype="html", *, subject):
-    msg = EmailMessage()
-    msg["From"] = "Service <hello@example.com>"
-    msg["Subject"] = subject
-    msg.set_content(body, subtype=subtype)
-    return msg.as_bytes()
-
 
 class ConfirmationLinkExtractionTests(unittest.TestCase):
     def test_email_link_url_policy_matches_extension_cases(self):
@@ -24,22 +17,22 @@ class ConfirmationLinkExtractionTests(unittest.TestCase):
         self.assertFalse(is_supported_email_link_url("https://example.com/" + "a" * 4096))
 
     def test_button_and_footer(self):
-        result = extract_confirmation_link_details(make_email('<a href="https://example.com/confirm?a=1&amp;b=2"><b>Verify your email</b></a><a href="https://example.com/unsubscribe">Unsubscribe</a>', subject="Confirm your account"))
+        result = extract_confirmation_link_details(make_raw_email('<a href="https://example.com/confirm?a=1&amp;b=2"><b>Verify your email</b></a><a href="https://example.com/unsubscribe">Unsubscribe</a>', subject="Confirm your account", subtype="html", sender="Service <hello@example.com>"))
         self.assertEqual(result["url"], "https://example.com/confirm?a=1&b=2")
         self.assertEqual(result["sender"], "hello@example.com")
 
     def test_plain_text(self):
-        result = extract_confirmation_link_details(make_email('Confirm your account:\nhttps://example.com/activate?token=abc', 'plain', subject="Confirm your account"))
+        result = extract_confirmation_link_details(make_raw_email('Confirm your account:\nhttps://example.com/activate?token=abc', subject="Confirm your account", subtype='plain'))
         self.assertEqual(result["url"], 'https://example.com/activate?token=abc')
 
     def test_blank_lines_between_instruction_and_url(self):
         for separator in ("\n\n", "\r\n\r\n", "\n \t\n\n"):
             with self.subTest(separator=separator):
-                raw = make_email("Verify your email:" + separator + "https://example.com/verify?token=abc", "plain", subject="Confirm your account")
+                raw = make_raw_email("Verify your email:" + separator + "https://example.com/verify?token=abc", subject="Confirm your account", subtype="plain")
                 self.assertEqual(extract_confirmation_link_details(raw)["url"], "https://example.com/verify?token=abc")
 
     def test_unrelated_paragraph_cannot_inherit_confirmation_instruction(self):
-        raw = make_email("Verify your email using the dashboard button.\n\nPrivacy policy:\n\nhttps://example.com/privacy", "plain", subject="Confirm your account")
+        raw = make_raw_email("Verify your email using the dashboard button.\n\nPrivacy policy:\n\nhttps://example.com/privacy", subject="Confirm your account", subtype="plain")
         self.assertIsNone(extract_confirmation_link_details(raw))
 
     def test_plain_text_confirmation_does_not_label_a_later_unrelated_url(self):
@@ -47,7 +40,7 @@ class ConfirmationLinkExtractionTests(unittest.TestCase):
             "Confirm your account by using the button in your dashboard. "
             "For help, read https://example.com/help"
         )
-        self.assertIsNone(extract_confirmation_link_details(make_email(body, "plain", subject="Confirm your account")))
+        self.assertIsNone(extract_confirmation_link_details(make_raw_email(body, subject="Confirm your account", subtype="plain")))
 
     def test_html_and_plain_are_alternative_renderings(self):
         msg = EmailMessage()
@@ -75,8 +68,8 @@ class ConfirmationLinkExtractionTests(unittest.TestCase):
         visible = '<a href="https://example.com/new"><b>Confirm</b> your email</a>'
         for element in hidden:
             with self.subTest(element=element):
-                self.assertIsNone(extract_confirmation_link_details(make_email(element, subject="Confirm your account")))
-                self.assertEqual(extract_confirmation_link_details(make_email(element + visible, subject="Confirm your account"))["url"], "https://example.com/new")
+                self.assertIsNone(extract_confirmation_link_details(make_raw_email(element, subject="Confirm your account", subtype="html")))
+                self.assertEqual(extract_confirmation_link_details(make_raw_email(element + visible, subject="Confirm your account", subtype="html"))["url"], "https://example.com/new")
 
     def test_reject_ambiguous_unsafe_and_unrelated(self):
         for body in [
@@ -91,19 +84,19 @@ class ConfirmationLinkExtractionTests(unittest.TestCase):
             '<a href="https://example.com">Visit website</a>',
         ]:
             with self.subTest(body=body):
-                self.assertIsNone(extract_confirmation_link_details(make_email(body, subject="Confirm your account")))
+                self.assertIsNone(extract_confirmation_link_details(make_raw_email(body, subject="Confirm your account", subtype="html")))
 
     def test_duplicate_link_and_password_subject(self):
         body = '<a href="https://example.com/a">Confirm account</a>' * 2
-        self.assertIsNotNone(extract_confirmation_link_details(make_email(body, subject="Confirm your account")))
+        self.assertIsNotNone(extract_confirmation_link_details(make_raw_email(body, subject="Confirm your account", subtype="html")))
         for subject in ("Reset your password", "Password reset request"):
             with self.subTest(subject=subject):
-                self.assertIsNone(extract_confirmation_link_details(make_email(body, subject=subject)))
+                self.assertIsNone(extract_confirmation_link_details(make_raw_email(body, subject=subject, subtype="html")))
 
     def test_onboarding_subject_can_mention_setting_a_password(self):
         body = '<a href="https://example.com/a">Verify your email</a>'
         result = extract_confirmation_link_details(
-            make_email(body, subject="Verify your email and set your password")
+            make_raw_email(body, subject="Verify your email and set your password", subtype="html")
         )
         self.assertEqual(result["url"], "https://example.com/a")
 
@@ -115,7 +108,7 @@ class ConfirmationLinkExtractionTests(unittest.TestCase):
 
 
     def test_plain_confirmation_footer_does_not_inherit_the_instruction(self):
-        raw = make_email("Confirm your email: https://example.com/confirm?token=real\nPrivacy policy: https://example.com/privacy", "plain", subject="Confirm your account")
+        raw = make_raw_email("Confirm your email: https://example.com/confirm?token=real\nPrivacy policy: https://example.com/privacy", subject="Confirm your account", subtype="plain")
         self.assertEqual(extract_confirmation_link_details(raw)["url"], "https://example.com/confirm?token=real")
 
 
@@ -124,11 +117,11 @@ class PasswordResetExtractionTests(unittest.TestCase):
     def test_blank_lines_between_instruction_and_url(self):
         for separator in ("\n\n", "\r\n\r\n", "\n \t\n\n"):
             with self.subTest(separator=separator):
-                raw = make_email("Reset your password:" + separator + "https://example.com/reset?token=abc", "plain", subject="Password reset request")
+                raw = make_raw_email("Reset your password:" + separator + "https://example.com/reset?token=abc", subject="Password reset request", subtype="plain")
                 self.assertEqual(extract_password_reset_link_details(raw)["url"], "https://example.com/reset?token=abc")
 
     def test_unrelated_paragraph_cannot_inherit_reset_instruction(self):
-        raw = make_email("Reset your password using the dashboard button.\n\nPrivacy policy:\n\nhttps://example.com/privacy", "plain", subject="Password reset request")
+        raw = make_raw_email("Reset your password using the dashboard button.\n\nPrivacy policy:\n\nhttps://example.com/privacy", subject="Password reset request", subtype="plain")
         self.assertIsNone(extract_password_reset_link_details(raw))
 
     def test_explicit_reset_html_and_plain(self):
@@ -136,7 +129,7 @@ class PasswordResetExtractionTests(unittest.TestCase):
             for subtype, body in (("html", f'<a href="https://example.com/reset?token=a&amp;b=2">{label}</a>'),
                                   ("plain", f'{label}:\nhttps://example.com/reset?token=a&b=2')):
                 with self.subTest(label=label, subtype=subtype):
-                    raw = make_email(body, subtype, subject="Password reset request")
+                    raw = make_raw_email(body, subject="Password reset request", subtype=subtype)
                     self.assertEqual(extract_password_reset_link_details(raw)["url"], "https://example.com/reset?token=a&b=2")
                     self.assertIsNone(extract_confirmation_link_details(raw))
 
@@ -151,9 +144,8 @@ class PasswordResetExtractionTests(unittest.TestCase):
             '<a href="https://example.com/reset">Cancel password reset</a>',
         ):
             with self.subTest(body=body):
-                self.assertIsNone(extract_password_reset_link_details(make_email(body, subject="Reset password")))
-        self.assertIsNone(extract_password_reset_link_details(make_email(
-            "Reset your password using the button. For help visit https://example.com/help", "plain", subject="Password reset request")))
+                self.assertIsNone(extract_password_reset_link_details(make_raw_email(body, subject="Reset password", subtype="html")))
+        self.assertIsNone(extract_password_reset_link_details(make_raw_email("Reset your password using the button. For help visit https://example.com/help", subject="Password reset request", subtype="plain")))
 
     def test_reset_multipart_prefers_html_and_ignores_attachments(self):
         msg = EmailMessage()
@@ -176,7 +168,7 @@ class PasswordResetExtractionTests(unittest.TestCase):
             ("plain", "For help with your password reset: https://example.com/help"),
         ):
             with self.subTest(body=body):
-                self.assertIsNone(extract_password_reset_link_details(make_email(body, subtype, subject="Password reset")))
+                self.assertIsNone(extract_password_reset_link_details(make_raw_email(body, subject="Password reset", subtype=subtype)))
 
     def test_help_link_does_not_hide_the_real_reset_action(self):
         for subtype, body in (
@@ -184,10 +176,10 @@ class PasswordResetExtractionTests(unittest.TestCase):
             ("plain", "Reset your password: https://example.com/reset?token=real\n\nIf you did not request a password reset, contact support at https://example.com/help"),
         ):
             with self.subTest(subtype=subtype):
-                self.assertEqual(extract_password_reset_link_details(make_email(body, subtype, subject="Password reset"))["url"], "https://example.com/reset?token=real")
+                self.assertEqual(extract_password_reset_link_details(make_raw_email(body, subject="Password reset", subtype=subtype))["url"], "https://example.com/reset?token=real")
 
     def test_password_reset_link_label_is_supported(self):
-        raw = make_email('<a href="https://example.com/reset">Password reset link</a>', subject="Password reset")
+        raw = make_raw_email('<a href="https://example.com/reset">Password reset link</a>', subject="Password reset", subtype="html")
         self.assertEqual(extract_password_reset_link_details(raw)["url"], "https://example.com/reset")
 
 
@@ -199,19 +191,19 @@ class PasswordResetExtractionTests(unittest.TestCase):
             for subtype, body in (("plain", f"{label} https://example.com/reset?token=real"),
                                   ("html", f'<a href="https://example.com/reset?token=real">{label}</a>')):
                 with self.subTest(label=label, subtype=subtype):
-                    self.assertEqual(extract_password_reset_link_details(make_email(body, subtype, subject="Password reset"))["url"], "https://example.com/reset?token=real")
+                    self.assertEqual(extract_password_reset_link_details(make_raw_email(body, subject="Password reset", subtype=subtype))["url"], "https://example.com/reset?token=real")
 
     def test_plain_reset_footer_does_not_inherit_the_instruction(self):
         for separator in ("\n", " ", "\n\n"):
             for footer in ("Privacy policy: https://example.com/privacy", "Visit our website: https://example.com/"):
                 with self.subTest(separator=separator, footer=footer):
-                    raw = make_email("Reset your password: https://example.com/reset?token=real" + separator + footer, "plain", subject="Password reset request")
+                    raw = make_raw_email("Reset your password: https://example.com/reset?token=real" + separator + footer, subject="Password reset request", subtype="plain")
                     self.assertEqual(extract_password_reset_link_details(raw)["url"], "https://example.com/reset?token=real")
 
     def test_explicit_second_reset_url_still_causes_ambiguity(self):
-        raw = make_email("Reset your password: https://example.com/reset?token=one\nReset your password: https://example.com/reset?token=two", "plain", subject="Password reset request")
+        raw = make_raw_email("Reset your password: https://example.com/reset?token=one\nReset your password: https://example.com/reset?token=two", subject="Password reset request", subtype="plain")
         self.assertIsNone(extract_password_reset_link_details(raw))
 
     def test_unsupported_preceding_url_cannot_label_a_later_url(self):
-        raw = make_email("Reset your password: http://example.com/reset\nPrivacy policy: https://example.com/privacy", "plain", subject="Password reset request")
+        raw = make_raw_email("Reset your password: http://example.com/reset\nPrivacy policy: https://example.com/privacy", subject="Password reset request", subtype="plain")
         self.assertIsNone(extract_password_reset_link_details(raw))

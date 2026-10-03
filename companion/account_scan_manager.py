@@ -39,12 +39,12 @@ class AccountScanManager:
 
     def close(self):
         for email in list(self.sessions):
-            self.remove(email)
+            self.discard_account_state(email)
         if self.executor:
             self.executor.shutdown(wait=False, cancel_futures=True)
             self.executor = None
 
-    def remove(self, email):
+    def discard_account_state(self, email):
         key = email.lower()
         session = self.sessions.pop(key, None)
         future = self.pending_scans.pop(key, None)
@@ -59,7 +59,7 @@ class AccountScanManager:
     def poll_accounts(self, account_credentials, mail_type="codes", collect_only=False):
         if mail_type != self.mail_type:
             for email in list(self.sessions):
-                self.remove(email)
+                self.discard_account_state(email)
             self.mail_type = mail_type
         now = time.time()
         self.cached_results_by_account = {key: [item for item in items
@@ -68,14 +68,14 @@ class AccountScanManager:
         active = {account["email"].lower() for account in account_credentials}
         for email in list(self.sessions):
             if email not in active:
-                self.remove(email)
+                self.discard_account_state(email)
         if not self.executor:
             self.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS)
         for account in account_credentials:
             key = account["email"].lower()
             session = self.sessions.get(key)
             if session and session.credentials != account:
-                self.remove(key)
+                self.discard_account_state(key)
                 session = None
             if not session:
                 session = self.sessions[key] = InboxSession(account, mail_type)
@@ -95,7 +95,7 @@ class AccountScanManager:
             try:
                 self.cached_results_by_account[key] = [dict(item, accountEmail=email) for item in future.result()]
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
-                self.remove(key)
+                self.discard_account_state(key)
                 warnings.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
         if warnings and not self.cached_results_by_account and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))

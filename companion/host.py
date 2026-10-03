@@ -41,7 +41,7 @@ def load_account_credentials():
     return saved["accounts"] if "accounts" in saved else [saved]
 
 
-def handle_request(request, sessions):
+def handle_request(request, scan_manager):
     if not isinstance(request, dict):
         raise UserError("Invalid request.")
     action = request.get("action")
@@ -58,7 +58,7 @@ def handle_request(request, sessions):
                 access_saved_credentials("set", {"accounts": remaining})
             else:
                 access_saved_credentials("delete")
-        sessions.remove(address)
+        scan_manager.discard_account_state(address)
         return {"accountEmails": [item["email"] for item in remaining]}
     if action == "saveAccount":
         address = request.get("email", "").strip()
@@ -76,14 +76,14 @@ def handle_request(request, sessions):
             account_credentials = [item for item in account_credentials if item["email"].lower() != address.lower()]
             account_credentials.append(credentials)
             access_saved_credentials("set", {"accounts": account_credentials})
-        sessions.remove(address)
+        scan_manager.discard_account_state(address)
         return {"accountEmails": [item["email"] for item in account_credentials]}
     if isinstance(action, str) and action in MAIL_EXTRACTORS:
         account_credentials = load_account_credentials()
         if not account_credentials:
-            sessions.close()
+            scan_manager.close()
             raise UserError("Connect Yahoo Mail first.")
-        return sessions.poll_accounts(account_credentials, action, request.get("collectOnly") is True)
+        return scan_manager.poll_accounts(account_credentials, action, request.get("collectOnly") is True)
     raise UserError("Unsupported request.")
 
 
@@ -103,14 +103,14 @@ def read_message(stream):
 
 
 def main():
-    sessions = AccountScanManager()
+    scan_manager = AccountScanManager()
     try:
         while True:
             try:
                 request = read_message(sys.stdin.buffer)
                 if request is None:
                     break
-                response = {"ok": True, **handle_request(request, sessions)}
+                response = {"ok": True, **handle_request(request, scan_manager)}
             except UserError as exc:
                 response = {"ok": False, "error": str(exc)}
             except imaplib.IMAP4.error:
@@ -132,7 +132,7 @@ def main():
             sys.stdout.buffer.write(struct.pack("=I", len(payload)) + payload)
             sys.stdout.buffer.flush()
     finally:
-        sessions.close()
+        scan_manager.close()
 
 
 if __name__ == "__main__":

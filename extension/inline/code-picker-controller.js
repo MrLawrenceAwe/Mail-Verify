@@ -1,8 +1,8 @@
 import { formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { createScanSchedule } from "../shared/scan-schedule.js";
 import { selectSuggestedCodes, messageKey, mutationAffectsPicker, isCodeRequestControl } from "./code-picker-policy.js";
-import { REQUEST_CONTROL_SELECTOR } from "../shared/request-controls.js";
-import { readCodeStepContext } from "../shared/code-step-context.js";
+import { REQUEST_CONTROL_SELECTOR } from "./request-controls.js";
+import { readCodeStepContext } from "./code-step-context.js";
 import { handleVerificationFields as defaultVerificationFieldsHandler } from "../shared/code-fields.js";
 import { calculatePickerPosition, createCodePickerView } from "./code-picker-view.js";
 import { initialStepCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
@@ -127,9 +127,9 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
         view.setStatus(error.message);
       }
     } finally {
-      const retry = checks.finish(checkToken);
-      if (retry === null) return;
-      if (retry) {
+      const outcome = checks.finish(checkToken);
+      if (outcome === "stale") return;
+      if (outcome === "retry") {
         if (view && !document.hidden) checkForCodes();
         return;
       }

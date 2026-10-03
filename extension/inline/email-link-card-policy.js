@@ -1,5 +1,5 @@
 import { createMutationInspection } from "./mutation-inspection.js";
-import { getRequestControlLabel } from "../shared/request-controls.js";
+import { getRequestControlLabel } from "./request-controls.js";
 import { isFreshMessage } from "../shared/mail-timing.js";
 
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
@@ -22,24 +22,24 @@ export function isEmailLinkRequestControl(control) {
 export function mutationAffectsEmailLinkCard(records, host, document, hasActiveStep) {
   const panels = "main, [role=main], form, [role=dialog], dialog";
   const relevantElements = `${panels}, input`;
-  const { textNeedsRescan, subtreeNeedsRescan, shouldInspectRecord } = createMutationInspection(
+  const { inspectText, inspectSubtree, claimRecord } = createMutationInspection(
     (value) => /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(value),
   );
   return records.some((record) => {
     const target = record.target;
-    if (!shouldInspectRecord(record, host)) return false;
+    if (!claimRecord(record, host)) return false;
     if (record.type === "attributes")
-      return subtreeNeedsRescan(target, relevantElements, true);
+      return inspectSubtree(target, relevantElements, true);
     const element = target.nodeType === 1 ? target : target.parentElement;
     const inActivePanel = hasActiveStep &&
       (element?.closest?.(panels) || !document.querySelector?.(panels));
     if (record.type === "characterData")
-      return !!inActivePanel || textNeedsRescan(target.textContent || "") || textNeedsRescan(record.oldValue || "");
+      return !!inActivePanel || inspectText(target.textContent || "") || inspectText(record.oldValue || "");
     if (record.type === "childList") {
       if (inActivePanel) return true;
       for (const nodes of [record.addedNodes, record.removedNodes])
         for (const node of nodes)
-          if (subtreeNeedsRescan(node, relevantElements, true)) return true;
+          if (inspectSubtree(node, relevantElements, true)) return true;
       return false;
     }
     return false;

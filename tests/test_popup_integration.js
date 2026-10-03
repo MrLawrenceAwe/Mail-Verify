@@ -59,7 +59,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       "status",
       "accountSetup",
       "companionSetup",
-      "connectedAccountPanel",
+      "connectedAccountsPanel",
       "accountForm",
       "saveAccountSubmit",
       "password",
@@ -346,7 +346,7 @@ test("removes an account and recovers from errors", async () => {
     assert.equal(state.requests[0].action, "removeAccount");
     assert.equal(state.requests[0].email, "test@yahoo.com");
     assert.equal(timers.length, failRemove ? 1 : 0);
-    assert.equal(controls.connectedAccountPanel.hidden, !failRemove);
+    assert.equal(controls.connectedAccountsPanel.hidden, !failRemove);
     assert.equal(controls.checkCodes.disabled, false);
   }
 });
@@ -395,7 +395,7 @@ test("connects an account without retaining the form password", async () => {
     password: "app-password",
   });
   assert.equal(controls.accounts.children[0].children[0].textContent, "test@yahoo.com");
-  assert.equal(controls.connectedAccountPanel.hidden, false);
+  assert.equal(controls.connectedAccountsPanel.hidden, false);
 });
 
 test("shows multiple accounts and labels codes with their inbox", async () => {
@@ -406,7 +406,7 @@ test("shows multiple accounts and labels codes with their inbox", async () => {
   assert.equal(controls.results.children[0].children[1].textContent, "test@yahoo.com");
   controls.showAccountSetup.trigger();
   assert.equal(controls.accountSetup.hidden, false);
-  assert.equal(controls.connectedAccountPanel.hidden, false);
+  assert.equal(controls.connectedAccountsPanel.hidden, false);
 });
 
 const link = { ...code, url: "https://example.com/confirm?token=secret" };
@@ -463,7 +463,7 @@ test("switching mail types ignores a pending code response", async () => {
   controls.checkCodes.trigger();
   await settle();
   assert.equal(controls.codeContext.hidden, false);
-  assert.match(controls.results.querySelectorAll("button")[0].textContent, /Fill on/);
+  assert.equal(controls.results.querySelectorAll("button")[0].textContent, "Fill code");
 });
 
 

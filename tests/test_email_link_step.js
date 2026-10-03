@@ -7,7 +7,7 @@ function detectedMailType(text) {
   return detectEmailLinkStep({ querySelectorAll: () => [panel] })?.mailType;
 }
 
-test("recognises confirmation prompts but rejects resets, newsletters and long pages", () => {
+test("classifies confirmation prompts without treating resets, newsletters or long pages as confirmation", () => {
   for (const text of ["Check your inbox", "We've sent a verification email", "Follow the link in your email to confirm your account"])
     assert.equal(detectedMailType(text), "confirmationLinks", text);
   for (const text of ["Reset your password. Check your email", "Check your email for our newsletter", "Welcome to our website", "x".repeat(2501) + " Check your email"])
