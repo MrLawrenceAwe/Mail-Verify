@@ -1,4 +1,4 @@
-import { recipientKeyFromText } from "../shared/recipient-identity.js";
+import { recipientKeyFromText } from "./recipient-identity.js";
 
 const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;

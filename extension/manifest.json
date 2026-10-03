@@ -35,6 +35,7 @@
         "inline/code-picker-controller.js",
         "inline/code-picker-policy.js",
         "inline/code-picker-view.js",
+        "inline/code-step-context.js",
         "inline/email-link-card-controller.js",
         "inline/email-link-card-policy.js",
         "inline/email-link-card-view.js",
@@ -42,18 +43,17 @@
         "inline/inline-client.js",
         "inline/mutation-inspection.js",
         "inline/page-coordinator.js",
+        "inline/recipient-identity.js",
+        "inline/request-controls.js",
         "inline/suggestion-mount.js",
         "shared/code-fields.js",
-        "shared/code-step-context.js",
         "shared/email-link-details.js",
         "shared/email-link-url.js",
         "shared/mail-presentation.js",
         "shared/mail-timing.js",
         "shared/polling-lifecycle.js",
         "shared/reset-link-copy.js",
-        "shared/scan-schedule.js",
-        "shared/request-controls.js",
-        "shared/recipient-identity.js"
+        "shared/scan-schedule.js"
       ],
       "matches": [
         "https://*/*"

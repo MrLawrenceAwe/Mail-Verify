@@ -1,5 +1,5 @@
 import { createMutationInspection } from "./mutation-inspection.js";
-import { getRequestControlLabel } from "../shared/request-controls.js";
+import { getRequestControlLabel } from "./request-controls.js";
 import { isFreshMessage } from "../shared/mail-timing.js";
 
 export function selectSuggestedCodes(codes, minReceivedAtMs, now = Date.now(), excludedMessageKeys = new Set()) {
@@ -22,28 +22,28 @@ export function messageKey(item) {
 }
 
 export function mutationAffectsPicker(records, { suggestionHost, fieldContextRoots = [], stepRoots = [], stepParent, labelRoots = [] } = {}) {
-  const { consumeNodeBudget, textNeedsRescan, subtreeNeedsRescan, shouldInspectRecord } = createMutationInspection(
+  const { consumeNodeBudget, inspectText, inspectSubtree, claimRecord } = createMutationInspection(
     (value) => /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value),
   );
   return records.some((record) => {
     const target = record.target;
-    if (!shouldInspectRecord(record, suggestionHost)) return false;
+    if (!claimRecord(record, suggestionHost)) return false;
     if (labelRoots.some((root) => root === target || root.contains?.(target))) return true;
     if (record.type === "childList" && target === stepParent) return true;
     if (stepRoots.some((root) => root.contains?.(target)) &&
         (record.type === "characterData" || record.type === "childList")) return true;
     const inContext = fieldContextRoots.some((root) => root.contains?.(target));
     if (record.type === "attributes")
-      return record.attributeName === "id" || target?.matches?.("input, label") || subtreeNeedsRescan(target, "input");
+      return record.attributeName === "id" || target?.matches?.("input, label") || inspectSubtree(target, "input");
     if (record.type === "characterData") {
       if (inContext && (!consumeNodeBudget() ||
-          textNeedsRescan(target.textContent || "") || textNeedsRescan(record.oldValue || ""))) return true;
+          inspectText(target.textContent || "") || inspectText(record.oldValue || ""))) return true;
       return !!target?.parentElement?.closest?.("label");
     }
     if (target?.closest?.("label")) return true;
     for (const nodes of [record.addedNodes, record.removedNodes])
       for (const node of nodes)
-        if (subtreeNeedsRescan(node, "input, label, form, main", inContext)) return true;
+        if (inspectSubtree(node, "input, label, form, main", inContext)) return true;
     return false;
   });
 }

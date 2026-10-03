@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recipientKeyFromText } from "../extension/shared/recipient-identity.js";
+import { recipientKeyFromText } from "../extension/inline/recipient-identity.js";
 
 test("recipient identities normalise, deduplicate and sort ordinary and masked addresses", () => {
   const key = recipientKeyFromText(

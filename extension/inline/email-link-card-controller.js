@@ -4,7 +4,7 @@ import { detectEmailLinkStep } from "./email-link-step.js";
 import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import { MAIL_PRESENTATION, formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
-import { REQUEST_CONTROL_SELECTOR } from "../shared/request-controls.js";
+import { REQUEST_CONTROL_SELECTOR } from "./request-controls.js";
 import { initialStepCutoff, resendCutoff, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
@@ -66,9 +66,9 @@ export function startEmailLinkCard({ environment = globalThis, detectStep = dete
         view.setStatus(error.message);
       }
     } finally {
-      const retry = checks.finish(checkToken);
-      if (retry === null) return;
-      if (retry && view && !document.hidden) checkForLinks();
+      const outcome = checks.finish(checkToken);
+      if (outcome === "stale") return;
+      if (outcome === "retry" && view && !document.hidden) checkForLinks();
       else if (polling.isCurrent(requestGeneration) && view && !document.hidden)
         polling.schedule(checkForLinks, scanSchedule.pollDelayMs);
     }

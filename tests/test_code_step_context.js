@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readCodeStepContext } from "../extension/shared/code-step-context.js";
+import { readCodeStepContext } from "../extension/inline/code-step-context.js";
 
 function element(tagName, children = [], props = {}) {
   const root = { nodeType: 1, tagName, ...props };

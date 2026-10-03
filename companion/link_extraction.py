@@ -36,22 +36,25 @@ class EmailLinkParser(VisibleEmailHTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
-        self.anchor = None
+        self.anchor_url = None
+        self.anchor_text_parts = []
 
     def visible_start(self, tag, attrs):
         if tag == "a":
-            self.anchor = [attrs.get("href", ""), []]
-        if tag == "img" and self.anchor:
-            self.anchor[1].append(attrs.get("alt", ""))
+            self.anchor_url = attrs.get("href", "")
+            self.anchor_text_parts = []
+        if tag == "img" and self.anchor_url is not None:
+            self.anchor_text_parts.append(attrs.get("alt", ""))
 
     def visible_data(self, data):
-        if self.anchor:
-            self.anchor[1].append(data)
+        if self.anchor_url is not None:
+            self.anchor_text_parts.append(data)
 
     def visible_end(self, tag):
-        if tag == "a" and self.anchor:
-            self.links.append((self.anchor[0], " ".join(self.anchor[1])))
-            self.anchor = None
+        if tag == "a" and self.anchor_url is not None:
+            self.links.append((self.anchor_url, " ".join(self.anchor_text_parts)))
+            self.anchor_url = None
+            self.anchor_text_parts = []
 
 
 RESET_LABEL_PATTERN = re.compile(

@@ -75,7 +75,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
   function renderAccounts(accounts) {
     getElement("accountSetup").hidden = accounts.length > 0;
     getElement("companionSetup").hidden = true;
-    getElement("connectedAccountPanel").hidden = accounts.length === 0;
+    getElement("connectedAccountsPanel").hidden = accounts.length === 0;
     getElement("accounts").replaceChildren();
     for (const email of accounts) {
       const row = document.createElement("div");
@@ -117,9 +117,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
         card.append(element);
       }
       const button = document.createElement("button");
-      button.textContent = targetTab
-        ? `Fill on ${new URL(targetTab.url).hostname}`
-        : "Fill code";
+      button.textContent = "Fill code";
       button.disabled = !targetTab;
       button.addEventListener("click", () => onFillCode(item, button));
       card.append(button);

@@ -34,11 +34,11 @@ function createCheckGate() {
     },
     invalidate() { active = undefined; retry = false; },
     finish(token) {
-      if (active !== token) return null;
+      if (active !== token) return "stale";
       active = undefined;
-      const requested = retry;
+      const outcome = retry ? "retry" : "complete";
       retry = false;
-      return requested;
+      return outcome;
     },
   };
 }

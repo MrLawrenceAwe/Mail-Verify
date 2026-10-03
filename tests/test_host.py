@@ -26,24 +26,24 @@ class HostTests(unittest.TestCase):
 
     def test_collection_request_does_not_start_new_mail_scans(self):
         credentials = {"email": "test@yahoo.com", "password": "unused"}
-        sessions = account_scan_manager.AccountScanManager()
+        scan_manager = account_scan_manager.AccountScanManager()
         with patch.object(host, "access_saved_credentials", return_value={"accounts": [credentials]}), patch.object(account_scan_manager, "scan_with_deadline") as fetch:
             try:
-                response = host.handle_request({"action": "codes", "collectOnly": True}, sessions)
+                response = host.handle_request({"action": "codes", "collectOnly": True}, scan_manager)
                 self.assertEqual(response, {"codes": [], "warnings": [], "scanPending": False})
                 fetch.assert_not_called()
             finally:
-                sessions.close()
+                scan_manager.close()
 
     def test_reset_links_dispatches_to_reset_extractor(self):
         credentials = {"email": "test@yahoo.com", "password": "unused"}
-        sessions = account_scan_manager.AccountScanManager()
+        scan_manager = account_scan_manager.AccountScanManager()
         item = {"url": "https://example.com/reset", "receivedAt": 1000, "uid": 1}
         with patch.object(host, "access_saved_credentials", return_value={"accounts": [credentials]}), patch.object(account_scan_manager, "scan_with_deadline", return_value=[item]):
-            result = host.handle_request({"action": "passwordResetLinks"}, sessions)
+            result = host.handle_request({"action": "passwordResetLinks"}, scan_manager)
         self.assertEqual(result, {"passwordResetLinks": [{**item, "accountEmail": credentials["email"]}], "warnings": [], "scanPending": False})
         from link_extraction import extract_password_reset_link_details
-        self.assertIs(sessions.sessions[credentials["email"]].extract_item, extract_password_reset_link_details)
+        self.assertIs(scan_manager.sessions[credentials["email"]].extract_item, extract_password_reset_link_details)
 
     def test_non_string_actions_are_rejected_as_unsupported(self):
         for action in (None, [], {}):
@@ -83,32 +83,32 @@ class HostTests(unittest.TestCase):
     def test_reused_session_notices_account_removal(self):
         credentials = {"email": "test@yahoo.com", "password": "test-password"}
         session = account_scan_manager.InboxSession(credentials)
-        sessions = account_scan_manager.AccountScanManager()
-        sessions.sessions["test@yahoo.com"] = session
+        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager.sessions["test@yahoo.com"] = session
         with patch.object(host, "access_saved_credentials", return_value=None), patch.object(session, "close") as close:
             with self.assertRaisesRegex(host.UserError, "Connect Yahoo Mail first"):
-                host.handle_request({"action": "codes"}, sessions)
+                host.handle_request({"action": "codes"}, scan_manager)
             # Account cleanup occurs when the next scan sees the changed list.
-            sessions.poll_accounts([])
+            scan_manager.poll_accounts([])
             close.assert_called_once()
 
     def test_reused_session_keeps_connection_for_unchanged_account(self):
         credentials = {"email": "test@yahoo.com", "password": "test-password"}
         session = account_scan_manager.InboxSession(credentials)
-        sessions = account_scan_manager.AccountScanManager()
-        sessions.sessions["test@yahoo.com"] = session
+        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager.sessions["test@yahoo.com"] = session
         with patch.object(host, "access_saved_credentials", return_value={"accounts": [dict(credentials)]}), patch.object(session, "close") as close, patch.object(account_scan_manager, "scan_with_deadline", return_value=[]) as check:
-            self.assertEqual(host.handle_request({"action": "codes"}, sessions), {"codes": [], "warnings": [], "scanPending": False})
+            self.assertEqual(host.handle_request({"action": "codes"}, scan_manager), {"codes": [], "warnings": [], "scanPending": False})
             close.assert_not_called()
             check.assert_called_once_with(session)
 
     def test_add_second_account_preserves_first(self):
         first = {"email": "one@yahoo.com", "password": "old-password"}
         second = {"email": "two@yahoo.com", "password": "new-password"}
-        sessions = account_scan_manager.AccountScanManager()
+        scan_manager = account_scan_manager.AccountScanManager()
         with patch.object(host, "access_saved_credentials", return_value=first) as access_saved_credentials, patch.object(host, "connect_imap") as connect:
             connect.return_value.__enter__.return_value = None
-            result = host.handle_request({"action": "saveAccount", **second}, sessions)
+            result = host.handle_request({"action": "saveAccount", **second}, scan_manager)
             self.assertEqual(result["accountEmails"], ["one@yahoo.com", "two@yahoo.com"])
             access_saved_credentials.assert_any_call("set", {"accounts": [first, second]})
 

@@ -117,7 +117,7 @@ class InboxSession:
         self.message_count = 0
         self.items_by_uid = {}
         self.pending_metadata_uids = set()
-        self.pending_body_timestamps = {}
+        self.pending_body_timestamps_seconds = {}
 
     def close(self):
         connection, self.connection = self.connection, None
@@ -125,14 +125,14 @@ class InboxSession:
         self.message_count = 0
         self.items_by_uid.clear()
         self.pending_metadata_uids.clear()
-        self.pending_body_timestamps.clear()
+        self.pending_body_timestamps_seconds.clear()
         if connection:
             try:
                 connection.shutdown()
             except (OSError, imaplib.IMAP4.error):
                 pass
 
-    def _new_message_metadata(self):
+    def _fetch_candidate_metadata(self):
         if self.discovery_cursor_uid is None:
             # Sequence numbers bound the first scan to the newest messages.
             if not self.message_count:
@@ -188,7 +188,7 @@ class InboxSession:
         self.pending_metadata_uids.difference_update(returned_uids)
         return metadata
 
-    def _eligible_messages(self, metadata, now):
+    def _eligible_arrival_times(self, metadata, now):
         eligible = {}
         for entry in metadata:
             if not isinstance(entry, bytes):
@@ -223,11 +223,11 @@ class InboxSession:
                 if uid is not None:
                     messages[uid] = entry[1]
             for uid in batch:
-                received = self.pending_body_timestamps[uid]
+                received = self.pending_body_timestamps_seconds[uid]
                 if uid not in messages:
                     # An OK fetch can omit a body. Try this UID again on the next poll.
                     continue
-                self.pending_body_timestamps.pop(uid, None)
+                self.pending_body_timestamps_seconds.pop(uid, None)
                 found = self.extract_item(messages[uid])
                 if found:
                     found["receivedAt"] = int(received * 1000)
@@ -245,7 +245,7 @@ class InboxSession:
             if len(distinct_senders) == DISTINCT_SENDER_LIMIT else None
         )
         eligible = sorted(
-            self.pending_body_timestamps.items(), key=lambda item: item[0], reverse=True
+            self.pending_body_timestamps_seconds.items(), key=lambda item: item[0], reverse=True
         )
         pending = [
             (uid, received)
@@ -253,7 +253,7 @@ class InboxSession:
             if 0 <= now - received <= MAX_MESSAGE_AGE_SECONDS
             and (cutoff is None or (int(received * 1000), uid) > cutoff)
         ][:MAX_CANDIDATE_MESSAGES]
-        self.pending_body_timestamps = dict(pending)
+        self.pending_body_timestamps_seconds = dict(pending)
         return [uid for uid, _ in pending]
 
     def scan_inbox(self):
@@ -274,8 +274,8 @@ class InboxSession:
                 for uid, item in self.items_by_uid.items()
                 if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS
             }
-            metadata = self._new_message_metadata()
-            self.pending_body_timestamps.update(self._eligible_messages(metadata, now))
+            metadata = self._fetch_candidate_metadata()
+            self.pending_body_timestamps_seconds.update(self._eligible_arrival_times(metadata, now))
             candidates = self._prune_pending_messages(now)
             self._fetch_items(candidates)
             return self._select_and_prune_results()
