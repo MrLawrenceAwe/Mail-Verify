@@ -20,6 +20,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);
+  const readStepContext = (context) => readCodeStepContext(context, browser.getComputedStyle);
   function unmountPicker({ preserveStep = false } = {}) {
     scanSchedule.clearPending();
     polling.cancelChecks();
@@ -48,7 +49,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
-  function mountPicker(field, context = readCodeStepContext(field.stepContext)) {
+  function mountPicker(field, context = readStepContext(field.stepContext)) {
     const mountedAnchor = field.anchor;
     minReceivedAtMs ??= initialStepCutoff(clock.now());
     anchor = field.anchor;
@@ -167,7 +168,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       return;
     }
     const context = refreshCandidates || !view || anchor !== field.anchor
-      ? readCodeStepContext(field.stepContext)
+      ? readStepContext(field.stepContext)
       : stepContext;
     if (anchor && anchor !== field.anchor) resetAttempt();
     else if (stepContext && context.key !== null && stepContext.key !== null && context.key !== stepContext.key)
