@@ -31,7 +31,7 @@ export function messageKey(item) {
 }
 
 export function mutationAffectsPicker(records, host, contextRoots = [], stepRoots = [], stepParent) {
-  const { inspectNode, relevantText, relevantSubtree, shouldInspectRecord } = createMutationInspection(
+  const { consumeNodeBudget, textNeedsRescan, subtreeNeedsRescan, shouldInspectRecord } = createMutationInspection(
     (value) => /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value),
   );
   return records.some((record) => {
@@ -41,17 +41,17 @@ export function mutationAffectsPicker(records, host, contextRoots = [], stepRoot
     if (stepRoots.some((root) => root.contains?.(target)) &&
         (record.type === "characterData" || record.type === "childList")) return true;
     if (record.type === "attributes")
-      return target?.matches?.("input, label") || relevantSubtree(target, "input");
+      return target?.matches?.("input, label") || subtreeNeedsRescan(target, "input");
     const inContext = contextRoots.some((root) => root.contains?.(target));
     if (record.type === "characterData") {
-      if (inContext && (!inspectNode() ||
-          relevantText(target.textContent || "") || relevantText(record.oldValue || ""))) return true;
+      if (inContext && (!consumeNodeBudget() ||
+          textNeedsRescan(target.textContent || "") || textNeedsRescan(record.oldValue || ""))) return true;
       return !!target?.parentElement?.closest?.("label");
     }
     if (target?.closest?.("label")) return true;
     for (const nodes of [record.addedNodes, record.removedNodes])
       for (const node of nodes)
-        if (relevantSubtree(node, "input, label, form, main", inContext)) return true;
+        if (subtreeNeedsRescan(node, "input, label, form, main", inContext)) return true;
     return false;
   });
 }

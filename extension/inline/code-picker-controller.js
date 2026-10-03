@@ -93,7 +93,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
-      const collectOnly = scanSchedule.beginCheck();
+      const { collectOnly } = scanSchedule.planNextCheck();
       const response = await requestInlineCheck(chrome.runtime, "codes", collectOnly);
       if (lastURL !== location.href) {
         syncPicker();
@@ -129,7 +129,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       if (view) positionPicker();
       if (view && !polling.hasExpired()) {
         polling.schedule(checkForCodes, polling.isCurrent(requestGeneration)
-          ? scanSchedule.pollDelay : 0);
+          ? scanSchedule.pollDelayMs : 0);
       } else if (view && !view.hasCodes() && !checkFailed) {
         view.setStatus("No code found. Click ↻ to check again.");
       }

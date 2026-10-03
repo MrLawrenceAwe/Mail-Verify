@@ -147,7 +147,7 @@ export function createPopupController({
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
-      const collectOnly = scanSchedule.beginCheck();
+      const { collectOnly } = scanSchedule.planNextCheck();
       const response = await sendSessionRequest(mailType, collectOnly);
       const results = response[mailType];
       if (!usingResult && polling.isCurrent(requestGeneration)) {
@@ -157,7 +157,7 @@ export function createPopupController({
         view.setStatus(
           response.warnings?.length
             ? `Some accounts could not be checked: ${response.warnings.join("; ")}`
-            : results.length ? MAIL_PRESENTATION[mailType].popupFoundStatus
+            : results.length ? MAIL_PRESENTATION[mailType].foundStatus
               : scanSchedule.pending ? "Checking your connected inboxes…" : MAIL_PRESENTATION[mailType].popupEmptyStatus,
         );
       }
@@ -175,7 +175,7 @@ export function createPopupController({
         scheduleCheck(
           failed
             ? DEFAULT_SCAN_INTERVAL_MS
-            : scanSchedule.pending ? scanSchedule.pollDelay : Math.max(
+            : scanSchedule.pending ? scanSchedule.pollDelayMs : Math.max(
                 MIN_POLL_PAUSE_MS,
                 DEFAULT_SCAN_INTERVAL_MS - (clock.now() - startedAt),
               ),
@@ -243,9 +243,7 @@ export function createPopupController({
       currentWindow: true,
     });
     if (tab?.url?.startsWith("https://")) targetTab = tab;
-    view.setDestination(targetTab
-      ? new URL(targetTab.url).hostname
-      : "an HTTPS page with a verification-code field");
+    view.setCodeDestination(targetTab);
     try {
       const result = await sendSessionRequest("status");
       if (result.accountEmails?.length) applyConnectedAccounts(result.accountEmails);

@@ -22,7 +22,7 @@ export function isEmailLinkRequestControl(control) {
 export function mutationAffectsEmailLinkCard(records, host, document, hasActiveStep, hasDescendant = (node, selector) => node?.querySelector?.(selector)) {
   const panels = "main, [role=main], form, [role=dialog]";
   const relevantElements = `${panels}, input`;
-  const { relevantText, relevantSubtree, shouldInspectRecord } = createMutationInspection(
+  const { textNeedsRescan, subtreeNeedsRescan, shouldInspectRecord } = createMutationInspection(
     (value) => /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(value),
   );
   return records.some((record) => {
@@ -34,12 +34,12 @@ export function mutationAffectsEmailLinkCard(records, host, document, hasActiveS
     if (record.type === "attributes")
       return !!(target.matches?.(relevantElements) || hasDescendant(target, relevantElements));
     if (record.type === "characterData")
-      return !!inActivePanel || relevantText(target.textContent || "") || relevantText(record.oldValue || "");
+      return !!inActivePanel || textNeedsRescan(target.textContent || "") || textNeedsRescan(record.oldValue || "");
     if (record.type === "childList") {
       if (inActivePanel) return true;
       for (const nodes of [record.addedNodes, record.removedNodes])
         for (const node of nodes)
-          if (relevantSubtree(node, relevantElements, true)) return true;
+          if (subtreeNeedsRescan(node, relevantElements, true)) return true;
       return false;
     }
     return false;

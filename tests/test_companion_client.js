@@ -88,8 +88,8 @@ test("uses the same response errors for one-off and session requests", async () 
 
 
 test("silent hosts time out, disconnect, and allow a fresh request", async () => {
-  const { createFakeTimers } = await import("./fake_timers.js");
-  const timers = createFakeTimers();
+  const { createTimerQueue } = await import("./timer_queue.js");
+  const timers = createTimerQueue();
   const ports = [];
   const client = createCompanionClient({connectNative() {
     const port = {
@@ -103,7 +103,7 @@ test("silent hosts time out, disconnect, and allow a fresh request", async () =>
   }}, timers);
   const stalled = client.sendSessionRequest("status");
   const rejected = assert.rejects(stalled, /too long/);
-  await timers.run(35_000);
+  await timers.runWithDelay(35_000);
   await rejected;
   assert.equal(ports[0].closed, true);
   const retry = client.sendSessionRequest("codes");
@@ -115,7 +115,7 @@ test("silent hosts time out, disconnect, and allow a fresh request", async () =>
   const save = client.sendOneOffRequest({action: "saveAccount", email: "test@yahoo.com", password: "unused"});
   assert.equal(ports[2].request.email, "test@yahoo.com");
   const saveRejected = assert.rejects(save, /too long/);
-  await timers.run(60_000);
+  await timers.runWithDelay(60_000);
   await saveRejected;
   assert.equal(ports[2].closed, true);
   assert.equal(timers.length, 0);

@@ -26,7 +26,7 @@ function isBoundedPanel(panel) {
   return true;
 }
 
-function matchesConfirmationPrompt(text) {
+function matchesConfirmationOrGenericWaitingPrompt(text) {
   const value = text.replace(/\s+/g, " ").trim();
   if (!value || value.length > 2500 || /\b(?:newsletter|unsubscribe)\b/i.test(value)) return false;
   return /\bcheck\s+(?:your\s+)?(?:e-?mail|inbox)\b/i.test(value) ||
@@ -63,7 +63,7 @@ export function detectEmailLinkStep(document) {
         !panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     const text = panel.innerText || "";
     const mailType = matchesPasswordResetWaitingPrompt(text) ? "passwordResetLinks"
-      : matchesConfirmationPrompt(text) ? "confirmationLinks" : null;
+      : matchesConfirmationOrGenericWaitingPrompt(text) ? "confirmationLinks" : null;
     if (!mailType) continue;
     if (!emailLinkPanelIds.has(panel)) emailLinkPanelIds.set(panel, nextEmailLinkPanelId++);
     // Countdown changes retain the step; a new task in the same panel changes it.

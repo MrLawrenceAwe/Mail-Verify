@@ -46,7 +46,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
     const requestGeneration = polling.generation;
     const checkToken = checks.start();
     try {
-      const collectOnly = scanSchedule.beginCheck();
+      const { collectOnly } = scanSchedule.planNextCheck();
       const response = await requestInlineCheck(chrome.runtime, mailType, collectOnly);
       if (!polling.isCurrent(requestGeneration) || !view || document.hidden) return;
       if (lastURL !== location.href || detectCode() || !isCurrentStep()) { syncLinkCard(); return; }
@@ -55,7 +55,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       currentLinks = selectEmailLinks(response[mailType] || [], minReceivedAtMs, clock.now());
       view.renderLinks(currentLinks);
       view.setStatus(response.warnings?.length ? `Could not check: ${response.warnings.join("; ")}` :
-        currentLinks.length ? MAIL_PRESENTATION[mailType].inlineFoundStatus : MAIL_PRESENTATION[mailType].waitingStatus);
+        currentLinks.length ? MAIL_PRESENTATION[mailType].foundStatus : MAIL_PRESENTATION[mailType].waitingStatus);
     } catch (error) {
       if (polling.isCurrent(requestGeneration) && view) {
         scanSchedule.clearPending();
@@ -68,7 +68,7 @@ export function startEmailLinkCard({ browser = globalThis, detectStep = detectEm
       if (retry === null) return;
       if (retry && view && !document.hidden) checkForLinks();
       else if (polling.isCurrent(requestGeneration) && view && !document.hidden)
-        polling.schedule(checkForLinks, scanSchedule.pollDelay);
+        polling.schedule(checkForLinks, scanSchedule.pollDelayMs);
     }
   }
   function syncLinkCard() {

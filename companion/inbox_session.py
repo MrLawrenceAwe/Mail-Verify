@@ -21,7 +21,7 @@ MAX_MESSAGE_AGE_SECONDS = 600
 MAX_FUTURE_SKEW_SECONDS = 120
 MESSAGE_BATCH_SIZE = 5
 MAX_MESSAGES = 30
-RECENT_RESULT_LIMIT = 5
+NEWEST_OVERALL_COUNT = 5
 DISTINCT_SENDER_LIMIT = 5
 MAX_MESSAGE_BYTES = 1_000_000
 
@@ -113,19 +113,19 @@ class InboxSession:
         self.extract_item = MAIL_EXTRACTORS[mail_type]
         self.credentials = credentials
         self.connection = None
-        self.last_seen_uid = None
+        self.discovery_cursor_uid = None
         self.message_count = 0
         self.items_by_uid = {}
         self.pending_metadata_uids = set()
-        self.pending_received_at_by_uid = {}
+        self.pending_body_timestamps = {}
 
     def close(self):
         connection, self.connection = self.connection, None
-        self.last_seen_uid = None
+        self.discovery_cursor_uid = None
         self.message_count = 0
         self.items_by_uid.clear()
         self.pending_metadata_uids.clear()
-        self.pending_received_at_by_uid.clear()
+        self.pending_body_timestamps.clear()
         if connection:
             try:
                 connection.shutdown()
@@ -133,10 +133,10 @@ class InboxSession:
                 pass
 
     def _new_message_metadata(self):
-        if self.last_seen_uid is None:
+        if self.discovery_cursor_uid is None:
             # Sequence numbers bound the first scan to the newest messages.
             if not self.message_count:
-                self.last_seen_uid = 0
+                self.discovery_cursor_uid = 0
                 return []
             first = max(1, self.message_count - MAX_MESSAGES + 1)
             status, metadata = self.connection.fetch(
@@ -153,24 +153,24 @@ class InboxSession:
             # A successful FETCH can still omit a message. Repeat the bounded
             # first scan on the next poll before advancing past its UID.
             if len(uids) == self.message_count - first + 1:
-                self.last_seen_uid = max(uids)
+                self.discovery_cursor_uid = max(uids)
             return metadata
 
         status, data = self.connection.uid(
-            "search", None, "UID", f"{self.last_seen_uid + 1}:*"
+            "search", None, "UID", f"{self.discovery_cursor_uid + 1}:*"
         )
         if status != "OK":
             raise UserError("Yahoo could not search your inbox.")
         # UID ranges ending in * can return the previous last UID.
-        all_uids = [uid for value in data[0].split() if (uid := int(value)) > self.last_seen_uid]
+        all_uids = [uid for value in data[0].split() if (uid := int(value)) > self.discovery_cursor_uid]
         self.pending_metadata_uids.update(all_uids[-MAX_MESSAGES:])
         # A successful UID FETCH may omit a message temporarily. Keep those
-        # UIDs queued so advancing last_seen_uid cannot make them disappear.
+        # UIDs queued so advancing discovery_cursor_uid cannot make them disappear.
         self.pending_metadata_uids = set(
             sorted(self.pending_metadata_uids, reverse=True)[:MAX_MESSAGES]
         )
         if all_uids:
-            self.last_seen_uid = all_uids[-1]
+            self.discovery_cursor_uid = all_uids[-1]
         if not self.pending_metadata_uids:
             return []
         uids = sorted(self.pending_metadata_uids, reverse=True)
@@ -223,11 +223,11 @@ class InboxSession:
                 if uid is not None:
                     messages[uid] = entry[1]
             for uid in batch:
-                received = self.pending_received_at_by_uid[uid]
+                received = self.pending_body_timestamps[uid]
                 if uid not in messages:
                     # An OK fetch can omit a body. Try this UID again on the next poll.
                     continue
-                self.pending_received_at_by_uid.pop(uid, None)
+                self.pending_body_timestamps.pop(uid, None)
                 found = self.extract_item(messages[uid])
                 if found:
                     found["receivedAt"] = int(received * 1000)
@@ -245,7 +245,7 @@ class InboxSession:
             if len(distinct_senders) == DISTINCT_SENDER_LIMIT else None
         )
         eligible = sorted(
-            self.pending_received_at_by_uid.items(), key=lambda item: item[0], reverse=True
+            self.pending_body_timestamps.items(), key=lambda item: item[0], reverse=True
         )
         pending = [
             (uid, received)
@@ -253,7 +253,7 @@ class InboxSession:
             if 0 <= now - received <= MAX_MESSAGE_AGE_SECONDS
             and (cutoff is None or (int(received * 1000), uid) > cutoff)
         ][:MAX_MESSAGES]
-        self.pending_received_at_by_uid = dict(pending)
+        self.pending_body_timestamps = dict(pending)
         return [uid for uid, _ in pending]
 
     def scan_inbox(self):
@@ -261,7 +261,7 @@ class InboxSession:
             if self.connection is None:
                 self.connection = connect_imap(self.credentials, deadline=self.deadline)
             self.connection.deadline = self.deadline
-            if self.last_seen_uid is None:
+            if self.discovery_cursor_uid is None:
                 # Refresh the count on retries: a message may have been deleted
                 # between SELECT and the previous sequence-number FETCH.
                 status, count = self.connection.select("INBOX", readonly=True)
@@ -275,7 +275,7 @@ class InboxSession:
                 if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS
             }
             metadata = self._new_message_metadata()
-            self.pending_received_at_by_uid.update(self._eligible_messages(metadata, now))
+            self.pending_body_timestamps.update(self._eligible_messages(metadata, now))
             candidates = self._prune_pending_messages(now)
             self._fetch_items(candidates)
             return self._select_and_prune_results()
@@ -291,8 +291,10 @@ class InboxSession:
         )
 
     def _select_and_prune_results(self):
+        # Retain the union of the five newest results and the newest result
+        # from each of five distinct senders. Their overlap allows up to nine.
         newest = self._newest_items()
-        newest_overall = newest[:RECENT_RESULT_LIMIT]
+        newest_overall = newest[:NEWEST_OVERALL_COUNT]
         newest_by_sender = self._newest_distinct_senders(newest)
         retained_uids = {item["uid"] for item in (*newest_overall, *newest_by_sender)}
         results = [item for item in newest if item["uid"] in retained_uids]

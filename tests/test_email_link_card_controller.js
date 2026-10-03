@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { detectEmailLinkStep, matchesPasswordResetWaitingPrompt } from "../extension/inline/email-link-step.js";
 import { startEmailLinkCard } from "../extension/inline/email-link-card-controller.js";
 import { inlineRuntime } from "./mock_inline_port.js";
-import { createFakeTimers } from "./fake_timers.js";
+import { createTimerQueue } from "./timer_queue.js";
 
 const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, accountEmail: "me@yahoo.com", sender: "hello@example.com", uid: 1 };
 
@@ -11,7 +11,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 const stepMutation = () => [{ type: "characterData", target: { nodeType: 3, textContent: "Check your email" } }];
 
 function setup(panel = null, mailType = "confirmationLinks") {
-  const timers = createFakeTimers(), events = {}, windowEvents = {};
+  const timers = createTimerQueue(), events = {}, windowEvents = {};
   const state = { now: 10000, detected: true, screenKey: "first signup", panel, code: false, requests: 0, collectionModes: [], stepReads: 0, views: [], respond: async () => ({ ok: true, [mailType]: [item], scanPending: false }) };
   state.mailType = mailType;
   const document = { hidden: false, documentElement: { append() {} }, querySelector: () => ({}), addEventListener(name, fn) { events[name] = fn; } };
@@ -32,7 +32,7 @@ function setup(panel = null, mailType = "confirmationLinks") {
     },
   });
   async function run(delay) {
-    await timers.run(delay); await settle();
+    await timers.runWithDelay(delay); await settle();
   }
   return { state, document, location, events, windowEvents, run, timers };
 }

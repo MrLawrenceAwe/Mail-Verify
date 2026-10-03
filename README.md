@@ -28,11 +28,11 @@ Use **↻** to restart checking, or **× / Escape** to dismiss an on-page sugges
 
 ## Checking and freshness
 
-Automatic checking lasts up to two minutes while the tab is active. Code suggestions check two seconds after each response; link cards and the popup check about every eight seconds. While slower inbox scans are running, collection polls retrieve results every second without starting scans. Full checks continue at the normal interval for available accounts. Keep the popup open for manual polling. Hiding a tab stops new on-page requests; scans already running in the companion can finish.
+Automatic checking lasts up to two minutes while the tab is active. Keep the popup open for manual checks. Hiding a tab stops new on-page checks.
 
-Each account scans its inbox only, starting with the latest 30 messages and limiting results to the last ten minutes. Spam and other folders are excluded. Up to four inboxes scan concurrently. Checks return completed results promptly while slower inboxes continue in the background; their results appear on a later poll.
+Checks show inbox emails from the last ten minutes. Spam and other folders are excluded. Results from slower accounts may appear later.
 
-Initial on-page suggestions allow emails received up to five seconds before the verification step appeared. After a resend, suggestions require mail dated in the following second or later, excluding the click’s second because inbox timestamps have one-second precision. The popup lets you choose other recent emails manually. See the [freshness rules](docs/development.md#detection-and-freshness-rules) for details.
+On-page suggestions show emails received around or after the verification step appeared. Resending clears older suggestions; an email arriving immediately after the click may also be excluded. Use the popup to choose other recent emails manually.
 
 ## Supported content and limits
 

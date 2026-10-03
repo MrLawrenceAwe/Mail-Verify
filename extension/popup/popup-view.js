@@ -30,8 +30,10 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
     getElement("linkGuidance").textContent = MAIL_PRESENTATION[mailType].guidance || "";
   }
 
-  function setDestination(text) {
-    getElement("destination").textContent = text;
+  function setCodeDestination(targetTab) {
+    getElement("destination").textContent = targetTab
+      ? new URL(targetTab.url).hostname : "an HTTPS page";
+    getElement("codePageHelp").hidden = !!targetTab;
   }
 
   function setAccountSubmitDisabled(disabled) {
@@ -117,7 +119,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
       const button = document.createElement("button");
       button.textContent = targetTab
         ? `Fill on ${new URL(targetTab.url).hostname}`
-        : "Open an HTTPS page with a verification-code field";
+        : "Fill code";
       button.disabled = !targetTab;
       button.addEventListener("click", () => onFillCode(item, button));
       card.append(button);
@@ -150,7 +152,7 @@ export function createPopupView(document, { onRemoveAccount, onFillCode, onUseLi
   getElement("addAccount").addEventListener("click", showAccountSetup);
 
   return { setStatus, showAccountSetup, showCompanionSetup,
-    setMailType, setDestination, setAccountSubmitDisabled, readCredentialsAndClearPassword,
+    setMailType, setCodeDestination, setAccountSubmitDisabled, readCredentialsAndClearPassword,
     clearAccountEmail, setCheckAndRemoveButtonsDisabled, setResultButtonsDisabled,
     markCodeFilled, markLinkOpened, markLinkCopied, renderAccounts, clearResults, renderCodes, renderLinks };
 }
