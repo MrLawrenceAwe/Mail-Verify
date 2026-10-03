@@ -1,3 +1,12 @@
+export function calculatePickerPosition(rect, width, height, viewportWidth, viewportHeight) {
+  const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
+  const below = rect.bottom + 4;
+  const top = below + height <= viewportHeight - 8
+    ? below
+    : Math.max(8, rect.top - height - 4);
+  return { left, top };
+}
+
 export function createCodePickerView(document, { onClose, onRetry, onFill }) {
   const host = document.createElement("div");
   host.dataset.mailVerify = "suggestion";

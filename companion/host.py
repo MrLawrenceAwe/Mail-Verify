@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from errors import UserError
-from keychain import keychain
+from keychain import access_saved_credentials
 from inbox_session import MAIL_EXTRACTORS, connect_imap
 from account_scan_manager import AccountScanManager
 
@@ -33,7 +33,7 @@ def account_lock():
 
 
 def load_account_credentials():
-    saved = keychain("get")
+    saved = access_saved_credentials("get")
     if not saved:
         return []
     # The original single-account Keychain item is read in place so an update
@@ -55,9 +55,9 @@ def handle_request(request, sessions):
             if len(remaining) == len(credentials):
                 raise UserError("That Yahoo account is not connected.")
             if remaining:
-                keychain("set", {"accounts": remaining})
+                access_saved_credentials("set", {"accounts": remaining})
             else:
-                keychain("delete")
+                access_saved_credentials("delete")
         sessions.remove(address)
         return {"accountEmails": [item["email"] for item in remaining]}
     if action == "saveAccount":
@@ -75,7 +75,7 @@ def handle_request(request, sessions):
             account_credentials = load_account_credentials()
             account_credentials = [item for item in account_credentials if item["email"].lower() != address.lower()]
             account_credentials.append(credentials)
-            keychain("set", {"accounts": account_credentials})
+            access_saved_credentials("set", {"accounts": account_credentials})
         sessions.remove(address)
         return {"accountEmails": [item["email"] for item in account_credentials]}
     if isinstance(action, str) and action in MAIL_EXTRACTORS:

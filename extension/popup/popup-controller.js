@@ -1,7 +1,7 @@
 import { createScanSchedule } from "../shared/scan-schedule.js";
-import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
+import { MAIL_PRESENTATION, formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
-import { handleCodeField } from "../shared/code-fields.js";
+import { handleVerificationFields } from "../shared/code-fields.js";
 import { isFreshMessage, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { createPopupView } from "./popup-view.js";
 import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
@@ -19,7 +19,7 @@ export function createPopupController({
   clipboard = globalThis.navigator?.clipboard,
 }) {
   const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
-  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: DEFAULT_SCAN_INTERVAL_MS });
+  const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout });
   let targetTab;
   let mailType = "codes";
   let checking = false,
@@ -91,7 +91,7 @@ export function createPopupController({
         );
       const [{ result }] = await chrome.scripting.executeScript({
         target: { tabId: targetTab.id },
-        func: handleCodeField,
+        func: handleVerificationFields,
         args: [{ action: "fill", code: item.code }],
       });
       if (!result?.ok)
@@ -156,7 +156,7 @@ export function createPopupController({
         else view.renderCodes(results, targetTab);
         view.setStatus(
           response.warnings?.length
-            ? `Some accounts could not be checked: ${response.warnings.join("; ")}`
+            ? formatAccountCheckWarnings(response.warnings)
             : results.length ? MAIL_PRESENTATION[mailType].foundStatus
               : scanSchedule.pending ? "Checking your connected inboxes…" : MAIL_PRESENTATION[mailType].popupEmptyStatus,
         );

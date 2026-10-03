@@ -1,6 +1,6 @@
 import { POLL_WINDOW_MS } from "./mail-timing.js";
 
-export function createPollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs }) {
+export function createPollingLifecycle({ clock, setTimeout, clearTimeout }) {
   let timer, deadline = 0, generation = 0;
   return {
     get deadline() { return deadline; },
@@ -11,7 +11,7 @@ export function createPollingLifecycle({ clock, setTimeout, clearTimeout, interv
     invalidateResponses() { generation++; },
     isCurrent(value) { return value === generation; },
     hasExpired() { return clock.now() >= deadline; },
-    schedule(callback, delay = intervalMs) {
+    schedule(callback, delay) {
       this.cancelScheduledCheck();
       timer = setTimeout(callback, delay);
     },

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { handleCodeField } from "../extension/shared/code-fields.js";
+import { handleVerificationFields } from "../extension/shared/code-fields.js";
 
 const contextStyle = node => node.fakeComputedStyle || { display: "block", visibility: "visible", opacity: "1" };
 
@@ -66,7 +66,7 @@ function run(inputs, activeElement = null, expectedAnchor = null, labelElements 
     },
   };
   vm.createContext(ctx);
-  return vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456", expectedAnchor })`, ctx);
+  return vm.runInContext(`(${handleVerificationFields.toString()})({ action: "fill", code: "123456", expectedAnchor })`, ctx);
 }
 
 test("fills labelled fields and rejects unrelated or hidden fields", () => {
@@ -152,7 +152,7 @@ test("does not report success when a single code field is replaced or cleared", 
       HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
       Event: class { constructor(type) { this.type = type; } },
     });
-    const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456" })`, context);
+    const result = vm.runInContext(`(${handleVerificationFields.toString()})({ action: "fill", code: "123456" })`, context);
     assert.equal(result.ok, false);
     assert.equal(original.focused, undefined);
     if (replace) assert.equal(current.value, undefined);
@@ -347,7 +347,7 @@ test("follows split fields replaced after each digit", () => {
   };
   vm.createContext(rerenderCtx);
   assert.equal(
-    vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456" })`, rerenderCtx).ok,
+    vm.runInContext(`(${handleVerificationFields.toString()})({ action: "fill", code: "123456" })`, rerenderCtx).ok,
     true,
   );
   assert.equal(current.map((x) => x.value).join(""), "123456");
@@ -370,7 +370,7 @@ test("stops if a rerender inserts another digit in the verification group", () =
     HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
     Event: class { constructor(type) { this.type = type; } },
   });
-  const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "fill", code: "123456" })`, context);
+  const result = vm.runInContext(`(${handleVerificationFields.toString()})({ action: "fill", code: "123456" })`, context);
   assert.equal(result.ok, false);
   assert.equal(current[0].value, undefined);
   assert.equal(original[1].value, undefined);
@@ -400,7 +400,7 @@ test("generic code field uses verification context outside its form", () => {
     innerHeight: 800,
     innerWidth: 1200,
   });
-  const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context);
+  const result = vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context);
   assert.equal(result.ok, true);
   assert.equal(result.candidateCache.contextRoots.length, 3);
   assert.equal(result.candidateCache.contextRoots.includes(form), true);
@@ -408,7 +408,7 @@ test("generic code field uses verification context outside its form", () => {
   assert.deepEqual(Array.from(result.stepContext.roots), [form, instructions]);
   assert.equal(result.stepContext.parent, main);
   instructions.firstChild.data = "Enter code to redeem a discount";
-  assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
+  assert.equal(vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context).ok, false);
 });
 
 test("unrelated verification text elsewhere in main does not identify a generic field", () => {
@@ -421,9 +421,9 @@ test("unrelated verification text elsewhere in main does not identify a generic 
     getComputedStyle: contextStyle,
     innerHeight: 800, innerWidth: 1200,
   });
-  assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, false);
+  assert.equal(vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context).ok, false);
   couponInstructions.firstChild.data = "We sent a code to your email.";
-  assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, true);
+  assert.equal(vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context).ok, true);
 });
 
 test("explicit hints skip page text and generic hints read shared context once", () => {
@@ -447,7 +447,7 @@ test("automatic detection does not fill or dispatch events", () => {
     document: { querySelectorAll: () => [input], activeElement: input },
     innerHeight: 800, innerWidth: 1200,
   });
-  assert.equal(vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context).ok, true);
+  assert.equal(vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context).ok, true);
   assert.equal(input.value, undefined);
   assert.deepEqual(input.events, []);
 });
@@ -459,7 +459,7 @@ test("opening a modal invalidates cached background code fields and restricts fi
   const dialog = { querySelectorAll: () => [inside] };
   const document = { activeElement: null, querySelector: () => modal,
     querySelectorAll: () => [background, inside] };
-  const handle = vm.runInNewContext(`(${handleCodeField.toString()})`, {
+  const handle = vm.runInNewContext(`(${handleVerificationFields.toString()})`, {
     document, HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
     Event: class { constructor(type) { this.type = type; } },
   });
@@ -480,7 +480,7 @@ test("detection reports generic code context for later page updates", () => {
     document: { querySelectorAll: () => [input], activeElement: input },
     innerHeight: 800, innerWidth: 1200,
   });
-  const result = vm.runInContext(`(${handleCodeField.toString()})({ action: "detect" })`, context);
+  const result = vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context);
   assert.equal(result.ok, false);
   assert.equal(result.candidateCache.contextRoots[0], form);
 });
@@ -496,7 +496,7 @@ test("cached detection tracks offscreen candidates without rescanning unrelated 
     document: { querySelectorAll: () => { queries++; return [input, unrelated]; }, activeElement: null },
     innerHeight: 800, innerWidth: 1200,
   });
-  vm.runInContext(`var detect = (${handleCodeField.toString()}); var field = detect({ action: "detect", trackedAnchor: input });`, context);
+  vm.runInContext(`var detect = (${handleVerificationFields.toString()}); var field = detect({ action: "detect", trackedAnchor: input });`, context);
   assert.equal(context.field.ok, false);
   assert.equal(context.field.trackedAnchorOffscreen, true);
   input.rect = { top: 100, bottom: 130, left: 0, right: 100 };
@@ -525,7 +525,7 @@ test("cached detection returns current step roots for explicit code fields", () 
     document: { querySelectorAll: () => [input], activeElement: input },
     innerHeight: 800, innerWidth: 1200,
   });
-  vm.runInContext(`var detect = (${handleCodeField.toString()}); var field = detect({ action: "detect" });`, context);
+  vm.runInContext(`var detect = (${handleVerificationFields.toString()}); var field = detect({ action: "detect" });`, context);
   assert.deepEqual(Array.from(context.field.stepContext.roots), [form, instructions, previous]);
   assert.equal(context.field.stepContext.parent, parent);
   const replacement = { textContent: "Code for a different signup" };
@@ -545,7 +545,7 @@ test("detects and fills fields named by multiple aria-labelledby references", ()
     document: { querySelectorAll: () => [input], activeElement: input, getElementById: id => labels.get(id) },
     innerHeight: 800, innerWidth: 1200,
   });
-  const detect = vm.runInContext(`(${handleCodeField.toString()})`, context);
+  const detect = vm.runInContext(`(${handleVerificationFields.toString()})`, context);
   // The accessible name joins references in their specified order.
   assert.equal(detect({ action: "detect" }).ok, true);
   assert.equal(run([input], input, input, labels).ok, true);
@@ -573,7 +573,7 @@ function contextElement(tagName, children = [], props = {}) {
 function contextText(data) { return { nodeType: 3, data, get textContent() { return this.data; } }; }
 
 function detectWith(inputs, activeElement = null) {
-  return vm.runInNewContext(`(${handleCodeField.toString()})`, {
+  return vm.runInNewContext(`(${handleVerificationFields.toString()})`, {
     document: { querySelectorAll: () => inputs, activeElement },
     getComputedStyle: contextStyle,
     HTMLInputElement: FakeInput,

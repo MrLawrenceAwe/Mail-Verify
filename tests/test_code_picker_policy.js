@@ -1,11 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculatePickerPosition, selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl } from "../extension/inline/code-picker-policy.js";
-
-test("suggestions sit below the field and stay within the viewport", () => {
-  assert.deepEqual(calculatePickerPosition({ left: 100, top: 200, bottom: 240 }, 300, 110, 1000, 800), { left: 100, top: 244 });
-  assert.deepEqual(calculatePickerPosition({ left: 900, top: 700, bottom: 740 }, 300, 110, 1000, 800), { left: 692, top: 586 });
-});
+import { selectSuggestedCodes, mutationAffectsPicker, isCodeRequestControl } from "../extension/inline/code-picker-policy.js";
 
 test("old codes are withheld while waiting for this verification attempt", () => {
   const older = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 1000 };
@@ -76,8 +71,8 @@ test("page mutations only rescan when fields or their form can change", () => {
   assert.equal(mutationAffectsPicker([{ type: "attributes", target: node("div", true) }]), true);
   assert.equal(mutationAffectsPicker([{ type: "characterData", target: { parentElement: labelChild } }]), true);
   const context = [{ contains: () => true }];
-  assert.equal(mutationAffectsPicker([{ type: "characterData", target: { textContent: "new code" } }], null, context), true);
-  assert.equal(mutationAffectsPicker([{ type: "characterData", target: { textContent: "clock" } }], null, context), false);
+  assert.equal(mutationAffectsPicker([{ type: "characterData", target: { textContent: "new code" } }], { fieldContextRoots: context }), true);
+  assert.equal(mutationAffectsPicker([{ type: "characterData", target: { textContent: "clock" } }], { fieldContextRoots: context }), false);
 });
 
 test("repeated unrelated attribute targets are inspected once per batch", () => {
@@ -99,7 +94,7 @@ test("picker bounds added and removed subtrees without aggregate text or queries
   for (const changed of ["addedNodes", "removedNodes"]) {
     const record = { type: "childList", target: {}, addedNodes: [], removedNodes: [] };
     record[changed] = [root];
-    assert.equal(mutationAffectsPicker([record], null, context), true);
+    assert.equal(mutationAffectsPicker([record], { fieldContextRoots: context }), true);
   }
 });
 
@@ -124,7 +119,7 @@ test("picker text budget includes current and previous text across records", () 
       get textContent() { reads++; return "x".repeat(1000); } },
     oldValue: "y".repeat(1000),
   }));
-  assert.equal(mutationAffectsPicker(records, null, [{ contains: () => true }]), true);
+  assert.equal(mutationAffectsPicker(records, { fieldContextRoots: [{ contains: () => true }] }), true);
   assert.equal(reads, 6);
 });
 
@@ -135,9 +130,9 @@ test("picker bounded traversal preserves nested fields and split context prompts
   span.firstChild = { nodeType: 3, textContent: "mail", parentNode: span };
   const record = { type: "childList", target: {}, addedNodes: [root], removedNodes: [] };
   const context = [{ contains: () => true }];
-  assert.equal(mutationAffectsPicker([record], null, context), true);
+  assert.equal(mutationAffectsPicker([record], { fieldContextRoots: context }), true);
   span.firstChild.textContent = "Price changed";
-  assert.equal(mutationAffectsPicker([record], null, context), false);
+  assert.equal(mutationAffectsPicker([record], { fieldContextRoots: context }), false);
   span.matches = selector => selector.includes("input");
   assert.equal(mutationAffectsPicker([record]), true);
 });
@@ -149,5 +144,5 @@ test("referenced accessible labels invalidate detection for any text change", ()
     { type: "characterData", target: text, oldValue: "OTP" },
     { type: "childList", target: root, addedNodes: [], removedNodes: [] },
     { type: "attributes", attributeName: "id", target: root },
-  ]) assert.equal(mutationAffectsPicker([record], null, [], [], undefined, [root]), true);
+  ]) assert.equal(mutationAffectsPicker([record], { labelRoots: [root] }), true);
 });

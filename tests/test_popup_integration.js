@@ -86,6 +86,7 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
     requests: [],
     sessionRequests: [],
     scanPending: false,
+    warnings: [],
     sendOneOff: null,
   };
   const tab = { id: 1, url: tabUrl };
@@ -97,9 +98,9 @@ async function setup({ codes = [code], account = "test@yahoo.com", remainingAcco
       state.sessionRequests.push({ action, collectOnly });
       return action === "status"
         ? { accountEmails: account ? [account] : [] }
-        : action === "passwordResetLinks" ? { passwordResetLinks: await state.fetchPasswordResetLinks(), scanPending: state.scanPending }
-        : action === "confirmationLinks" ? { confirmationLinks: await state.fetchConfirmationLinks(), scanPending: state.scanPending }
-        : { codes: await state.fetchCodes(), scanPending: state.scanPending };
+        : action === "passwordResetLinks" ? { passwordResetLinks: await state.fetchPasswordResetLinks(), scanPending: state.scanPending, warnings: state.warnings }
+        : action === "confirmationLinks" ? { confirmationLinks: await state.fetchConfirmationLinks(), scanPending: state.scanPending, warnings: state.warnings }
+        : { codes: await state.fetchCodes(), scanPending: state.scanPending, warnings: state.warnings };
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);
@@ -418,7 +419,7 @@ test("finds links only on request and opens only the selected link", async () =>
   assert.equal(controls.codeContext.hidden, true);
   assert.deepEqual(state.opened, []);
   assert.deepEqual(controls.results.children[0].children.slice(0, 4).map(line => line.textContent),
-    [link.accountEmail, link.sender, link.subject, "Destination: example.com"]);
+    [link.accountEmail, link.sender, link.subject, "Link host: example.com"]);
   const button = controls.results.querySelectorAll("button")[0];
   assert.equal(button.textContent, "Open confirmation link ↗");
   await button.trigger();
@@ -547,7 +548,7 @@ test("popup guidance follows the selected action and clears when returning to co
   assert.match(controls.linkGuidance.textContent, /Opening a link in a new tab/);
   controls.checkPasswordResetLinks.trigger();
   await settle();
-  assert.match(controls.linkGuidance.textContent, /sender and destination before copying/);
+  assert.match(controls.linkGuidance.textContent, /sender and link host before copying/);
   assert.doesNotMatch(controls.linkGuidance.textContent, /open|confirm/i);
   controls.checkCodes.trigger();
   await settle();
@@ -582,4 +583,30 @@ test("unavailable popup clipboard gives recovery guidance and keeps links select
   assert.equal(button.disabled, false);
   assert.match(controls.status.textContent, /Clipboard unavailable.*Close and reopen this popup/);
   assert.doesNotMatch(controls.status.textContent, /Try copying again from the popup/);
+});
+
+test("partial account failures keep popup results selectable and clear after recovery", async () => {
+  for (const [control, fetchResults] of [
+    ["checkCodes", "fetchCodes"],
+    ["checkConfirmationLinks", "fetchConfirmationLinks"],
+    ["checkPasswordResetLinks", "fetchPasswordResetLinks"],
+  ]) {
+    const { controls, state } = await setup();
+    state[fetchResults] = async () => [{ ...code, url: "https://example.com/verify" }];
+    state.warnings = ["other@yahoo.com: Yahoo took too long to respond."];
+    controls[control].trigger();
+    await settle();
+    const button = controls.results.querySelectorAll("button")[0];
+    assert.equal(button.disabled, false);
+    assert.equal(controls.status.textContent, "Some accounts could not be checked: other@yahoo.com: Yahoo took too long to respond.");
+    state.warnings = [];
+    controls[control].trigger();
+    await settle();
+    assert.equal(controls.results.querySelectorAll("button")[0], button);
+    assert.doesNotMatch(controls.status.textContent, /could not be checked/);
+    await button.trigger();
+    if (control === "checkCodes") assert.ok(state.scriptArgs);
+    else if (control === "checkConfirmationLinks") assert.equal(state.opened.length, 1);
+    else assert.deepEqual(state.copied, ["https://example.com/verify"]);
+  }
 });

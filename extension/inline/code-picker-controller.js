@@ -1,19 +1,20 @@
+import { formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { createScanSchedule } from "../shared/scan-schedule.js";
-import { calculatePickerPosition, selectSuggestedCodes, messageKey, mutationAffectsPicker, isCodeRequestControl } from "./code-picker-policy.js";
+import { selectSuggestedCodes, messageKey, mutationAffectsPicker, isCodeRequestControl } from "./code-picker-policy.js";
 import { REQUEST_CONTROL_SELECTOR } from "../shared/request-controls.js";
 import { readCodeStepContext } from "../shared/code-step-context.js";
-import { handleCodeField } from "../shared/code-fields.js";
-import { createCodePickerView } from "./code-picker-view.js";
+import { handleVerificationFields as defaultVerificationFieldsHandler } from "../shared/code-fields.js";
+import { calculatePickerPosition, createCodePickerView } from "./code-picker-view.js";
 import { initialStepCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
 import { mountSuggestion, suggestionMountRoot } from "./suggestion-mount.js";
 
-export function startCodePicker({ browser = globalThis, handleField = handleCodeField, page = getPageCoordinator(browser, handleField) } = {}) {
+export function startCodePicker({ environment = globalThis, handleVerificationFields = defaultVerificationFieldsHandler, page = getPageCoordinator(environment, handleVerificationFields) } = {}) {
   const { document, window, location, chrome, requestAnimationFrame,
-    setTimeout, clearTimeout, Date: clock = Date } = browser;
-  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout, intervalMs: CODE_PICKER_SCAN_INTERVAL_MS });
+    setTimeout, clearTimeout, Date: clock = Date } = environment;
+  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout });
   const { checks } = polling;
   let view;
   const scanSchedule = createScanSchedule({ clock, intervalMs: CODE_PICKER_SCAN_INTERVAL_MS });
@@ -21,7 +22,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
   let minReceivedAtMs, anchor, stepContext;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);
-  const readStepContext = (context) => readCodeStepContext(context, browser.getComputedStyle);
+  const readStepContext = (context) => readCodeStepContext(context, environment.getComputedStyle);
   function unmountPicker({ preserveStep = false } = {}) {
     scanSchedule.clearPending();
     polling.invalidateChecks();
@@ -49,7 +50,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     if (view.host.parentNode && view.host.parentNode !== mountRoot)
       mountSuggestion(document, view.host, field.anchor);
     const bounds = view.host.getBoundingClientRect();
-    const { left, top } = calculatePickerPosition(field.rect, bounds.width, bounds.height, browser.innerWidth, browser.innerHeight);
+    const { left, top } = calculatePickerPosition(field.rect, bounds.width, bounds.height, environment.innerWidth, environment.innerHeight);
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
@@ -72,7 +73,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
           positionPicker();
           return;
         }
-        const result = handleField({ action: "fill", code: item.code, expectedAnchor: mountedAnchor });
+        const result = handleVerificationFields({ action: "fill", code: item.code, expectedAnchor: mountedAnchor });
         if (result.ok) {
           filledStep = true;
           unmountPicker({ preserveStep: true });
@@ -113,7 +114,7 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
       const codes = selectSuggestedCodes(response.codes, minReceivedAtMs, clock.now(), excludedMessageKeys);
       view.renderCodes(codes, location.hostname);
       const status = response.warnings?.length
-        ? `Could not check: ${response.warnings.join("; ")}`
+        ? formatAccountCheckWarnings(response.warnings)
         : codes.length
           ? location.hostname
           : "Waiting for an email code…";
@@ -199,7 +200,13 @@ export function startCodePicker({ browser = globalThis, handleField = handleCode
     });
   };
   page.onMutation((records) => {
-    if (mutationAffectsPicker(records, view?.host, page.candidateCache?.contextRoots, stepContext?.roots, stepContext?.parent, page.candidateCache?.labelRoots)) scheduleDiscovery();
+    if (mutationAffectsPicker(records, {
+      suggestionHost: view?.host,
+      fieldContextRoots: page.candidateCache?.contextRoots,
+      stepRoots: stepContext?.roots,
+      stepParent: stepContext?.parent,
+      labelRoots: page.candidateCache?.labelRoots,
+    })) scheduleDiscovery();
   });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
