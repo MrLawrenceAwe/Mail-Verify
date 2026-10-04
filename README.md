@@ -15,6 +15,8 @@ Find email verification codes, account confirmation links, and password reset li
 - Extracts codes and links locally, with freshness filtering and bounded page inspection.
 - Automated Python and JavaScript suites use synthetic mail and fake browser/IMAP connections.
 
+For a preview without an inbox, serve the repository with `python3 -m http.server 8767 --bind 127.0.0.1` and open `/docs/preview.html`. This renders the real suggestion interface with synthetic mail.
+
 ## Quick setup
 
 Requires macOS, desktop Chrome, Python 3.9+ and a Yahoo-generated app password.
