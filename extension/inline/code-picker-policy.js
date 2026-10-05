@@ -1,5 +1,5 @@
 import { createMutationInspection } from "./mutation-inspection.js";
-import { getRequestControlLabel } from "./request-controls.js";
+import { getRequestControlLabel, isPhoneOnlyRequestLabel } from "./request-controls.js";
 import { isFreshMessage } from "../shared/mail-timing.js";
 
 export function selectSuggestedCodes(codes, minReceivedAtMs, now = Date.now(), excludedMessageKeys = new Set()) {
@@ -50,7 +50,7 @@ export function mutationAffectsPicker(records, { suggestionHost, fieldContextRoo
 
 export function isCodeRequestControl(control) {
   const label = getRequestControlLabel(control);
-  if (/\b(?:coupon|promo|discount|referral)\b/i.test(label)) return false;
+  if (isPhoneOnlyRequestLabel(label) || /\b(?:coupon|promo|discount|referral)\b/i.test(label)) return false;
   return /^(?:re-?send|send|request|get|email)\b/i.test(label) &&
     (/\b(?:code|otp|passcode)\b/i.test(label) || /^(?:re-?send(?: again| e-?mail)?|send again)$/i.test(label));
 }

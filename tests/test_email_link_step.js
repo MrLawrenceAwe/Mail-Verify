@@ -96,6 +96,17 @@ test("an active native modal takes precedence over background waiting panels", (
     querySelectorAll: () => [background] }).mailType, 'passwordResetLinks');
 });
 
+test("the active stacked modal determines link purpose instead of the first dialog", () => {
+  const panel = text => ({ querySelectorAll: () => [], innerText: text,
+    getClientRects: () => [{}], checkVisibility: () => true });
+  const inactive = panel('Check your email for a confirmation link.');
+  const active = panel('Password reset. Check your email.');
+  const document = { activeElement: { closest: () => active }, querySelector: () => inactive };
+  const step = detectEmailLinkStep(document);
+  assert.equal(step.panel, active);
+  assert.equal(step.mailType, 'passwordResetLinks');
+});
+
 test("detects reset email waiting screens while excluding request and new-password forms", () => {
   for (const text of ["Reset your password. Check your inbox", "Password reset link sent to your email", "We sent a link to reset your password", "Follow the link in your email to change your password"])
     assert.equal(matchesPasswordResetWaitingPrompt(text), true, text);

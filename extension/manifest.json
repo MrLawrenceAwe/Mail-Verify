@@ -46,6 +46,7 @@
         "inline/recipient-identity.js",
         "inline/request-controls.js",
         "inline/suggestion-mount.js",
+        "shared/active-modal.js",
         "shared/code-fields.js",
         "shared/email-link-details.js",
         "shared/email-link-url.js",

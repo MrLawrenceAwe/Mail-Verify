@@ -1,4 +1,5 @@
 import { recipientKeyFromText } from "./recipient-identity.js";
+import { findActiveModal } from "../shared/active-modal.js";
 
 const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;
@@ -64,7 +65,7 @@ export function matchesPasswordResetWaitingPrompt(text) {
 
 export function detectEmailLinkStep(document) {
   // Inspect short visible task panels, never hidden templates or the extension card.
-  const modal = document.querySelector?.('dialog:modal');
+  const modal = findActiveModal(document);
   const panelSelector = "main, [role=main], form, [role=dialog], dialog";
   const panels = modal ? [modal, ...modal.querySelectorAll(panelSelector)]
     : [...document.querySelectorAll(panelSelector)];

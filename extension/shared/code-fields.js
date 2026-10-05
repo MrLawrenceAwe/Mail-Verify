@@ -143,7 +143,11 @@ export function handleVerificationFields({ action, code, candidateCache, expecte
     }) ? group : null;
   };
   const focused = document.activeElement;
-  const scope = document.querySelector?.('dialog:modal') || document;
+  // Keep modal selection inline because Chrome serializes this function for
+  // popup fills. This follows the same rule as shared/active-modal.js.
+  const scope = focused?.closest?.('dialog:modal') ||
+    document.elementFromPoint?.(0, 0)?.closest?.('dialog:modal') ||
+    document.querySelector?.('dialog:modal') || document;
   // Cache semantic candidates, including offscreen fields, for cheap scroll updates.
   // Filling always rediscovers the page so cached hints cannot authorize a fill.
   let candidates = detectOnly && candidateCache;

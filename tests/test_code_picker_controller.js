@@ -6,7 +6,8 @@ import { handleVerificationFields } from "../extension/shared/code-fields.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createTimerQueue } from "./timer_queue.js";
 
-function pickerEnvironment({ handleVerificationFields, now = Date.now, check, onMount = () => {},
+function pickerEnvironment({ handleVerificationFields, now = Date.now, check, activeElement,
+  onMount = () => {},
   onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn(), getControls = () => [] }) {
   const events = new Map(), timers = createTimerQueue();
   const results = {
@@ -22,6 +23,7 @@ function pickerEnvironment({ handleVerificationFields, now = Date.now, check, on
     innerWidth: 1200, innerHeight: 800,
     getComputedStyle: node => node.fakeComputedStyle || {},
     document: {
+      activeElement,
       hidden: false,
       documentElement: { append: onMount },
       querySelectorAll: getControls,
@@ -79,6 +81,7 @@ test("code suggestions mount beside their field inside a modal dialog", async ()
   const f = pickerEnvironment({ handleVerificationFields: () => ({ ok: true, anchor,
     rect: { top:100, bottom:130, left:20, right:200 } }),
     check: async () => ({ ok: true, codes: [] }),
+    activeElement: anchor,
     onMount: () => assert.fail('must not mount in the inert background'),
   });
   await new Promise(resolve => setImmediate(resolve));

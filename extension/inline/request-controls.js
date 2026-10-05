@@ -6,6 +6,11 @@ export function getRequestControlLabel(control) {
     .replace(/\s+/g, " ").trim();
 }
 
+export function isPhoneOnlyRequestLabel(label) {
+  return /\b(?:sms|text(?:\s+message)?|phone|mobile|telephone|whatsapp|voice|call)\b/i.test(label) &&
+    !/\be-?mail\b/i.test(label);
+}
+
 // A form owns its controls even when they live outside its DOM subtree.
 function requestControlScope(element) {
   return element?.form || element?.closest?.("form, dialog, [role=dialog], main, [role=main]");

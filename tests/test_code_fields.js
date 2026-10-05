@@ -473,6 +473,28 @@ test("opening a modal invalidates cached background code fields and restricts fi
   assert.equal(background.value, undefined);
 });
 
+test("serialized filling uses the active stacked modal and rejects the inactive field", () => {
+  const inactiveInput = new FakeInput({ autocomplete: 'one-time-code' });
+  const activeInput = new FakeInput({ autocomplete: 'one-time-code' });
+  const inactive = { querySelectorAll: () => [inactiveInput] };
+  const active = { querySelectorAll: () => [activeInput] };
+  activeInput.closest = () => active;
+  const document = { activeElement: activeInput, querySelector: () => inactive,
+    querySelectorAll: () => [inactiveInput, activeInput],
+    elementFromPoint: () => ({ closest: () => active }) };
+  const handle = vm.runInNewContext(`(${handleVerificationFields.toString()})`, {
+    document, HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
+    Event: class { constructor(type) { this.type = type; } },
+  });
+  assert.equal(handle({ action: 'detect' }).anchor, activeInput);
+  assert.equal(handle({ action: 'fill', code: '123456', expectedAnchor: inactiveInput }).ok, false);
+  assert.equal(handle({ action: 'fill', code: '123456' }).ok, true);
+  assert.equal(activeInput.value, '123456');
+  assert.equal(inactiveInput.value, undefined);
+  document.activeElement = null;
+  assert.equal(handle({ action: 'detect' }).anchor, activeInput);
+});
+
 test("detection reports generic code context for later page updates", () => {
   const form = { textContent: "Enter code", contains: () => true };
   const input = new FakeInput({ name: "code", form });

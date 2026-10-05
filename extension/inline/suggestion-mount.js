@@ -1,11 +1,12 @@
+import { findActiveModal } from "../shared/active-modal.js";
+
 // Modal dialogs make the rest of the document inert, regardless of z-index.
-export function suggestionMountRoot(document, anchor) {
-  return anchor?.closest?.("dialog:modal") ||
-    document.querySelector?.("dialog:modal") || document.documentElement;
+export function suggestionMountRoot(document) {
+  return findActiveModal(document) || document.documentElement;
 }
 
-export function mountSuggestion(document, host, anchor) {
-  const root = suggestionMountRoot(document, anchor);
+export function mountSuggestion(document, host) {
+  const root = suggestionMountRoot(document);
   // A popover inside the modal stays interactive, but escapes transformed or
   // clipping dialog ancestors so fixed positioning still uses the viewport.
   if (host.hasAttribute("popover")) {

@@ -1,5 +1,5 @@
 import { createMutationInspection } from "./mutation-inspection.js";
-import { getRequestControlLabel } from "./request-controls.js";
+import { getRequestControlLabel, isPhoneOnlyRequestLabel } from "./request-controls.js";
 import { isFreshMessage } from "../shared/mail-timing.js";
 
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
@@ -13,6 +13,7 @@ export function selectEmailLinks(items, minReceivedAtMs, now) {
 
 export function isEmailLinkRequestControl(control) {
   const label = getRequestControlLabel(control);
+  if (isPhoneOnlyRequestLabel(label)) return false;
   if (/^(?:re-?send|send again)\b/i.test(label)) return true;
   return /^(?:send|request|get|email)\b/i.test(label) &&
     /\b(?:confirm(?:ation)?|verif(?:y|ication)|activat(?:e|ion)|reset|password)\b/i.test(label) &&

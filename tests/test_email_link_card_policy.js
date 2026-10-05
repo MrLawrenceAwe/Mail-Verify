@@ -6,9 +6,11 @@ const item = { url: "https://example.com/confirm?token=abc", receivedAt: 10000, 
 
 test("recognises controls that request another confirmation message", () => {
   const control = (textContent) => ({ textContent, getAttribute: () => "" });
-  for (const label of ["Resend email", "Send again", "Send confirmation email", "Request verification link"])
+  for (const label of ["Resend email", "Resend email and SMS code", "Send again", "Send confirmation email", "Request verification link"])
     assert.equal(isEmailLinkRequestControl(control(label)), true, label);
   assert.equal(isEmailLinkRequestControl(control("Contact support")), false);
+  for (const label of ["Resend SMS code", "Resend text message", "Resend phone verification", "Send again via WhatsApp"])
+    assert.equal(isEmailLinkRequestControl(control(label)), false, label);
 });
 
 test("ignores unrelated page mutations but scans prompt and code-field changes", () => {

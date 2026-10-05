@@ -26,6 +26,8 @@ import { startCodePicker } from '../../extension/inline/code-picker-controller.j
 import { startEmailLinkCard } from '../../extension/inline/email-link-card-controller.js';
 import { inlineRuntime } from '../mock_inline_port.js';
 const mode = new URL(location.href).searchParams.get('mode') || 'codes';
+if (new URL(location.href).searchParams.has('sameForm'))
+  document.querySelector('#emailStep').append(document.querySelector('#phoneResend'));
 const isCode = mode === 'codes';
 document.querySelector('h1').textContent = isCode ? 'Email verification' : mode === 'passwordResetLinks' ? 'Password reset' : 'Account confirmation';
 document.querySelector('#instruction').textContent = isCode

@@ -47,9 +47,9 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
   }
   function positionPicker(field = detectCodeField()) {
     if (!view || !field.ok) return;
-    const mountRoot = suggestionMountRoot(document, field.anchor);
+    const mountRoot = suggestionMountRoot(document);
     if (view.host.parentNode && view.host.parentNode !== mountRoot)
-      mountSuggestion(document, view.host, field.anchor);
+      mountSuggestion(document, view.host);
     const bounds = view.host.getBoundingClientRect();
     pageControls ??= [...document.querySelectorAll('button, a[href], input, select, textarea, [role="button"], [role="link"]')];
     const controlRects = pageControls.filter(control => control !== field.anchor && control.isConnected &&
@@ -88,7 +88,7 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
       },
     });
     view = mountedView;
-    mountSuggestion(document, view.host, field.anchor);
+    mountSuggestion(document, view.host);
     restartPolling();
     positionPicker(field);
   }
