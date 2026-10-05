@@ -441,6 +441,8 @@ test("retry during an active check ignores its response and checks again immedia
 for (const resend of [
   { tagName: "INPUT", value: "Resend code", getAttribute: () => null },
   { textContent: "Resend email" },
+  { textContent: "Resend verification email" },
+  { textContent: "Resend confirmation e-mail" },
   { textContent: "Send again" },
 ]) test(`${resend.value || resend.textContent} clears the old suggestion and waits for newer mail`, async () => {
   let now = 9500;
@@ -468,7 +470,7 @@ for (const resend of [
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
 });
 
-for (const textContent of ["Resend email", "Send again"])
+for (const textContent of ["Resend email", "Resend verification email", "Send again"])
 test(`${textContent} restarts checking after the polling deadline`, async () => {
   let now = 9500, checks = 0;
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };

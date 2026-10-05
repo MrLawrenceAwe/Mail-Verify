@@ -44,9 +44,9 @@ test("same sender and UID in separate accounts remain distinct", () => {
 });
 
 test("recognises common resend labels without treating coupon requests as email codes", () => {
-  for (const textContent of ["Resend code", "Resend email and SMS code", "Send another verification code", "Request a new code", "Get a new OTP", "Resend", "Resend email", "Resend e-mail", "Send again"])
+  for (const textContent of ["Resend code", "Resend email and SMS code", "Send another verification code", "Request a new code", "Get a new OTP", "Resend", "Resend email", "Resend e-mail", "Resend verification email", "Resend confirmation e-mail", "Resend security email", "Resend authentication email", "Send again"])
     assert.equal(isCodeRequestControl({ textContent }), true, textContent);
-  for (const textContent of ["Resend invoice", "Resend message", "Send email", "Send promo code again", "Resend SMS code", "Send phone verification code", "Resend text message", "Request mobile code"])
+  for (const textContent of ["Resend invoice", "Resend invoice email", "Resend message", "Send email", "Send promo code again", "Resend SMS code", "Send phone verification code", "Resend text message", "Request mobile code"])
     assert.equal(isCodeRequestControl({ textContent }), false, textContent);
   assert.equal(isCodeRequestControl({ textContent: "Send promo code" }), false);
   assert.equal(isCodeRequestControl({ textContent: "Continue" }), false);

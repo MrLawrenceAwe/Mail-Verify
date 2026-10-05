@@ -52,5 +52,5 @@ export function isCodeRequestControl(control) {
   const label = getRequestControlLabel(control);
   if (isPhoneOnlyRequestLabel(label) || /\b(?:coupon|promo|discount|referral)\b/i.test(label)) return false;
   return /^(?:re-?send|send|request|get|email)\b/i.test(label) &&
-    (/\b(?:code|otp|passcode)\b/i.test(label) || /^(?:re-?send(?: again| e-?mail)?|send again)$/i.test(label));
+    (/\b(?:code|otp|passcode)\b/i.test(label) || /^(?:re-?send(?: again| (?:(?:verification|confirmation|security|authentication) )?e-?mail)?|send again)$/i.test(label));
 }
