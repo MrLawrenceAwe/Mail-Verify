@@ -282,13 +282,15 @@ class InboxSession:
                 if status != "OK":
                     raise UserError("Yahoo could not open your inbox.")
                 self.message_count = int(count[0])
+            metadata = self._fetch_candidate_metadata()
+            # Mail can arrive while IMAP is searching or fetching metadata.
+            # Judge arrival times against the completed fetch, not scan start.
             now = time.time()
             self.items_by_uid = {
                 uid: item
                 for uid, item in self.items_by_uid.items()
                 if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS
             }
-            metadata = self._fetch_candidate_metadata()
             self.pending_body_timestamps_seconds.update(self._eligible_arrival_times(metadata, now))
             candidates = self._prune_pending_messages(now)
             self._fetch_items(candidates)

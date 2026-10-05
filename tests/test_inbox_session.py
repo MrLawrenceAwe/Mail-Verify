@@ -14,6 +14,43 @@ from imap_responses import body_response, metadata_response
 
 
 class InboxSessionTests(unittest.TestCase):
+    def test_mail_arriving_during_search_retains_its_arrival_time_after_resend(self):
+        base = 1_790_000_000
+        arrival = base + 1
+        for mail_type, body in (
+            ("codes", "Your security code is 654321."),
+            ("confirmationLinks", "Confirm your account: https://example.test/confirm"),
+            ("passwordResetLinks", "Reset your password: https://example.test/reset"),
+        ):
+            with self.subTest(mail_type=mail_type):
+                # The scan starts in the resend's second. A search response
+                # includes mail delivered in the next second, after the cutoff.
+                now = [base + 0.8]
+
+                class FakeConnection:
+                    def uid(self, command, *args):
+                        if command == "search":
+                            now[0] = max(now[0], base + 1.2)
+                            return "OK", [b"101"]
+                        if "INTERNALDATE" in args[1]:
+                            return metadata_response([101], received_at=arrival)
+                        return body_response([(101, make_raw_email(body))])
+
+                    def shutdown(self):
+                        pass
+
+                session = inbox_session.InboxSession({}, mail_type)
+                session.connection = FakeConnection()
+                session.discovery_cursor_uid = 100
+                with patch.object(inbox_session.time, "time", side_effect=lambda: now[0]):
+                    first = session.scan_inbox()
+                    now[0] = base + 2
+                    second = session.scan_inbox()
+                self.assertEqual(len(first), 1)
+                self.assertEqual(first[0]["receivedAt"], arrival * 1000)
+                self.assertEqual(second, first)
+                session.close()
+
     def test_partial_initial_metadata_does_not_requeue_processed_bodies(self):
         received_at = time.time() - 60
 
