@@ -96,6 +96,8 @@ A scan downloads eligible messages in batches of at most five, newest first. It 
 
 Initial discovery starts with the latest 30 inbox messages. `MAX_CANDIDATE_MESSAGES` also bounds the metadata and body candidate queues; it is separate from download batch size and retained result limits. `discovery_cursor_uid` tracks discovered UIDs even when their metadata or bodies still need fetching; `pending_body_timestamps_seconds` maps queued body UIDs to arrival times in seconds. Each inbox retains the union of its five newest results (`NEWEST_OVERALL_COUNT`) and its newest result from each of five distinct senders. These groups overlap, so an inbox can retain up to nine results.
 
+When initial metadata is incomplete, discovery retries the latest 30 messages. `initial_processed_body_uids` remembers up to 30 processed bodies, including messages without results, so retries advance through deferred mail instead of downloading the same newest batch. Missing bodies remain queued. This tracking clears when initial discovery completes or the connection closes.
+
 ## Detection and freshness rules
 
 On-page results must have arrived since the verification step began, allowing five seconds for mail delivered just before it appeared. The code picker keeps the newest code per sender and account. Resend countdown ticks and completion, including parenthesised countdowns, retain the same verification step. Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. The popup can show recent emails excluded by that rule.

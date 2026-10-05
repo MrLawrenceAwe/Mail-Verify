@@ -118,6 +118,7 @@ class InboxSession:
         self.items_by_uid = {}
         self.pending_metadata_uids = set()
         self.pending_body_timestamps_seconds = {}
+        self.initial_processed_body_uids = set()
 
     def close(self):
         connection, self.connection = self.connection, None
@@ -126,6 +127,7 @@ class InboxSession:
         self.items_by_uid.clear()
         self.pending_metadata_uids.clear()
         self.pending_body_timestamps_seconds.clear()
+        self.initial_processed_body_uids.clear()
         if connection:
             try:
                 connection.shutdown()
@@ -152,8 +154,14 @@ class InboxSession:
             }
             # A successful FETCH can still omit a message. Repeat the bounded
             # first scan on the next poll before advancing past its UID.
+            # Bodies already processed during those retries must not jump
+            # ahead of deferred or missing bodies again.
+            metadata = [entry for entry in metadata
+                        if not isinstance(entry, bytes)
+                        or message_uid(entry) not in self.initial_processed_body_uids]
             if len(uids) == self.message_count - first + 1:
                 self.discovery_cursor_uid = max(uids)
+                self.initial_processed_body_uids.clear()
             return metadata
 
         status, data = self.connection.uid(
@@ -229,6 +237,12 @@ class InboxSession:
                     continue
                 self.pending_body_timestamps_seconds.pop(uid, None)
                 found = self.extract_item(messages[uid])
+                if self.discovery_cursor_uid is None:
+                    self.initial_processed_body_uids.add(uid)
+                    # The initial discovery window only includes the latest
+                    # candidates, even if new mail arrives during retries.
+                    if len(self.initial_processed_body_uids) > MAX_CANDIDATE_MESSAGES:
+                        self.initial_processed_body_uids.remove(min(self.initial_processed_body_uids))
                 if found:
                     found["receivedAt"] = int(received * 1000)
                     found["uid"] = uid

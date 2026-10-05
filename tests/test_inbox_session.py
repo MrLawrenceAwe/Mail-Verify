@@ -14,6 +14,98 @@ from imap_responses import body_response, metadata_response
 
 
 class InboxSessionTests(unittest.TestCase):
+    def test_partial_initial_metadata_does_not_requeue_processed_bodies(self):
+        received_at = time.time() - 60
+
+        class FakeConnection:
+            def __init__(self):
+                self.metadata_fetches = 0
+                self.batches = []
+
+            def select(self, *_args, **_kwargs):
+                return "OK", [b"12"]
+
+            def fetch(self, *_args):
+                self.metadata_fetches += 1
+                # Keep one metadata entry missing while older bodies are scanned.
+                first = 2 if self.metadata_fetches < 4 else 1
+                return metadata_response(range(first, 13), received_at=received_at)
+
+            def uid(self, command, *args):
+                if command == "search":
+                    return "OK", [b""]
+                uids = [int(uid) for uid in args[0].split(b",")]
+                self.batches.append(uids)
+                return body_response(
+                    (uid, make_raw_email(
+                        f"Your code is {100000 + uid}." if uid in (11, 7, 2, 1)
+                        else "No code here.", sender=f"sender{uid}@example.test",
+                    ))
+                    for uid in uids
+                    # Missing bodies must remain eligible for a later retry.
+                    if not (uid == 12 and len(self.batches) == 1)
+                )
+
+            def shutdown(self):
+                pass
+
+        connection = FakeConnection()
+        with patch.object(inbox_session, "connect_imap", return_value=connection):
+            session = inbox_session.InboxSession({})
+            self.assertEqual([item["uid"] for item in session.scan_inbox()], [11])
+            self.assertEqual([item["uid"] for item in session.scan_inbox()], [11, 7])
+            self.assertEqual([item["uid"] for item in session.scan_inbox()], [11, 7, 2])
+            self.assertIsNone(session.discovery_cursor_uid)
+            self.assertEqual([item["uid"] for item in session.scan_inbox()], [11, 7, 2, 1])
+            self.assertEqual(session.discovery_cursor_uid, 12)
+            session.scan_inbox()
+            self.assertEqual(connection.batches, [
+                [12, 11, 10, 9, 8], [12, 7, 6, 5, 4], [3, 2], [1],
+            ])
+            session.close()
+
+    def test_initial_retry_window_advances_without_redownloading_processed_mail(self):
+        received_at = time.time() - 60
+
+        class FakeConnection:
+            count = 40
+
+            def __init__(self):
+                self.downloaded_uids = []
+
+            def select(self, *_args, **_kwargs):
+                return "OK", [str(self.count).encode()]
+
+            def fetch(self, sequence, _parts):
+                first, last = map(int, sequence.split(":"))
+                return metadata_response(range(first, last), received_at=received_at)
+
+            def uid(self, command, *args):
+                self.assert_body_request(command, args)
+                uids = [int(uid) for uid in args[0].split(b",")]
+                self.downloaded_uids.extend(uids)
+                return body_response((uid, make_raw_email("No code here.")) for uid in uids)
+
+            def assert_body_request(self, command, args):
+                if command != "fetch" or args[1] != "(UID BODY.PEEK[])":
+                    raise AssertionError("Initial discovery must retry sequence metadata")
+
+            def shutdown(self):
+                pass
+
+        connection = FakeConnection()
+        with patch.object(inbox_session, "connect_imap", return_value=connection):
+            session = inbox_session.InboxSession({})
+            for _ in range(4):
+                self.assertEqual(session.scan_inbox(), [])
+                self.assertLessEqual(len(session.initial_processed_body_uids),
+                                     inbox_session.MAX_CANDIDATE_MESSAGES)
+                connection.count += 1
+            self.assertEqual(len(connection.downloaded_uids), 32)
+            self.assertEqual(set(connection.downloaded_uids), set(range(11, 43)))
+            session.close()
+            self.assertEqual(session.initial_processed_body_uids, set())
+
     def test_scan_inbox_batches_fetches_and_keeps_newest_first(self):
         class FakeConnection:
             def __init__(self):
