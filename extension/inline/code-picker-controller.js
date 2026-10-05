@@ -1,7 +1,7 @@
 import { formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { createScanSchedule } from "../shared/scan-schedule.js";
 import { selectSuggestedCodes, messageKey, mutationAffectsPicker, isCodeRequestControl } from "./code-picker-policy.js";
-import { REQUEST_CONTROL_SELECTOR } from "./request-controls.js";
+import { REQUEST_CONTROL_SELECTOR, belongsToVerificationStep } from "./request-controls.js";
 import { readCodeStepContext } from "./code-step-context.js";
 import { handleVerificationFields as defaultVerificationFieldsHandler } from "../shared/code-fields.js";
 import { calculatePickerPosition, createCodePickerView } from "./code-picker-view.js";
@@ -60,7 +60,6 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     view.host.style.top = `${top}px`;
   }
   function mountPicker(field, context = readStepContext(field.stepContext)) {
-    const mountedAnchor = field.anchor;
     minReceivedAtMs ??= initialStepCutoff(clock.now());
     anchor = field.anchor;
     stepContext = context;
@@ -78,7 +77,7 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
           positionPicker();
           return;
         }
-        const result = handleVerificationFields({ action: "fill", code: item.code, expectedAnchor: mountedAnchor });
+        const result = handleVerificationFields({ action: "fill", code: item.code, expectedAnchor: anchor });
         if (result.ok) {
           filledStep = true;
           unmountPicker({ preserveStep: true });
@@ -181,8 +180,16 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     const context = refreshCandidates || !view || anchor !== field.anchor
       ? readStepContext(field.stepContext)
       : stepContext;
-    if (anchor && anchor !== field.anchor) resetAttempt();
-    else if (stepContext && context.recipientKey !== null && stepContext.recipientKey !== null && context.recipientKey !== stepContext.recipientKey)
+    if (anchor && anchor !== field.anchor) {
+      const unchangedReplacement = !filledStep && anchor.isConnected === false &&
+        anchor.isEqualNode(field.anchor) && stepContext?.roots[0] &&
+        stepContext.roots[0] === context.roots[0] &&
+        context.recipientKey !== null && context.recipientKey === stepContext.recipientKey;
+      // DOM replacement alone does not request new mail. Keep the selection
+      // and cutoff, but validate any fill against the new live input.
+      if (unchangedReplacement) anchor = field.anchor;
+      else resetAttempt();
+    } else if (stepContext && context.recipientKey !== null && stepContext.recipientKey !== null && context.recipientKey !== stepContext.recipientKey)
       resetAttempt({ preserveCutoff: true });
     else if (filledStep) return;
     if (!view && !dismissed) mountPicker(field, context);
@@ -216,7 +223,9 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
   });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
-    if (!control || !isCodeRequestControl(control) || !detectCodeField().ok) return;
+    if (!control || !isCodeRequestControl(control)) return;
+    const field = detectCodeField();
+    if (!field.ok || !belongsToVerificationStep(control, field.anchor)) return;
     // IMAP dates have one-second precision. Codes from the resend's current
     // second cannot be distinguished from an unseen code sent just before it.
     // Start with the next second so a pending check cannot revive the old code.

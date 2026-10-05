@@ -5,3 +5,14 @@ export function getRequestControlLabel(control) {
     (control?.tagName === "INPUT" ? control.value : control?.textContent) || "")
     .replace(/\s+/g, " ").trim();
 }
+
+// A form owns its controls even when they live outside its DOM subtree.
+function requestControlScope(element) {
+  return element?.form || element?.closest?.("form, dialog, [role=dialog], main, [role=main]");
+}
+
+export function belongsToVerificationStep(control, stepElement) {
+  const controlScope = requestControlScope(control);
+  // Standalone resend controls can sit beside the verification panel.
+  return !controlScope || controlScope === requestControlScope(stepElement);
+}

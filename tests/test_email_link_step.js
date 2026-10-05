@@ -88,7 +88,7 @@ test("status messages and unrelated contact addresses retain the email request i
 });
 
 test("an active native modal takes precedence over background waiting panels", () => {
-  const modal = { innerText: 'Password reset. Check your email.',
+  const modal = { querySelectorAll: () => [], innerText: 'Password reset. Check your email.',
     getClientRects: () => [{}], checkVisibility: () => true };
   const background = { innerText: 'Check your email',
     getClientRects: () => [{}], checkVisibility: () => true };
@@ -159,4 +159,20 @@ test("line-separated headings and continuation lines retain reset intent", () =>
     assert.equal(matchesPasswordResetWaitingPrompt(text), true, text);
     assert.equal(detectedMailType(text), "passwordResetLinks", text);
   }
+});
+
+test("a waiting form inside main owns the link step instead of the outer region", () => {
+  const form = { innerText: "Check your email.", getClientRects: () => [{}], checkVisibility: () => true };
+  const main = { ...form, contains: node => node === form };
+  const other = { ...form, innerText: "Phone verification" };
+  const step = detectEmailLinkStep({ querySelectorAll: () => [main, form, other] });
+  assert.equal(step.panel, form);
+});
+
+test("a form inside the active modal owns its resend controls", () => {
+  const form = { innerText: "Reset your password. Check your email.", getClientRects: () => [{}], checkVisibility: () => true };
+  const modal = { ...form, querySelectorAll: () => [form], contains: node => node === form };
+  const step = detectEmailLinkStep({ querySelector: () => modal });
+  assert.equal(step.panel, form);
+  assert.equal(step.mailType, "passwordResetLinks");
 });

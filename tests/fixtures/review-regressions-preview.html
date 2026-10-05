@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mail Verify review regressions</title>
+<style>
+  body { font:18px system-ui; margin:40px; }
+  form { margin-bottom:24px; }
+  input { display:block; padding:8px; font:inherit; margin:12px 0; }
+  button { margin:4px; }
+</style>
+<main>
+  <form id="emailStep">
+    <h1></h1><p id="instruction"></p>
+    <label id="codeField">Email verification code<input id="verification-code" autocomplete="one-time-code"></label>
+    <button type="button" id="replace">Replace identical input</button>
+    <button type="button" id="resend">Resend email</button>
+    <button type="button" id="deliver">Deliver replacement email</button>
+  </form>
+  <form id="phoneStep">
+    <h2>Independent phone verification</h2>
+    <button type="button" id="phoneResend">Resend SMS code</button>
+  </form>
+</main>
+<p id="feedback" aria-live="polite"></p>
+<script type="module">
+import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
+import { startEmailLinkCard } from '../../extension/inline/email-link-card-controller.js';
+import { inlineRuntime } from '../mock_inline_port.js';
+const mode = new URL(location.href).searchParams.get('mode') || 'codes';
+const isCode = mode === 'codes';
+document.querySelector('h1').textContent = isCode ? 'Email verification' : mode === 'passwordResetLinks' ? 'Password reset' : 'Account confirmation';
+document.querySelector('#instruction').textContent = isCode
+  ? 'We sent a security code to preview@yahoo.com.'
+  : mode === 'passwordResetLinks'
+    ? 'Check your email for a link to reset your password. We sent a link to preview@yahoo.com.'
+    : 'Check your email for a confirmation link. We sent a link to preview@yahoo.com.';
+document.querySelector('#codeField').hidden = !isCode;
+document.querySelector('#replace').hidden = !isCode;
+let item = { uid:1, accountEmail:'preview@yahoo.com', code:'331519',
+  sender:'auth@example.test', subject:'Your verification email',
+  url:'https://example.test/verify', receivedAt:Date.now() };
+window.chrome = { runtime:inlineRuntime(() => ({ ok:true, codes:[item],
+  confirmationLinks:[item], passwordResetLinks:[item], scanPending:false })) };
+const feedback = document.querySelector('#feedback');
+document.querySelector('#phoneResend').onclick = () => { feedback.textContent = 'Only an SMS was requested. The existing email result must remain usable.'; };
+document.querySelector('#resend').onclick = () => { feedback.textContent = 'A new email was requested. The previous email result must disappear.'; };
+document.querySelector('#deliver').onclick = () => {
+  item = { ...item, uid:item.uid+1, code:'654321', receivedAt:Date.now() };
+  feedback.textContent = 'Replacement email delivered.';
+};
+document.querySelector('#replace').onclick = () => {
+  const input = document.querySelector('#verification-code');
+  input.replaceWith(input.cloneNode(true));
+  feedback.textContent = 'The same unused input was rerendered. Its email code must remain usable.';
+};
+document.querySelector('#emailStep').addEventListener('input', event => {
+  feedback.textContent = event.target.value === item.code ? 'Code filled successfully in the current input.' : 'Incorrect code.';
+});
+if (isCode) document.querySelector('input').focus();
+startCodePicker();
+startEmailLinkCard();
+</script>

@@ -475,3 +475,27 @@ test("partial account failures retain healthy links and clear after recovery", a
     assert.equal(view.callbacks.onSelectLink(item), true);
   }
 });
+
+test("another form's resend retains links while the waiting form's resend clears them", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const panel = { innerText: mailType === "passwordResetLinks" ? "Reset your password. Check your email." : "Check your email.",
+      closest() { return this; }, getClientRects: () => [{}], checkVisibility: () => true };
+    const f = setup(panel, mailType);
+    await settle();
+    const view = f.state.views.at(-1);
+    const control = { textContent: "Resend SMS code", form: {} };
+    f.events.click({ target: { closest: () => control } });
+    await settle();
+    assert.equal(view.removed, false);
+    assert.deepEqual(view.links, [item]);
+    assert.equal(view.callbacks.onSelectLink(item), true);
+    // Confirmation selection dismisses the card; use a fresh setup for resend.
+    const next = setup(panel, mailType);
+    await settle();
+    control.form = panel;
+    control.textContent = "Resend email";
+    next.events.click({ target: { closest: () => control } });
+    await settle();
+    assert.deepEqual(next.state.views.at(-1).links, []);
+  }
+});

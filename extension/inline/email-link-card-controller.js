@@ -4,7 +4,7 @@ import { detectEmailLinkStep } from "./email-link-step.js";
 import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import { MAIL_PRESENTATION, formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
-import { REQUEST_CONTROL_SELECTOR } from "./request-controls.js";
+import { REQUEST_CONTROL_SELECTOR, belongsToVerificationStep } from "./request-controls.js";
 import { initialStepCutoff, resendCutoff, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
@@ -142,7 +142,8 @@ export function startEmailLinkCard({ environment = globalThis, detectStep = dete
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && view) dismissCard(); });
   document.addEventListener("click", (event) => {
     const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
-    if (!activeStep || !isEmailLinkRequestControl(control)) return;
+    if (!activeStep || !isEmailLinkRequestControl(control) ||
+        !belongsToVerificationStep(control, activeStep.panel)) return;
     minReceivedAtMs = resendCutoff(clock.now());
     dismissed = false;
     unmountCard();

@@ -869,3 +869,79 @@ test("an oversized step keeps the last known recipient and remains selectable", 
   button.onclick();
   assert.equal(fills, 1);
 });
+
+test("resends in an independent form leave the active code usable", async () => {
+  const form = { textContent: "We sent a code to test@yahoo.com." };
+  const anchor = { form };
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
+  const f = pickerEnvironment({
+    handleVerificationFields: () => ({ ok: true, anchor, stepContext: { roots: [form] },
+      rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
+    now: () => 10000, check: async () => ({ ok: true, codes: [code] }),
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  const button = f.results.children[0];
+  const control = { form: {}, textContent: "Resend code" };
+  f.events.get("click")({ target: { closest: () => control } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.results.children[0], button);
+  control.form = form;
+  f.events.get("click")({ target: { closest: () => control } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.results.childElementCount, 0, "the active form's resend still clears old mail");
+});
+
+test("an identical detached field replacement retains old mail and fills the live input", async () => {
+  for (const discoveryFirst of [false, true]) {
+    const form = { textContent: "We sent a code to test@yahoo.com." };
+    const original = { isConnected: true, isEqualNode: other => other === replacement };
+    const replacement = {};
+    let anchor = original, now = 10000, filledAnchor;
+    const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
+    const f = pickerEnvironment({
+      handleVerificationFields: request => {
+        if (request.action === "fill") { filledAnchor = request.expectedAnchor; return { ok: true }; }
+        return { ok: true, anchor, stepContext: { roots: [form] },
+          rect: { top: 100, bottom: 130, left: 20, right: 200 } };
+      }, now: () => now, check: async () => ({ ok: true, codes: [code] }),
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    const button = f.results.children[0];
+    original.isConnected = false;
+    anchor = replacement;
+    now = 20000; // The existing mail is outside a newly started step's allowance.
+    if (discoveryFirst) {
+      f.events.get("focusin")();
+      await f.timers.runWithDelay(150);
+      await f.timers.runWithDelay(2000);
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    assert.equal(f.results.children[0], button);
+    button.onclick();
+    assert.equal(filledAnchor, replacement);
+  }
+});
+
+test("a changed recipient or changed field is not treated as an identical replacement", async () => {
+  for (const change of ["recipient", "attributes", "container", "connected"]) {
+    const form = { textContent: "We sent a code to test@yahoo.com." };
+    let root = form;
+    const original = { isConnected: true, isEqualNode: () => change !== "attributes" };
+    let anchor = original;
+    const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
+    const f = pickerEnvironment({
+      handleVerificationFields: () => ({ ok: true, anchor, stepContext: { roots: [root] },
+        rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
+      now: () => 10000, check: async () => ({ ok: true, codes: [code] }),
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    original.isConnected = change === "connected";
+    anchor = {};
+    if (change === "recipient") form.textContent = "We sent a code to another@yahoo.com.";
+    if (change === "container") root = { textContent: form.textContent };
+    f.events.get("focusin")();
+    await f.timers.runWithDelay(150);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.results.childElementCount, 0, change);
+  }
+});

@@ -65,9 +65,13 @@ export function matchesPasswordResetWaitingPrompt(text) {
 export function detectEmailLinkStep(document) {
   // Inspect short visible task panels, never hidden templates or the extension card.
   const modal = document.querySelector?.('dialog:modal');
-  const panels = modal ? [modal] : [...document.querySelectorAll("main, [role=main], form, [role=dialog], dialog")];
+  const panelSelector = "main, [role=main], form, [role=dialog], dialog";
+  const panels = modal ? [modal, ...modal.querySelectorAll(panelSelector)]
+    : [...document.querySelectorAll(panelSelector)];
   if (!panels.length) panels.push(document.body);
+  let detectedStep = null;
   for (const panel of panels) {
+    if (detectedStep && !detectedStep.panel.contains?.(panel)) continue;
     if (!panel || !isBoundedPanel(panel) || !panel.getClientRects().length ||
         !panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     const text = panel.innerText || "";
@@ -77,7 +81,10 @@ export function detectEmailLinkStep(document) {
     if (!emailLinkPanelIds.has(panel)) emailLinkPanelIds.set(panel, nextEmailLinkPanelId++);
     // Status text and countdowns do not identify a new email request.
     // Panel replacement, recipient changes, and purpose changes still do.
-    return { key: `${emailLinkPanelIds.get(panel)}:${mailType}:${recipientIdentity(text)}`, mailType };
+    // Prefer the waiting form inside a larger task panel, so its resend
+    // controls cannot be confused with another form in the same main region.
+    if (!detectedStep || detectedStep.panel.contains?.(panel))
+      detectedStep = { key: `${emailLinkPanelIds.get(panel)}:${mailType}:${recipientIdentity(text)}`, mailType, panel };
   }
-  return null;
+  return detectedStep;
 }
