@@ -43,7 +43,7 @@ export function mutationAffectsPicker(records, { suggestionHost, fieldContextRoo
     if (target?.closest?.("label")) return true;
     for (const nodes of [record.addedNodes, record.removedNodes])
       for (const node of nodes)
-        if (inspectSubtree(node, "input, label, form, main", inContext)) return true;
+        if (inspectSubtree(node, 'input, label, form, main, button, a[href], select, textarea, [role="button"], [role="link"]', inContext)) return true;
     return false;
   });
 }

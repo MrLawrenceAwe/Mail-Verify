@@ -196,6 +196,23 @@ test("renders matching mail, validates open and remains dismissed", async () => 
   assert.equal(f.state.views.length, 1);
 });
 
+test("a dismissed card returns for a new waiting step after the old step disappears", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const f = setup(null, mailType); await settle();
+    f.state.views[0].callbacks.onClose();
+    f.state.mutate(stepMutation()); await f.run(250);
+    assert.equal(f.state.views.length, 1, "the current step stays dismissed");
+    f.state.detected = false;
+    f.state.mutate(stepMutation()); await f.run(250);
+    f.state.detected = true;
+    f.state.screenKey = "new signup and recipient";
+    f.state.mutate(stepMutation()); await f.run(250);
+    assert.equal(f.state.views.length, 2);
+    assert.equal(f.state.views[1].removed, false);
+    assert.equal(f.state.requests, 2);
+  }
+});
+
 test("a failed inbox check removes previously offered links", async () => {
   const f = setup(); await settle();
   const view = f.state.views[0];

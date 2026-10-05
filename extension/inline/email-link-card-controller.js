@@ -85,6 +85,7 @@ export function startEmailLinkCard({ environment = globalThis, detectStep = dete
     const nextStep = detectCode() ? null : detectStep(document);
     if (nextStep === null) {
       unmountCard();
+      dismissed = false;
       activeStep = null;
       minReceivedAtMs = undefined;
       polling.stopScheduledPolling();

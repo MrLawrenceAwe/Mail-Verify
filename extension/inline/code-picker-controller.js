@@ -20,6 +20,7 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
   const scanSchedule = createScanSchedule({ clock, intervalMs: CODE_PICKER_SCAN_INTERVAL_MS });
   let dismissed = false, filledStep = false, lastURL = location.href;
   let minReceivedAtMs, anchor, stepContext;
+  let pageControls;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);
   const readStepContext = (context) => readCodeStepContext(context, environment.getComputedStyle);
@@ -50,7 +51,11 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     if (view.host.parentNode && view.host.parentNode !== mountRoot)
       mountSuggestion(document, view.host, field.anchor);
     const bounds = view.host.getBoundingClientRect();
-    const { left, top } = calculatePickerPosition(field.rect, bounds.width, bounds.height, environment.innerWidth, environment.innerHeight);
+    pageControls ??= [...document.querySelectorAll('button, a[href], input, select, textarea, [role="button"], [role="link"]')];
+    const controlRects = pageControls.filter(control => control !== field.anchor && control.isConnected &&
+      (mountRoot === document.documentElement || control.closest('dialog:modal') === mountRoot))
+      .map(control => control.getBoundingClientRect()).filter(rect => rect.width > 0 && rect.height > 0);
+    const { left, top } = calculatePickerPosition(field.rect, bounds.width, bounds.height, environment.innerWidth, environment.innerHeight, controlRects);
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
@@ -156,6 +161,7 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     }
   }
   function syncPicker({ refreshCandidates = true } = {}) {
+    if (refreshCandidates) pageControls = undefined;
     if (lastURL !== location.href) {
       resetAttempt({ newPage: true });
       lastURL = location.href;
