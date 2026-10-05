@@ -35,6 +35,7 @@ class VisibleEmailHTMLParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.stack = []
+        self.open_tag_indices = {}
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -49,16 +50,25 @@ class VisibleEmailHTMLParser(HTMLParser):
         if not hidden:
             self.visible_start(tag, attrs)
         if tag not in VOID_TAGS:
+            self.open_tag_indices.setdefault(tag, []).append(len(self.stack))
             self.stack.append((tag, hidden))
 
     def handle_endtag(self, tag):
-        for index in range(len(self.stack) - 1, -1, -1):
-            if self.stack[index][0] == tag:
-                hidden = self.stack[index][1]
-                del self.stack[index:]
-                if not hidden:
-                    self.visible_end(tag)
-                break
+        indices = self.open_tag_indices.get(tag)
+        if not indices:
+            return
+        index = indices[-1]
+        hidden = self.stack[index][1]
+        # Locate the matching ancestor without searching the stack. Each open
+        # element is removed once, keeping malformed HTML processing linear.
+        while len(self.stack) > index:
+            open_tag, _ = self.stack.pop()
+            open_indices = self.open_tag_indices[open_tag]
+            open_indices.pop()
+            if not open_indices:
+                del self.open_tag_indices[open_tag]
+        if not hidden:
+            self.visible_end(tag)
 
     def handle_data(self, data):
         if not self.stack or not self.stack[-1][1]:
