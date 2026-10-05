@@ -130,7 +130,7 @@ Link-panel detection skips explicitly hidden subtrees, scripts, styles, and temp
 
 ## Installation identity and updates
 
-Follow the [installation and update instructions](../README.md#setup), then refresh affected web pages.
+Follow the [installation and update instructions](setup.md#setup), then refresh affected web pages.
 
 Expected extension ID: `ggmcbkkmgcdiimnpkekakaegmclkgkjj`.
 
