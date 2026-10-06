@@ -74,6 +74,31 @@ function pickerEnvironment({ handleVerificationFields, now = Date.now, check, ac
   return { environment, events, timers, results, elements };
 }
 
+test("initial code suggestions accept recent mail received before field discovery", async () => {
+  const now = 1_000_000;
+  const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456",
+    sender: "noreply@email.trac.jobs", receivedAt: now - 30_000 };
+  let fills = 0;
+  const anchor = {};
+  const { results } = pickerEnvironment({
+    handleVerificationFields: ({ action }) => {
+      if (action === "fill") { fills++; return { ok: true }; }
+      return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20, right: 200 } };
+    },
+    now: () => now,
+    check: async () => ({ ok: true, codes: [
+      code,
+      { ...code, uid: 2, sender: "expired@example.test", receivedAt: now - 600_001 },
+      { ...code, uid: 3, sender: "future@example.test", receivedAt: now + 1000 },
+    ] }),
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(results.childElementCount, 1);
+  assert.equal(results.children[0].strong.textContent, "Fill code 123456");
+  results.children[0].onclick();
+  assert.equal(fills, 1);
+});
+
 test("code suggestions mount beside their field inside a modal dialog", async () => {
   let mounted;
   const modal = { append(host) { mounted = host; } };

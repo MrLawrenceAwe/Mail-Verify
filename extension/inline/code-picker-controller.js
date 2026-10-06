@@ -5,7 +5,7 @@ import { REQUEST_CONTROL_SELECTOR, belongsToVerificationStep } from "./request-c
 import { readCodeStepContext } from "./code-step-context.js";
 import { handleVerificationFields as defaultVerificationFieldsHandler } from "../shared/code-fields.js";
 import { calculatePickerPosition, createCodePickerView } from "./code-picker-view.js";
-import { initialStepCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
+import { initialStepCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS, MAX_MESSAGE_AGE_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
@@ -19,7 +19,10 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
   let view;
   const scanSchedule = createScanSchedule({ clock, intervalMs: CODE_PICKER_SCAN_INTERVAL_MS });
   let dismissed = false, filledStep = false, lastURL = location.href;
-  let minReceivedAtMs, anchor, stepContext;
+  // Mail may arrive before this page loads or the extension discovers its field.
+  // Start with the popup's freshness window; later attempts use a step cutoff.
+  let minReceivedAtMs = clock.now() - MAX_MESSAGE_AGE_MS;
+  let anchor, stepContext;
   let pageControls;
   let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);

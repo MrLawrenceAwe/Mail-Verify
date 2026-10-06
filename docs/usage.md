@@ -18,7 +18,7 @@ Automatic checking lasts up to two minutes while the tab is active. Keep the pop
 
 Checks show inbox emails from the last ten minutes. Spam and other folders are excluded. Results from slower accounts may appear later.
 
-On-page suggestions show emails received around or after the verification step appeared. Resending clears older suggestions; an email arriving immediately after the click may also be excluded. Use the popup to choose other recent emails manually.
+The initial inline code suggestion panel accepts emails from the last ten minutes, including mail delivered before the page loaded. Later code steps and on-page link suggestions show emails received around or after the verification step appeared. Resending clears older suggestions; an email arriving immediately after the click may also be excluded. Use the popup to choose other recent emails manually.
 
 ## Supported content and limits
 
@@ -28,4 +28,3 @@ On-page suggestions show emails received around or after the verification step a
 - Does not authenticate senders or match results to the current website. Check the sender and link host before using a result; tracking links may redirect.
 
 See [detection and freshness rules](development.md#detection-and-freshness-rules) for exact matching and timestamp behaviour.
-
