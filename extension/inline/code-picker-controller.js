@@ -5,7 +5,7 @@ import { REQUEST_CONTROL_SELECTOR, belongsToVerificationStep } from "./request-c
 import { readCodeStepContext } from "./code-step-context.js";
 import { handleVerificationFields as defaultVerificationFieldsHandler } from "../shared/code-fields.js";
 import { calculatePickerPosition, createCodePickerView } from "./code-picker-view.js";
-import { initialStepCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS, MAX_MESSAGE_AGE_MS } from "../shared/mail-timing.js";
+import { stepStartCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS, MAX_MESSAGE_AGE_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
@@ -63,7 +63,7 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     view.host.style.top = `${top}px`;
   }
   function mountPicker(field, context = readStepContext(field.stepContext)) {
-    minReceivedAtMs ??= initialStepCutoff(clock.now());
+    minReceivedAtMs ??= stepStartCutoff(clock.now());
     anchor = field.anchor;
     stepContext = context;
     const mountedView = createCodePickerView(document, {
@@ -154,7 +154,7 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     unmountPicker();
     filledStep = false;
     minReceivedAtMs = advanceCutoff
-      ? Math.max(minReceivedAtMs ?? -Infinity, initialStepCutoff(clock.now()))
+      ? Math.max(minReceivedAtMs ?? -Infinity, stepStartCutoff(clock.now()))
       : undefined;
     if (newPage) {
       dismissed = false;

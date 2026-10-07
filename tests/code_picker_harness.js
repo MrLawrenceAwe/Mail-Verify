@@ -2,7 +2,7 @@ import { startCodePicker } from "../extension/inline/code-picker-controller.js";
 import { inlineRuntime } from "./mock_inline_port.js";
 import { createTimerQueue } from "./timer_queue.js";
 
-export function pickerEnvironment({ handleVerificationFields, now = Date.now, check, activeElement,
+export function createCodePickerHarness({ handleVerificationFields, now = Date.now, check, activeElement,
   onMount = () => {},
   onRemove = () => {}, onObserve = () => {}, onFrame = (fn) => fn(), getControls = () => [] }) {
   const events = new Map(), timers = createTimerQueue();

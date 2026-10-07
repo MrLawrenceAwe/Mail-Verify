@@ -14,7 +14,7 @@ find extension -name "*.js" -exec node --check {} \;
 
 The installer test installs into a temporary directory, launches that copy to verify native-message framing and imports, then checks uninstall cleanup. It does not access Yahoo or Keychain.
 
-To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/tests/fixtures/code-picker-preview.html`. The fixture does not access Yahoo. **Resend email** and **Send again** must immediately clear the old suggestion. Wait at least one second after resending, then click **Deliver replacement code** and verify that the replacement suggestion fills `654321`.
+To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/docs/preview.html?interactive`. The fixture does not access Yahoo. **Resend email** and **Send again** must immediately clear the old suggestion. Wait at least one second after resending, then click **Deliver replacement code** and verify that the replacement suggestion fills `654321`.
 
 `tests/fixtures/modal-suggestions-preview.html` supplies synthetic mail for modal and link-step checks. Use `?mode=modal-code` to fill a code in a native modal, `?mode=modal-reset` to copy a reset link in a modal, or `?mode=status` for a normal waiting panel. Add `&transform=1` to test a scaled, clipped dialog. **Update connection status** must retain the offered link; **Change recipient** and **Resend email** must clear it. Add `&stacked=1` to open a second modal, or `&stacked=reverse` to put the active modal first in DOM order. Suggestions must belong to the active dialog and remain usable. These fixtures do not access Yahoo. When testing edits, serve with caching disabled or use a fresh local port so Chrome reloads imported modules.
 
@@ -24,7 +24,16 @@ To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 1
 
 `tests/fixtures/verification-step-preview.html` checks resend scope and verification-field replacement. Use `?mode=codes`, `?mode=confirmationLinks`, or `?mode=passwordResetLinks`. **Resend SMS code** must retain the existing email result; **Resend verification email** must clear it. In code mode, **Replace identical input** must retain the unused code, and selecting it must report a successful fill in the current input. Add `&sameForm=1` to place the SMS resend in the same form as the email step; it must still retain the email result. After resending, wait at least one second before **Deliver replacement email**.
 
-The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle. Code-picker controller tests are grouped into `test_code_picker_steps.js`, `test_code_picker_polling.js`, `test_code_picker_positioning.js`, and `test_code_picker_selection.js`, using the shared `code_picker_environment.js` harness. `test_popup_integration.js` covers the popup controller and its real view together. [Code-field tests](../tests/test_code_fields.js) verify that numeric split-digit groups reject mismatched code lengths.
+The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle.
+
+| Suite | Behaviour groups | Shared harness |
+| --- | --- | --- |
+| `test_code_picker_*.js` | Steps, polling, positioning, selection | `code_picker_harness.js` |
+| `test_email_link_card_*.js` controller suites | Steps, polling, mutations, selection | `email_link_card_harness.js` |
+| `test_popup_*.js` | Polling, accounts, result selection with the real view | `popup_harness.js` |
+| `test_code_fields.js` | Detection and filling, including numeric split-digit length checks | `verification_field_harness.js` |
+
+The field harness evaluates the serialized entry point in an isolated VM to verify it has no module-scope dependencies.
 
 `tests/timer_queue.js` stores callbacks for explicit execution by insertion order or requested delay; it does not advance a clock. `tests/email_messages.py` shares `make_raw_email()` across code extraction, link extraction, and inbox-scanning tests. Its subject, subtype, and sender options describe each synthetic message; multipart and attachment cases build their own MIME structure.
 

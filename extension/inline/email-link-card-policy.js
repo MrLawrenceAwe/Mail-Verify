@@ -32,12 +32,12 @@ export function mutationAffectsEmailLinkCard(records, host, document, hasActiveS
     if (record.type === "attributes")
       return inspectSubtree(target, relevantElements, true);
     const element = target.nodeType === 1 ? target : target.parentElement;
-    const inActivePanel = hasActiveStep &&
-      (element?.closest?.(panels) || !document.querySelector?.(panels));
+    const mutationInCandidatePanel = hasActiveStep && Boolean(
+      element?.closest?.(panels) || !document.querySelector?.(panels));
     if (record.type === "characterData")
-      return !!inActivePanel || inspectText(target.textContent || "") || inspectText(record.oldValue || "");
+      return mutationInCandidatePanel || inspectText(target.textContent || "") || inspectText(record.oldValue || "");
     if (record.type === "childList") {
-      if (inActivePanel) return true;
+      if (mutationInCandidatePanel) return true;
       for (const nodes of [record.addedNodes, record.removedNodes])
         for (const node of nodes)
           if (inspectSubtree(node, relevantElements, true)) return true;

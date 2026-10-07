@@ -5,7 +5,7 @@ import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import { MAIL_PRESENTATION, formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
 import { REQUEST_CONTROL_SELECTOR, belongsToVerificationStep } from "./request-controls.js";
-import { initialStepCutoff, resendCutoff, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
+import { stepStartCutoff, resendCutoff, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
@@ -104,7 +104,7 @@ export function startEmailLinkCard({ environment = globalThis, detectStep = dete
     if (dismissed) return;
     if (!activeStep) {
       activeStep = nextStep;
-      minReceivedAtMs ??= initialStepCutoff(clock.now());
+      minReceivedAtMs ??= stepStartCutoff(clock.now());
       polling.renewDeadline();
     }
     if (view) return;

@@ -27,7 +27,7 @@ test("both link-card mail types show email details and their own action and guid
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     const { card, action, root, item } = setup(mailType);
     assert.deepEqual(card.children.slice(0, 4).map(line => line.textContent),
-      [item.accountEmail, item.sender, item.subject, "Initial destination: example.com"]);
+      [`Inbox: ${item.accountEmail}`, `From: ${item.sender}`, item.subject, "Initial destination: example.com"]);
     if (mailType === "confirmationLinks") {
       assert.equal(action.tag, "a");
       assert.equal(action.href, item.url);
@@ -71,4 +71,16 @@ test("failed reset-card copies show the error and allow another attempt", async 
   assert.equal(action.disabled, false);
   assert.equal(action.textContent, "Copy password reset link");
   assert.match(controls["#status"].textContent, /Clipboard denied/);
+});
+
+
+test("link cards identify inbox and missing sender without empty subject rows", () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const { view, controls, item } = setup(mailType);
+    view.renderLinks([{ ...item, sender: "  ", subject: " " }]);
+    const card = controls["#results"].children[0];
+    assert.deepEqual(card.children.slice(0, -1).map(line => line.textContent), [
+      `Inbox: ${item.accountEmail}`, "From: Unknown sender", "Initial destination: example.com",
+    ]);
+  }
 });

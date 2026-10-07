@@ -31,7 +31,7 @@ CODE_PATTERNS = (
 )
 
 
-class EmailHTMLTextParser(VisibleEmailHTMLParser):
+class CodeHTMLTextParser(VisibleEmailHTMLParser):
     BLOCK_TAGS = {"br", "p", "div", "td", "tr", "li", "table", "section", "article", "h1", "h2", "h3"}
     INLINE_BREAK = "\x1f"
 
@@ -49,18 +49,21 @@ class EmailHTMLTextParser(VisibleEmailHTMLParser):
     def visible_data(self, data):
         self.parts.append(data)
 
+    def extraction_text(self):
+        text = "".join(self.parts)
+        return re.sub(rf"(?<=\d){self.INLINE_BREAK}(?=\d)", "", text).replace(
+            self.INLINE_BREAK, " "
+        )
+
 
 def extract_code_details(raw_message):
     message = email.message_from_bytes(raw_message, policy=policy.default)
     texts = []
     for content_type, value in iter_text_parts(message):
         if content_type == "text/html":
-            parser = EmailHTMLTextParser()
+            parser = CodeHTMLTextParser()
             parser.feed(value)
-            value = "".join(parser.parts)
-            value = re.sub(r"(?<=\d)\x1f(?=\d)", "", value).replace(
-                EmailHTMLTextParser.INLINE_BREAK, " "
-            )
+            value = parser.extraction_text()
         texts.append(value)
     subject, display_metadata = extract_message_metadata(message)
     codes = set()

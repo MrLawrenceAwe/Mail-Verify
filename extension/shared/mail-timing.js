@@ -5,7 +5,7 @@ export const PENDING_SCAN_POLL_MS = 1_000;
 export const MAX_MESSAGE_AGE_MS = 600_000;
 const STEP_ALLOWANCE_MS = 5_000;
 
-export function initialStepCutoff(now) {
+export function stepStartCutoff(now) {
   return now - STEP_ALLOWANCE_MS;
 }
 

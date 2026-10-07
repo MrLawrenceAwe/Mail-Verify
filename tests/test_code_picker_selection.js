@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pickerEnvironment } from "./code_picker_environment.js";
+import { createCodePickerHarness } from "./code_picker_harness.js";
 
 test("picker passes its mounted field to the fill action", async () => {
   const anchor = {};
   const fills = [];
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9_000 };
-  const { results } = pickerEnvironment({
+  const { results } = createCodePickerHarness({
     handleVerificationFields: (request) => {
       if (request.action === "fill") {
         fills.push(request);
@@ -29,7 +29,7 @@ test("selection revalidates the verification step before the queued discovery ru
     const form = { textContent: "We sent a code to alice@example.test. Resend in 30 seconds", contains: () => true };
     const anchor = { form };
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
-    const { timers, results } = pickerEnvironment({
+    const { timers, results } = createCodePickerHarness({
       handleVerificationFields: ({ action }) => {
         if (action === "fill") { fills++; return { ok: true }; }
         return { ok: true, anchor, stepContext: { roots: [form] },
@@ -72,7 +72,7 @@ test("switching CSS-hidden recipients blocks the previous code before discovery 
     const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
     const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20000 };
     let codes = [oldCode];
-    const { results, timers } = pickerEnvironment({
+    const { results, timers } = createCodePickerHarness({
       handleVerificationFields: ({ action }) => {
         if (action === "fill") { fills++; return { ok: true }; }
         return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20, right: 200 }, stepContext: { roots: [form] } };
@@ -107,7 +107,7 @@ test("switching CSS-hidden recipients blocks the previous code before discovery 
 test("failed fills retain specific field guidance and use a fallback when absent", async () => {
   for (const error of ["The verification-code fields changed while filling them. Try again.", undefined]) {
     const anchor = {};
-    const { results, elements } = pickerEnvironment({
+    const { results, elements } = createCodePickerHarness({
       handleVerificationFields: ({ action }) => action === "fill" ? { ok: false, error }
         : { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20, right: 200 } },
       now: () => 10000,
@@ -128,7 +128,7 @@ test("visible code suggestions distinguish senders and inboxes without hovering"
     { uid: 2, accountEmail: "first@yahoo.com", sender: "security@other.test", code: "222222", receivedAt: 9000 },
     { uid: 3, accountEmail: "second@yahoo.com", sender: "", code: "333333", receivedAt: 9000 },
   ];
-  const { results } = pickerEnvironment({
+  const { results } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: true, anchor: {}, rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
     now: () => 10000,
     check: async () => ({ ok: true, codes }),

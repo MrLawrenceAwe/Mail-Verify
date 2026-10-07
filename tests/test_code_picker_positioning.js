@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pickerEnvironment } from "./code_picker_environment.js";
+import { createCodePickerHarness } from "./code_picker_harness.js";
 
 test("picker repositions using the current viewport after resize", () => {
   const frames = [];
   const anchor = {};
   let mounted;
-  const { environment, events } = pickerEnvironment({
+  const { environment, events } = createCodePickerHarness({
     handleVerificationFields: () => ({
       ok: true, anchor,
       rect: { left: 900, right: 1100, top: 100, bottom: 130 },
@@ -27,7 +27,7 @@ test("picker repositions using the current viewport after resize", () => {
 test("picker avoids page controls and reuses their discovery during scroll", async () => {
   let mounted, observer, queries = 0;
   const controls = [];
-  const { events, timers } = pickerEnvironment({
+  const { events, timers } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: true, anchor: {},
       rect: { left: 20, right: 200, top: 100, bottom: 130 } }),
     getControls: () => { queries++; return controls; },
@@ -53,7 +53,7 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   let observer, discoveries = 0, detections = 0, visible = false, mounted;
   const anchor = {};
   const cached = { inputs: [], contextRoots: [] };
-  const { events, timers, elements } = pickerEnvironment({
+  const { events, timers, elements } = createCodePickerHarness({
     handleVerificationFields: ({ candidateCache: candidates }) => {
       detections++;
       if (!candidates) discoveries++;
@@ -97,7 +97,7 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
 test("oversized picker mutations coalesce into one deferred discovery", async () => {
   let observer, discoveries = 0;
   const contextRoots = [{ contains: () => true }];
-  const { timers } = pickerEnvironment({
+  const { timers } = createCodePickerHarness({
     handleVerificationFields: () => { discoveries++; return { ok: false, candidateCache: { inputs: [], contextRoots } }; },
     onObserve: callback => { observer = callback; },
     check: () => { assert.fail("no field should start a mail check"); },

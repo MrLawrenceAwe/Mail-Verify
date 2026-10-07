@@ -1,72 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import vm from "node:vm";
-import { handleVerificationFields } from "../extension/shared/code-fields.js";
+import { FakeInput, createVerificationFieldHarness } from "./verification_field_harness.js";
 
-const contextStyle = node => node.fakeComputedStyle || { display: "block", visibility: "visible", opacity: "1" };
-
-// Chrome serializes this function into the page; evaluate the exported function
-// in an isolated DOM context to verify it has no module-scope dependencies.
-class FakeInput {
-  constructor(props = {}) {
-    Object.assign(
-      this,
-      {
-        type: "text",
-        maxLength: -1,
-        name: "",
-        id: "",
-        placeholder: "",
-        autocomplete: "",
-        labels: [],
-        form: null,
-        parentElement: null,
-        events: [],
-      },
-      props,
-    );
-  }
-  getClientRects() {
-    return [1];
-  }
-  getBoundingClientRect() {
-    return this.rect || { top: 0, left: 0, bottom: 20, right: 100 };
-  }
-  checkVisibility() {
-    return !this.hidden;
-  }
-  getAttribute() {
-    return "";
-  }
-  set value(value) {
-    this._value = value;
-  }
-  get value() {
-    return this._value;
-  }
-  dispatchEvent(event) {
-    this.events.push(event.type);
-  }
-  focus() {
-    this.focused = true;
-  }
-}
 function run(inputs, activeElement = null, expectedAnchor = null, labelElements = new Map()) {
-  const ctx = {
-    expectedAnchor,
+  const { handle } = createVerificationFieldHarness({
     document: { querySelectorAll: () => inputs, activeElement, getElementById: id => labelElements.get(id) },
-    getComputedStyle: contextStyle,
-    HTMLInputElement: FakeInput,
-    innerHeight: 800,
-    innerWidth: 1200,
-    Event: class {
-      constructor(type) {
-        this.type = type;
-      }
-    },
-  };
-  vm.createContext(ctx);
-  return vm.runInContext(`(${handleVerificationFields.toString()})({ action: "fill", code: "123456", expectedAnchor })`, ctx);
+  });
+  return handle({ action: "fill", code: "123456", expectedAnchor });
 }
 
 test("fills labelled fields and rejects unrelated or hidden fields", () => {
@@ -147,12 +87,10 @@ test("does not report success when a single code field is replaced or cleared", 
         this.value = "";
       }
     };
-    const context = vm.createContext({
+    const context = createVerificationFieldHarness({
       document: { querySelectorAll: () => [current], activeElement: original },
-      HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
-      Event: class { constructor(type) { this.type = type; } },
     });
-    const result = vm.runInContext(`(${handleVerificationFields.toString()})({ action: "fill", code: "123456" })`, context);
+    const result = context.handle({ action: "fill", code: "123456" });
     assert.equal(result.ok, false);
     assert.equal(original.focused, undefined);
     if (replace) assert.equal(current.value, undefined);
@@ -265,7 +203,7 @@ test("keeps a full numeric code field separate from a split group in the same fo
       type: "number", name: "security_code", form,
       parentElement: { parentElement: form },
     });
-    const handle = detectWith([...digits, phone], phone);
+    const handle = createFieldHandler([...digits, phone], phone);
     const selected = handle({ action: "detect" });
     assert.equal(selected.anchor, phone);
     for (const expectedAnchor of [undefined, selected.anchor]) {
@@ -274,7 +212,7 @@ test("keeps a full numeric code field separate from a split group in the same fo
       assert.equal(phone.value, "123456");
       assert.equal(digits.every(input => input.value === undefined), true);
     }
-    const splitHandle = detectWith([...digits, phone], digits[1]);
+    const splitHandle = createFieldHandler([...digits, phone], digits[1]);
     assert.equal(splitHandle({ action: "detect" }).anchor, digits[0]);
     assert.equal(splitHandle({ action: "fill", code: "654321" }).ok, digitCount === 6);
     assert.equal(phone.value, "123456");
@@ -336,18 +274,10 @@ test("follows split fields replaced after each digit", () => {
   };
   const rerenderCtx = {
     document: { querySelectorAll: () => current, activeElement: original[0] },
-    HTMLInputElement: FakeInput,
-    innerHeight: 800,
-    innerWidth: 1200,
-    Event: class {
-      constructor(type) {
-        this.type = type;
-      }
-    },
   };
-  vm.createContext(rerenderCtx);
+  const rerenderHarness = createVerificationFieldHarness(rerenderCtx);
   assert.equal(
-    vm.runInContext(`(${handleVerificationFields.toString()})({ action: "fill", code: "123456" })`, rerenderCtx).ok,
+    rerenderHarness.handle({ action: "fill", code: "123456" }).ok,
     true,
   );
   assert.equal(current.map((x) => x.value).join(""), "123456");
@@ -365,12 +295,10 @@ test("stops if a rerender inserts another digit in the verification group", () =
     if (event.type === "input")
       current = [new FakeInput({ maxLength: 1, parentElement: parent }), ...original];
   };
-  const context = vm.createContext({
+  const context = createVerificationFieldHarness({
     document: { querySelectorAll: () => current, activeElement: original[0] },
-    HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
-    Event: class { constructor(type) { this.type = type; } },
   });
-  const result = vm.runInContext(`(${handleVerificationFields.toString()})({ action: "fill", code: "123456" })`, context);
+  const result = context.handle({ action: "fill", code: "123456" });
   assert.equal(result.ok, false);
   assert.equal(current[0].value, undefined);
   assert.equal(original[1].value, undefined);
@@ -394,13 +322,10 @@ test("generic code field uses verification context outside its form", () => {
   const main = { textContent: "We sent a code to your email. Enter code" };
   const form = contextElement("FORM", [contextText("Enter code")], { parentElement: main, previousElementSibling: instructions });
   const input = new FakeInput({ name: "code", form });
-  const context = vm.createContext({
+  const context = createVerificationFieldHarness({
     document: { querySelectorAll: () => [input], activeElement: input, body: main },
-    getComputedStyle: contextStyle,
-    innerHeight: 800,
-    innerWidth: 1200,
   });
-  const result = vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context);
+  const result = context.handle({ action: "detect" });
   assert.equal(result.ok, true);
   assert.equal(result.candidateCache.contextRoots.length, 3);
   assert.equal(result.candidateCache.contextRoots.includes(form), true);
@@ -408,7 +333,7 @@ test("generic code field uses verification context outside its form", () => {
   assert.deepEqual(Array.from(result.stepContext.roots), [form, instructions]);
   assert.equal(result.stepContext.parent, main);
   instructions.firstChild.data = "Enter code to redeem a discount";
-  assert.equal(vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context).ok, false);
+  assert.equal(context.handle({ action: "detect" }).ok, false);
 });
 
 test("unrelated verification text elsewhere in main does not identify a generic field", () => {
@@ -416,14 +341,12 @@ test("unrelated verification text elsewhere in main does not identify a generic 
   const couponInstructions = contextElement("P", [contextText("Redeem your gift code.")]);
   const form = contextElement("FORM", [contextText("Code")], { parentElement: main, previousElementSibling: couponInstructions });
   const input = new FakeInput({ name: "code", form });
-  const context = vm.createContext({
+  const context = createVerificationFieldHarness({
     document: { querySelectorAll: () => [input], activeElement: input, body: main },
-    getComputedStyle: contextStyle,
-    innerHeight: 800, innerWidth: 1200,
   });
-  assert.equal(vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context).ok, false);
+  assert.equal(context.handle({ action: "detect" }).ok, false);
   couponInstructions.firstChild.data = "We sent a code to your email.";
-  assert.equal(vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context).ok, true);
+  assert.equal(context.handle({ action: "detect" }).ok, true);
 });
 
 test("explicit hints skip page text and generic hints read shared context once", () => {
@@ -443,11 +366,10 @@ test("explicit hints skip page text and generic hints read shared context once",
 
 test("automatic detection does not fill or dispatch events", () => {
   const input = new FakeInput({ autocomplete: "one-time-code" });
-  const context = vm.createContext({
+  const context = createVerificationFieldHarness({
     document: { querySelectorAll: () => [input], activeElement: input },
-    innerHeight: 800, innerWidth: 1200,
   });
-  assert.equal(vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context).ok, true);
+  assert.equal(context.handle({ action: "detect" }).ok, true);
   assert.equal(input.value, undefined);
   assert.deepEqual(input.events, []);
 });
@@ -459,10 +381,9 @@ test("opening a modal invalidates cached background code fields and restricts fi
   const dialog = { querySelectorAll: () => [inside] };
   const document = { activeElement: null, querySelector: () => modal,
     querySelectorAll: () => [background, inside] };
-  const handle = vm.runInNewContext(`(${handleVerificationFields.toString()})`, {
-    document, HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
-    Event: class { constructor(type) { this.type = type; } },
-  });
+  const handle = createVerificationFieldHarness({
+    document,
+  }).handle;
   const initial = handle({ action: 'detect', trackedAnchor: background });
   modal = dialog;
   const detected = handle({ action: 'detect', candidateCache: initial.candidateCache });
@@ -482,10 +403,9 @@ test("serialized filling uses the active stacked modal and rejects the inactive 
   const document = { activeElement: activeInput, querySelector: () => inactive,
     querySelectorAll: () => [inactiveInput, activeInput],
     elementFromPoint: () => ({ closest: () => active }) };
-  const handle = vm.runInNewContext(`(${handleVerificationFields.toString()})`, {
-    document, HTMLInputElement: FakeInput, innerHeight: 800, innerWidth: 1200,
-    Event: class { constructor(type) { this.type = type; } },
-  });
+  const handle = createVerificationFieldHarness({
+    document,
+  }).handle;
   assert.equal(handle({ action: 'detect' }).anchor, activeInput);
   assert.equal(handle({ action: 'fill', code: '123456', expectedAnchor: inactiveInput }).ok, false);
   assert.equal(handle({ action: 'fill', code: '123456' }).ok, true);
@@ -498,40 +418,37 @@ test("serialized filling uses the active stacked modal and rejects the inactive 
 test("detection reports generic code context for later page updates", () => {
   const form = { textContent: "Enter code", contains: () => true };
   const input = new FakeInput({ name: "code", form });
-  const context = vm.createContext({
+  const context = createVerificationFieldHarness({
     document: { querySelectorAll: () => [input], activeElement: input },
-    innerHeight: 800, innerWidth: 1200,
   });
-  const result = vm.runInContext(`(${handleVerificationFields.toString()})({ action: "detect" })`, context);
+  const result = context.handle({ action: "detect" });
   assert.equal(result.ok, false);
   assert.equal(result.candidateCache.contextRoots[0], form);
 });
-
 
 test("cached detection tracks offscreen candidates without rescanning unrelated inputs", () => {
   let queries = 0;
   const input = new FakeInput({ autocomplete: "one-time-code", rect: { top: 900, bottom: 930, left: 0, right: 100 } });
   const unrelated = new FakeInput({ name: "search" });
   unrelated.getClientRects = () => { throw new Error("Unrelated fields need no layout reads"); };
-  const context = vm.createContext({
+  const context = createVerificationFieldHarness({
     input,
     document: { querySelectorAll: () => { queries++; return [input, unrelated]; }, activeElement: null },
-    innerHeight: 800, innerWidth: 1200,
   });
-  vm.runInContext(`var detect = (${handleVerificationFields.toString()}); var field = detect({ action: "detect", trackedAnchor: input });`, context);
+  context.field = context.handle({ action: "detect", trackedAnchor: input });
   assert.equal(context.field.ok, false);
   assert.equal(context.field.trackedAnchorOffscreen, true);
   input.rect = { top: 100, bottom: 130, left: 0, right: 100 };
-  vm.runInContext('field = detect({ action: "detect", candidateCache: field.candidateCache, trackedAnchor: input });', context);
+  context.field = context.handle({ action: "detect", candidateCache: context.field.candidateCache, trackedAnchor: input });
   assert.equal(context.field.ok, true);
   assert.equal(queries, 1);
   input.isConnected = false;
-  vm.runInContext('field = detect({ action: "detect", candidateCache: field.candidateCache, trackedAnchor: input });', context);
+  context.field = context.handle({ action: "detect", candidateCache: context.field.candidateCache, trackedAnchor: input });
   assert.equal(context.field.ok, false);
   assert.equal(context.field.trackedAnchorOffscreen, false);
   input.isConnected = true;
   input.autocomplete = "";
-  vm.runInContext('field = detect({ action: "detect" });', context);
+  context.field = context.handle({ action: "detect" });
   assert.equal(context.field.ok, false);
   assert.equal(queries, 2);
 });
@@ -543,16 +460,15 @@ test("cached detection returns current step roots for explicit code fields", () 
   const parent = {};
   const form = { previousElementSibling: instructions, parentElement: parent };
   const input = new FakeInput({ autocomplete: "one-time-code", form });
-  const context = vm.createContext({
+  const context = createVerificationFieldHarness({
     document: { querySelectorAll: () => [input], activeElement: input },
-    innerHeight: 800, innerWidth: 1200,
   });
-  vm.runInContext(`var detect = (${handleVerificationFields.toString()}); var field = detect({ action: "detect" });`, context);
+  context.field = context.handle({ action: "detect" });
   assert.deepEqual(Array.from(context.field.stepContext.roots), [form, instructions, previous]);
   assert.equal(context.field.stepContext.parent, parent);
   const replacement = { textContent: "Code for a different signup" };
   form.previousElementSibling = replacement;
-  const next = vm.runInContext('detect({ action: "detect", candidateCache: field.candidateCache })', context);
+  const next = context.handle({ action: "detect", candidateCache: context.field.candidateCache });
   assert.deepEqual(Array.from(next.stepContext.roots), [form, replacement]);
 });
 
@@ -563,11 +479,10 @@ test("detects and fills fields named by multiple aria-labelledby references", ()
   ]);
   const input = new FakeInput();
   input.getAttribute = name => name === "aria-labelledby" ? "missing purpose field" : null;
-  const context = vm.createContext({
+  const context = createVerificationFieldHarness({
     document: { querySelectorAll: () => [input], activeElement: input, getElementById: id => labels.get(id) },
-    innerHeight: 800, innerWidth: 1200,
   });
-  const detect = vm.runInContext(`(${handleVerificationFields.toString()})`, context);
+  const detect = context.handle;
   // The accessible name joins references in their specified order.
   assert.equal(detect({ action: "detect" }).ok, true);
   assert.equal(run([input], input, input, labels).ok, true);
@@ -594,14 +509,10 @@ function contextElement(tagName, children = [], props = {}) {
 }
 function contextText(data) { return { nodeType: 3, data, get textContent() { return this.data; } }; }
 
-function detectWith(inputs, activeElement = null) {
-  return vm.runInNewContext(`(${handleVerificationFields.toString()})`, {
+function createFieldHandler(inputs, activeElement = null) {
+  return createVerificationFieldHarness({
     document: { querySelectorAll: () => inputs, activeElement },
-    getComputedStyle: contextStyle,
-    HTMLInputElement: FakeInput,
-    innerHeight: 800, innerWidth: 1200,
-    Event: class { constructor(type) { this.type = type; } },
-  });
+  }).handle;
 }
 
 test("focusing an unlabelled digit selects its own OTP group for detection and fill", () => {
@@ -614,9 +525,9 @@ test("focusing an unlabelled digit selects its own OTP group for detection and f
     }));
   });
   const inputs = groups.flat();
-  const initial = detectWith(inputs)({ action: "detect" });
+  const initial = createFieldHandler(inputs)({ action: "detect" });
   assert.equal(initial.anchor, groups[0][0]);
-  const focusedDetect = detectWith(inputs, groups[1][2]);
+  const focusedDetect = createFieldHandler(inputs, groups[1][2]);
   for (const candidateCache of [undefined, initial.candidateCache]) {
     const selected = focusedDetect({ action: "detect", candidateCache, trackedAnchor: initial.anchor });
     assert.equal(selected.anchor, groups[1][0]);
@@ -643,7 +554,7 @@ test("hidden instructions and non-rendered content cannot qualify a generic code
       contextText("Code"),
     ]);
     const input = new FakeInput({ name: "code", form });
-    const detect = detectWith([input], input);
+    const detect = createFieldHandler([input], input);
     assert.equal(detect({ action: "detect" }).ok, false, tagName);
     assert.equal(detect({ action: "fill", code: "123456" }).ok, false, tagName);
     assert.equal(input.value, undefined);
@@ -657,7 +568,7 @@ test("generic context retains visible instructions and rejects incomplete traver
     [contextText(instruction), contextText("x".repeat(10_000))],
   ]) {
     const input = new FakeInput({ name: "code", form: contextElement("FORM", children) });
-    const detect = detectWith([input]);
+    const detect = createFieldHandler([input]);
     assert.equal(detect({ action: "detect" }).ok, false);
     assert.equal(detect({ action: "fill", code: "123456" }).ok, false);
     assert.equal(input.value, undefined);
@@ -669,7 +580,7 @@ test("generic context retains visible instructions and rejects incomplete traver
     contextElement("P", [contextText("We sent a "), contextElement("SPAN", [contextText("code")]), contextText(" to your email.")]),
   ]);
   const input = new FakeInput({ name: "code", form });
-  assert.equal(detectWith([input])({ action: "detect" }).ok, true);
+  assert.equal(createFieldHandler([input])({ action: "detect" }).ok, true);
   assert.equal(run([input]).ok, true);
 });
 
@@ -677,7 +588,7 @@ test("unlabelled numeric fields need a validated OTP group to take focus", () =>
   const parentElement = {};
   const code = new FakeInput({ name: "verification_code" });
   const unrelated = Array.from({ length: 6 }, () => new FakeInput({ maxLength: 1, parentElement }));
-  const detect = detectWith([code, ...unrelated], unrelated[2]);
+  const detect = createFieldHandler([code, ...unrelated], unrelated[2]);
   assert.equal(detect({ action: "detect" }).anchor, code);
   assert.equal(detect({ action: "fill", code: "123456" }).ok, true);
   assert.equal(code.value, "123456");

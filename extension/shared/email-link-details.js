@@ -1,5 +1,11 @@
 export function appendEmailLinkDetails(document, card, item, className = "") {
-  for (const text of [item.accountEmail, item.sender, item.subject, `Initial destination: ${new URL(item.url).hostname}`]) {
+  const details = [
+    `Inbox: ${item.accountEmail}`,
+    `From: ${item.sender?.trim() || "Unknown sender"}`,
+    item.subject?.trim(),
+    `Initial destination: ${new URL(item.url).hostname}`,
+  ];
+  for (const text of details.filter(Boolean)) {
     const line = document.createElement("p");
     line.textContent = text;
     if (className) line.className = className;

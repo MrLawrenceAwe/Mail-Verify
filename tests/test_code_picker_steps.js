@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { handleVerificationFields } from "../extension/shared/code-fields.js";
-import { pickerEnvironment } from "./code_picker_environment.js";
+import { createCodePickerHarness } from "./code_picker_harness.js";
 
 test("initial code suggestions accept recent mail received before field discovery", async () => {
   const now = 1_000_000;
@@ -10,7 +10,7 @@ test("initial code suggestions accept recent mail received before field discover
     sender: "noreply@email.trac.jobs", receivedAt: now - 30_000 };
   let fills = 0;
   const anchor = {};
-  const { results } = pickerEnvironment({
+  const { results } = createCodePickerHarness({
     handleVerificationFields: ({ action }) => {
       if (action === "fill") { fills++; return { ok: true }; }
       return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20, right: 200 } };
@@ -33,7 +33,7 @@ test("code suggestions mount beside their field inside a modal dialog", async ()
   let mounted;
   const modal = { append(host) { mounted = host; } };
   const anchor = { closest: selector => selector === 'dialog:modal' ? modal : null };
-  const f = pickerEnvironment({ handleVerificationFields: () => ({ ok: true, anchor,
+  const f = createCodePickerHarness({ handleVerificationFields: () => ({ ok: true, anchor,
     rect: { top:100, bottom:130, left:20, right:200 } }),
     check: async () => ({ ok: true, codes: [] }),
     activeElement: anchor,
@@ -67,7 +67,7 @@ test("focus moves within split digits preserve suggestions, but another group st
     });
     const detect = vm.runInContext(`(${handleVerificationFields.toString()})`, context);
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-    const { events, timers, results } = pickerEnvironment({
+    const { events, timers, results } = createCodePickerHarness({
       handleVerificationFields: detect, now: () => 10000,
       onMount: () => { mounts++; },
       check: async () => { requests++; return { ok: true, codes: [code] }; },
@@ -109,7 +109,7 @@ test("a successful fill allows a new code field on the same URL", async () => {
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20_000 };
   let codes = [oldCode];
-  const { timers, results } = pickerEnvironment({
+  const { timers, results } = createCodePickerHarness({
     handleVerificationFields: (request) => request.action === "fill"
       ? { ok: true }
       : { ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20, right: 200 } },
@@ -137,7 +137,7 @@ test("a successful fill keeps the same field closed until a resend", async () =>
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 22_000 };
   let codes = [oldCode], mounts = 0;
-  const { events, timers, results } = pickerEnvironment({
+  const { events, timers, results } = createCodePickerHarness({
     handleVerificationFields: (request) => request.action === "fill"
       ? { ok: true }
       : { ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20, right: 200 } },
@@ -171,7 +171,7 @@ for (const resend of [
   let now = 9500;
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let codes = [oldCode];
-  const { events, timers, results } = pickerEnvironment({
+  const { events, timers, results } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
     now: () => now,
     check: async () => ({ ok: true, codes }),
@@ -198,7 +198,7 @@ test(`${textContent} restarts checking after the polling deadline`, async () => 
   let now = 9500, checks = 0;
   const oldCode = { uid: 7, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let codes = [oldCode];
-  const { events, timers, results } = pickerEnvironment({
+  const { events, timers, results } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: true, anchor: {}, rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
     now: () => now,
     check: async () => { checks++; return { ok: true, codes }; },
@@ -225,7 +225,7 @@ test(`${textContent} restarts checking after the polling deadline`, async () => 
 test("resend before the first check returns does not revive an unseen old code", async () => {
   const requests = [];
   let now = 9500;
-  const { events, timers, results } = pickerEnvironment({
+  const { events, timers, results } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: true, anchor: {}, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
     now: () => now,
     check: () => new Promise(resolve => requests.push(resolve)),
@@ -253,7 +253,7 @@ test("new route clears suggestions even when the code field is reused", async ()
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let responses = [oldCode];
   const anchor = {};
-  const { environment, events, timers, results } = pickerEnvironment({
+  const { environment, events, timers, results } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: true, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
     now: () => now,
     check: async () => ({ ok: true, codes: responses }),
@@ -285,7 +285,7 @@ test("scrolling away and back keeps a code from the same verification step", asy
       : { left: 20, right: 120, top: -130, bottom: -100 },
   };
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9_000 };
-  const { events, results } = pickerEnvironment({
+  const { events, results } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: visible, anchor, trackedAnchorOffscreen: !visible,
       candidateCache: { inputs: [anchor], contextRoots: [] }, rect: anchor.getBoundingClientRect() }),
     now: () => now,
@@ -311,7 +311,7 @@ test("countdown completion retains codes without starting a new attempt", async 
     const anchor = { form };
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
     let requests = 0;
-    const { timers, results, elements } = pickerEnvironment({
+    const { timers, results, elements } = createCodePickerHarness({
       handleVerificationFields: () => ({ ok: true, anchor, stepContext: { roots: [form, form.previousElementSibling].filter(Boolean), parent: form.parentElement }, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
       now: () => now,
       check: async () => { requests++; return { ok: true, codes: [code] }; },
@@ -339,7 +339,7 @@ test("changed verification instructions reset codes on the same field and URL", 
   const anchor = { form };
   const oldCode = { uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 };
   let responses = [oldCode];
-  const { timers, results } = pickerEnvironment({
+  const { timers, results } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: true, anchor, stepContext: { roots: [form, form.previousElementSibling].filter(Boolean), parent: form.parentElement }, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
     now: () => now,
     check: async () => ({ ok: true, codes: responses }),
@@ -382,7 +382,7 @@ test("changed verification instructions reset codes on the same field and URL", 
 test("a new verification field on the same URL starts a fresh code window", async () => {
   let observer, now = 10_000, visible = true, anchor = {}, responses = [], warnings = [];
   responses = [{ uid: 1, accountEmail: "test@yahoo.com", code: "111111", sender: "auth@example.test", receivedAt: 9000 }];
-  const { events, timers, results, elements } = pickerEnvironment({
+  const { events, timers, results, elements } = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: visible, anchor, candidateCache: { contextRoots: [] }, rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
     now: () => now,
     check: async () => ({ ok: true, codes: responses, warnings }),
@@ -441,7 +441,7 @@ test("incidental form messages retain codes through discovery, retry and selecti
   const form = { textContent: "Enter your verification code", contains: () => true };
   const anchor = {};
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-  const { timers, results, elements } = pickerEnvironment({
+  const { timers, results, elements } = createCodePickerHarness({
     handleVerificationFields: ({ action }) => {
       if (action === "fill") { fills++; return { ok: true }; }
       return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20, right: 200 }, stepContext: { roots: [form] } };
@@ -472,7 +472,7 @@ test("an oversized step keeps the last known recipient and remains selectable", 
   const form = { textContent: "We sent a code to alice@example.test", contains: () => true };
   const anchor = {};
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-  const { timers, results } = pickerEnvironment({
+  const { timers, results } = createCodePickerHarness({
     handleVerificationFields: ({ action }) => {
       if (action === "fill") { fills++; return { ok: true }; }
       return { ok: true, anchor, rect: { top: 100, bottom: 130, left: 20, right: 200 }, stepContext: { roots: [form] } };
@@ -497,7 +497,7 @@ test("resends in an independent form leave the active code usable", async () => 
   const form = { textContent: "We sent a code to test@yahoo.com." };
   const anchor = { form };
   const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-  const f = pickerEnvironment({
+  const f = createCodePickerHarness({
     handleVerificationFields: () => ({ ok: true, anchor, stepContext: { roots: [form] },
       rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
     now: () => 10000, check: async () => ({ ok: true, codes: [code] }),
@@ -521,7 +521,7 @@ test("an identical detached field replacement retains old mail and fills the liv
     const replacement = {};
     let anchor = original, now = 10000, filledAnchor;
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-    const f = pickerEnvironment({
+    const f = createCodePickerHarness({
       handleVerificationFields: request => {
         if (request.action === "fill") { filledAnchor = request.expectedAnchor; return { ok: true }; }
         return { ok: true, anchor, stepContext: { roots: [form] },
@@ -552,7 +552,7 @@ test("a changed recipient or changed field is not treated as an identical replac
     const original = { isConnected: true, isEqualNode: () => change !== "attributes" };
     let anchor = original;
     const code = { uid: 1, accountEmail: "test@yahoo.com", code: "123456", sender: "auth@example.test", receivedAt: 9000 };
-    const f = pickerEnvironment({
+    const f = createCodePickerHarness({
       handleVerificationFields: () => ({ ok: true, anchor, stepContext: { roots: [root] },
         rect: { top: 100, bottom: 130, left: 20, right: 200 } }),
       now: () => 10000, check: async () => ({ ok: true, codes: [code] }),
