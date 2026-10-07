@@ -39,7 +39,7 @@ export function createPopupController({
     view.renderAccounts(accountEmails);
     view.clearResults();
     if (!accountEmails.length) {
-      polling.stopScheduledPolling();
+      polling.endPollingWindow();
       view.setStatus("No email accounts connected.");
       return;
     }
@@ -64,7 +64,7 @@ export function createPopupController({
     view.setResultButtonsDisabled(true);
     try {
       await action();
-      polling.stopScheduledPolling();
+      polling.endPollingWindow();
     } catch (error) {
       view.setStatus(error.message, true);
       view.setResultButtonsDisabled(false);
@@ -219,7 +219,7 @@ export function createPopupController({
   }
   async function removeAccount(email) {
     if (savingAccount || removingAccount) return;
-    polling.stopScheduledPolling();
+    polling.endPollingWindow();
     removingAccount = true;
     abortCheck();
     view.setCheckAndRemoveButtonsDisabled(true);

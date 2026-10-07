@@ -419,7 +419,7 @@ test("finds links only on request and opens only the selected link", async () =>
   assert.equal(controls.codeContext.hidden, true);
   assert.deepEqual(state.opened, []);
   assert.deepEqual(controls.results.children[0].children.slice(0, 4).map(line => line.textContent),
-    [link.accountEmail, link.sender, link.subject, "Link host: example.com"]);
+    [link.accountEmail, link.sender, link.subject, "Initial destination: example.com"]);
   const button = controls.results.querySelectorAll("button")[0];
   assert.equal(button.textContent, "Open confirmation link ↗");
   await button.trigger();
@@ -548,7 +548,7 @@ test("popup guidance follows the selected action and clears when returning to co
   assert.match(controls.linkGuidance.textContent, /Opening a link in a new tab/);
   controls.checkPasswordResetLinks.trigger();
   await settle();
-  assert.match(controls.linkGuidance.textContent, /sender and link host before copying/);
+  assert.match(controls.linkGuidance.textContent, /sender and initial destination before copying/);
   assert.doesNotMatch(controls.linkGuidance.textContent, /open|confirm/i);
   controls.checkCodes.trigger();
   await settle();

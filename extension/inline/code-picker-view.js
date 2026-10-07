@@ -36,7 +36,7 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
     .code:disabled { opacity:.6; }
     svg { width:24px; height:20px; flex:none; }
     strong { display:block; font-size:14px; font-weight:500; }
-    small { display:block; font-size:11px; margin-top:0; }
+    small { display:block; font-size:11px; margin-top:0; overflow-wrap:anywhere; }
     .controls { display:flex; align-items:center; gap:4px; padding:0 3px; }
     #status { flex:1; font-size:10px; margin:2px 0; overflow-wrap:anywhere; }
     #retry, #close { color:#555d6b; background:transparent; padding:1px 4px; border-radius:3px; line-height:18px; }
@@ -64,7 +64,7 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
       button.className = "code";
       button.innerHTML = `<svg viewBox="0 0 36 28" aria-hidden="true"><path fill="currentColor" d="M2 2h32L18 14zM1 5l12 10L1 25zm34 0v20L23 15zM3 27l12-10 3 3 3-3 12 10z"/></svg><span><strong></strong><small></small></span>`;
       button.querySelector("strong").textContent = `Fill code ${item.code}`;
-      button.querySelector("small").textContent = item.accountEmail;
+      button.querySelector("small").textContent = `${item.sender || "Unknown sender"} · ${item.accountEmail}`;
       button.title = `${item.accountEmail}\n${item.sender}\n${item.subject}\nFill on ${hostname}`;
       button.setAttribute("aria-label", `Fill code ${item.code} from ${item.sender} in ${item.accountEmail}. ${item.subject}. On ${hostname}`);
       button.addEventListener("mousedown", (event) => event.preventDefault());

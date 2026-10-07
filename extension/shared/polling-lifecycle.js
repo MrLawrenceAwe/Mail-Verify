@@ -6,7 +6,9 @@ export function createPollingLifecycle({ clock, setTimeout, clearTimeout }) {
     get deadline() { return deadline; },
     get generation() { return generation; },
     renewDeadline() { deadline = clock.now() + POLL_WINDOW_MS; },
-    stopScheduledPolling() { this.cancelScheduledCheck(); deadline = 0; },
+    // End automatic checking; cancelling a scheduled check alone retains its window.
+    endPollingWindow() { this.cancelScheduledCheck(); deadline = 0; },
+    // Cancel only the next check, leaving the deadline and active response intact.
     cancelScheduledCheck() { clearTimeout(timer); timer = undefined; },
     invalidateResponses() { generation++; },
     isCurrent(value) { return value === generation; },

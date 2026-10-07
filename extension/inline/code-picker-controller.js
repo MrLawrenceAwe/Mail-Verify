@@ -149,11 +149,11 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
       }
     }
   }
-  function resetAttempt({ newPage = false, preserveCutoff = false } = {}) {
+  function resetAttempt({ newPage = false, advanceCutoff = false } = {}) {
     excludeSeenMessages();
     unmountPicker();
     filledStep = false;
-    minReceivedAtMs = preserveCutoff
+    minReceivedAtMs = advanceCutoff
       ? Math.max(minReceivedAtMs ?? -Infinity, initialStepCutoff(clock.now()))
       : undefined;
     if (newPage) {
@@ -193,7 +193,7 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
       if (unchangedReplacement) anchor = field.anchor;
       else resetAttempt();
     } else if (stepContext && context.recipientKey !== null && stepContext.recipientKey !== null && context.recipientKey !== stepContext.recipientKey)
-      resetAttempt({ preserveCutoff: true });
+      resetAttempt({ advanceCutoff: true });
     else if (filledStep) return;
     if (!view && !dismissed) mountPicker(field, context);
     else {

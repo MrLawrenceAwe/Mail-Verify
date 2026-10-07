@@ -88,7 +88,7 @@ export function startEmailLinkCard({ environment = globalThis, detectStep = dete
       dismissed = false;
       activeStep = null;
       minReceivedAtMs = undefined;
-      polling.stopScheduledPolling();
+      polling.endPollingWindow();
       return;
     }
     if (activeStep && (nextStep.key !== activeStep.key || nextStep.mailType !== activeStep.mailType)) {
@@ -99,7 +99,7 @@ export function startEmailLinkCard({ environment = globalThis, detectStep = dete
       // have one-second precision, so start with the next second to exclude
       // links delivered just before this step appeared.
       minReceivedAtMs = Math.max(minReceivedAtMs ?? -Infinity, resendCutoff(clock.now()));
-      polling.stopScheduledPolling();
+      polling.endPollingWindow();
     }
     if (dismissed) return;
     if (!activeStep) {

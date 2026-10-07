@@ -84,8 +84,7 @@ export function detectEmailLinkStep(document) {
     // Panel replacement, recipient changes, and purpose changes still do.
     // Prefer the waiting form inside a larger task panel, so its resend
     // controls cannot be confused with another form in the same main region.
-    if (!detectedStep || detectedStep.panel.contains?.(panel))
-      detectedStep = { key: `${emailLinkPanelIds.get(panel)}:${mailType}:${recipientIdentity(text)}`, mailType, panel };
+    detectedStep = { key: `${emailLinkPanelIds.get(panel)}:${mailType}:${recipientIdentity(text)}`, mailType, panel };
   }
   return detectedStep;
 }

@@ -27,7 +27,7 @@ test("both link-card mail types show email details and their own action and guid
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     const { card, action, root, item } = setup(mailType);
     assert.deepEqual(card.children.slice(0, 4).map(line => line.textContent),
-      [item.accountEmail, item.sender, item.subject, "Link host: example.com"]);
+      [item.accountEmail, item.sender, item.subject, "Initial destination: example.com"]);
     if (mailType === "confirmationLinks") {
       assert.equal(action.tag, "a");
       assert.equal(action.href, item.url);
@@ -36,7 +36,7 @@ test("both link-card mail types show email details and their own action and guid
     } else {
       assert.equal(action.tag, "button");
       assert.equal(action.href, undefined);
-      assert.match(root.innerHTML, /sender and link host before copying/);
+      assert.match(root.innerHTML, /sender and initial destination before copying/);
       assert.doesNotMatch(root.innerHTML, /Opening a link/);
     }
   }
