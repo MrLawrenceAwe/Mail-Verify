@@ -2,7 +2,10 @@ import { handleVerificationFields as defaultVerificationFieldsHandler } from "..
 
 const coordinators = new WeakMap();
 
-export function getPageCoordinator(environment, handleVerificationFields = defaultVerificationFieldsHandler) {
+export function getPageCoordinator(
+  environment,
+  handleVerificationFields = defaultVerificationFieldsHandler,
+) {
   const { document, window, MutationObserver } = environment;
   if (coordinators.has(document)) return coordinators.get(document);
 
@@ -10,25 +13,62 @@ export function getPageCoordinator(environment, handleVerificationFields = defau
   const pageListeners = new Set();
   let candidateCache;
   const coordinator = {
-    get candidateCache() { return candidateCache; },
+    get candidateCache() {
+      return candidateCache;
+    },
     detectCodeField({ refresh = false, trackedAnchor } = {}) {
       if (refresh) candidateCache = undefined;
-      const field = handleVerificationFields({ action: "detect", candidateCache, trackedAnchor });
+      const field = handleVerificationFields({
+        action: "detect",
+        candidateCache,
+        trackedAnchor,
+      });
       candidateCache = field.candidateCache;
       return field;
     },
-    invalidateCandidates() { candidateCache = undefined; },
-    onMutation(listener) { mutationListeners.add(listener); },
-    onPageChange(listener) { pageListeners.add(listener); },
+    invalidateCandidates() {
+      candidateCache = undefined;
+    },
+    onMutation(listener) {
+      mutationListeners.add(listener);
+    },
+    onPageChange(listener) {
+      pageListeners.add(listener);
+    },
   };
   coordinators.set(document, coordinator);
 
   new MutationObserver((records) => {
-    if (document.hidden) { candidateCache = undefined; return; }
+    if (document.hidden) {
+      candidateCache = undefined;
+      return;
+    }
     for (const listener of mutationListeners) listener(records);
   }).observe(document.documentElement, {
-    childList: true, subtree: true, characterData: true, characterDataOldValue: true, attributes: true,
-    attributeFilter: ["role", "type", "name", "id", "placeholder", "autocomplete", "aria-label", "aria-labelledby", "aria-hidden", "hidden", "open", "style", "class", "disabled", "readonly", "maxlength", "for"],
+    childList: true,
+    subtree: true,
+    characterData: true,
+    characterDataOldValue: true,
+    attributes: true,
+    attributeFilter: [
+      "role",
+      "type",
+      "name",
+      "id",
+      "placeholder",
+      "autocomplete",
+      "aria-label",
+      "aria-labelledby",
+      "aria-hidden",
+      "hidden",
+      "open",
+      "style",
+      "class",
+      "disabled",
+      "readonly",
+      "maxlength",
+      "for",
+    ],
   });
   const notifyPageChange = () => {
     for (const listener of pageListeners) listener();

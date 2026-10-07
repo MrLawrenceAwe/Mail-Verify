@@ -16,11 +16,21 @@ export function createTimerQueue() {
       pending.set(id, { fn, delay });
       return id;
     },
-    clearTimeout(id) { pending.delete(id); },
-    takeNewest() { return take([...pending.keys()].at(-1)); },
-    takeOldest() { return take(pending.keys().next().value); },
-    get length() { return pending.size; },
-    values() { return pending.values(); },
+    clearTimeout(id) {
+      pending.delete(id);
+    },
+    takeNewest() {
+      return take([...pending.keys()].at(-1));
+    },
+    takeOldest() {
+      return take(pending.keys().next().value);
+    },
+    get length() {
+      return pending.size;
+    },
+    values() {
+      return pending.values();
+    },
     async runWithDelay(delay) {
       const match = [...pending].find(([, entry]) => entry.delay === delay);
       assert.ok(match, `timer ${delay} exists`);

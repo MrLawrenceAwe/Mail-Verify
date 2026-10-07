@@ -8,7 +8,10 @@
   </head>
   <body>
     <header>
-      <span class="mark">M<span>✓</span></span>
+      <span class="mark">
+        M
+        <span>✓</span>
+      </span>
       <div>
         <h1>Mail Verify</h1>
         <p>Email codes, confirmation and reset links.</p>
@@ -20,18 +23,20 @@
       </p>
       <section id="accountSetup" hidden>
         <h2>Add or update Yahoo account</h2>
-        <p>Use a Yahoo-generated app password, stored in your Mac’s Keychain.</p>
+        <p>
+          Use a Yahoo-generated app password, stored in your Mac’s Keychain.
+        </p>
         <form id="accountForm">
-          <label for="email">Yahoo email address</label
-          ><input
+          <label for="email">Yahoo email address</label>
+          <input
             id="email"
             type="email"
             autocomplete="username"
             required
             placeholder="you@yahoo.com"
           />
-          <label for="password">App password</label
-          ><input
+          <label for="password">App password</label>
+          <input
             id="password"
             type="password"
             autocomplete="off"
@@ -42,37 +47,52 @@
             href="https://login.yahoo.com/account/security"
             target="_blank"
             rel="noreferrer"
-            >Create an app password in Yahoo ↗</a
           >
+            Create an app password in Yahoo ↗
+          </a>
           <button id="saveAccountSubmit" type="submit">Save account</button>
         </form>
       </section>
       <section id="connectedAccountsPanel" hidden>
         <div id="accounts"></div>
-        <button id="showAccountSetup" class="quiet">Add or update Yahoo account</button>
+        <button id="showAccountSetup" class="quiet">
+          Add or update Yahoo account
+        </button>
         <div id="codeContext">
-          <p class="destination">Fill on <strong id="destination"></strong></p>
+          <p class="target-page">
+            Target page:
+            <strong id="targetPage"></strong>
+          </p>
           <p id="codePageHelp" class="hint" hidden>
-            Open an HTTPS page with a verification-code field, then reopen Mail Verify.
+            Open an HTTPS page with a verification-code field, then reopen Mail
+            Verify.
           </p>
           <p class="hint">
-            Check that the sender and service match this website before filling.
+            Results come from all connected inboxes. Choose a code whose sender
+            and service match the target page.
           </p>
         </div>
         <div id="results"></div>
         <button id="checkCodes">Find verification codes</button>
-        <button id="checkConfirmationLinks" class="quiet">Find confirmation links</button>
-        <button id="checkPasswordResetLinks" class="quiet">Find password reset links</button>
+        <button id="checkConfirmationLinks" class="quiet">
+          Find confirmation links
+        </button>
+        <button id="checkPasswordResetLinks" class="quiet">
+          Find password reset links
+        </button>
         <p id="linkGuidance" class="hint" hidden></p>
         <p class="hint">
-          Checks for up to 2 minutes while this popup is open.
-          Shows inbox emails from the last 10 minutes.
+          Checks for up to 2 minutes while this popup is open. Shows inbox
+          emails from the last 10 minutes.
         </p>
       </section>
       <section id="companionSetup" hidden>
         <h2>Install Mac companion</h2>
-        <p>Run <strong>Install Companion.command</strong> from the project folder,
-          then reopen this popup.</p>
+        <p>
+          Run
+          <strong>Install Companion.command</strong>
+          from the project folder, then reopen this popup.
+        </p>
       </section>
     </main>
     <footer>Codes and links are extracted on your Mac.</footer>

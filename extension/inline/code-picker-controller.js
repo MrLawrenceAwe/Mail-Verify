@@ -1,32 +1,72 @@
 import { formatAccountCheckWarnings } from "../shared/mail-presentation.js";
 import { createScanSchedule } from "../shared/scan-schedule.js";
-import { selectSuggestedCodes, messageKey, mutationAffectsPicker, isCodeRequestControl } from "./code-picker-policy.js";
-import { REQUEST_CONTROL_SELECTOR, belongsToVerificationStep } from "./request-controls.js";
+import {
+  selectSuggestedCodes,
+  messageKey,
+  mutationAffectsPicker,
+  isCodeRequestControl,
+} from "./code-picker-policy.js";
+import {
+  REQUEST_CONTROL_SELECTOR,
+  belongsToVerificationStep,
+} from "./request-controls.js";
 import { readCodeStepContext } from "./code-step-context.js";
 import { handleVerificationFields as defaultVerificationFieldsHandler } from "../shared/code-fields.js";
-import { calculatePickerPosition, createCodePickerView } from "./code-picker-view.js";
-import { stepStartCutoff, isFreshMessage, resendCutoff, CODE_PICKER_SCAN_INTERVAL_MS, MAX_MESSAGE_AGE_MS } from "../shared/mail-timing.js";
+import {
+  calculatePickerPosition,
+  createCodePickerView,
+} from "./code-picker-view.js";
+import {
+  stepStartCutoff,
+  isFreshMessage,
+  resendCutoff,
+  CODE_PICKER_SCAN_INTERVAL_MS,
+  MAX_MESSAGE_AGE_MS,
+} from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
 import { mountSuggestion, suggestionMountRoot } from "./suggestion-mount.js";
 
-export function startCodePicker({ environment = globalThis, handleVerificationFields = defaultVerificationFieldsHandler, page = getPageCoordinator(environment, handleVerificationFields) } = {}) {
-  const { document, window, location, chrome, requestAnimationFrame,
-    setTimeout, clearTimeout, Date: clock = Date } = environment;
-  const polling = createInlinePollingLifecycle({ clock, setTimeout, clearTimeout });
+export function startCodePicker({
+  environment = globalThis,
+  handleVerificationFields = defaultVerificationFieldsHandler,
+  page = getPageCoordinator(environment, handleVerificationFields),
+} = {}) {
+  const {
+    document,
+    window,
+    location,
+    chrome,
+    requestAnimationFrame,
+    setTimeout,
+    clearTimeout,
+    Date: clock = Date,
+  } = environment;
+  const polling = createInlinePollingLifecycle({
+    clock,
+    setTimeout,
+    clearTimeout,
+  });
   const { checks } = polling;
   let view;
-  const scanSchedule = createScanSchedule({ clock, intervalMs: CODE_PICKER_SCAN_INTERVAL_MS });
-  let dismissed = false, filledStep = false, lastURL = location.href;
+  const scanSchedule = createScanSchedule({
+    clock,
+    intervalMs: CODE_PICKER_SCAN_INTERVAL_MS,
+  });
+  let dismissed = false,
+    filledStep = false,
+    lastURL = location.href;
   // Mail may arrive before this page loads or the extension discovers its field.
   // Start with the popup's freshness window; later attempts use a step cutoff.
   let minReceivedAtMs = clock.now() - MAX_MESSAGE_AGE_MS;
   let anchor, stepContext;
   let pageControls;
-  let seenMessageKeys = new Set(), excludedMessageKeys = new Set();
+  let seenMessageKeys = new Set(),
+    excludedMessageKeys = new Set();
   const detectCodeField = (options) => page.detectCodeField(options);
-  const readStepContext = (context) => readCodeStepContext(context, environment.getComputedStyle);
+  const readStepContext = (context) =>
+    readCodeStepContext(context, environment.getComputedStyle);
   function unmountPicker({ preserveStep = false } = {}) {
     scanSchedule.clearPending();
     polling.invalidateChecks();
@@ -45,7 +85,8 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     for (const key of seenMessageKeys) excludedMessageKeys.add(key);
   }
   function restartPolling() {
-    if (polling.renewAndQueueRetry()) return;
+    polling.renewDeadline();
+    if (polling.queueRetryIfBusy()) return;
     checkForCodes();
   }
   function positionPicker(field = detectCodeField()) {
@@ -54,11 +95,29 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     if (view.host.parentNode && view.host.parentNode !== mountRoot)
       mountSuggestion(document, view.host);
     const bounds = view.host.getBoundingClientRect();
-    pageControls ??= [...document.querySelectorAll('button, a[href], input, select, textarea, [role="button"], [role="link"]')];
-    const controlRects = pageControls.filter(control => control !== field.anchor && control.isConnected &&
-      (mountRoot === document.documentElement || control.closest('dialog:modal') === mountRoot))
-      .map(control => control.getBoundingClientRect()).filter(rect => rect.width > 0 && rect.height > 0);
-    const { left, top } = calculatePickerPosition(field.rect, bounds.width, bounds.height, environment.innerWidth, environment.innerHeight, controlRects);
+    pageControls ??= [
+      ...document.querySelectorAll(
+        'button, a[href], input, select, textarea, [role="button"], [role="link"]',
+      ),
+    ];
+    const controlRects = pageControls
+      .filter(
+        (control) =>
+          control !== field.anchor &&
+          control.isConnected &&
+          (mountRoot === document.documentElement ||
+            control.closest("dialog:modal") === mountRoot),
+      )
+      .map((control) => control.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    const { left, top } = calculatePickerPosition(
+      field.rect,
+      bounds.width,
+      bounds.height,
+      environment.innerWidth,
+      environment.innerHeight,
+      controlRects,
+    );
     view.host.style.left = `${left}px`;
     view.host.style.top = `${top}px`;
   }
@@ -80,12 +139,18 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
           positionPicker();
           return;
         }
-        const result = handleVerificationFields({ action: "fill", code: item.code, expectedAnchor: anchor });
+        const result = handleVerificationFields({
+          action: "fill",
+          code: item.code,
+          expectedAnchor: anchor,
+        });
         if (result.ok) {
           filledStep = true;
           unmountPicker({ preserveStep: true });
         } else {
-          view.setStatus(result.error || "Select the code field and try again.");
+          view.setStatus(
+            result.error || "Select the code field and try again.",
+          );
           positionPicker();
         }
       },
@@ -101,24 +166,35 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
       syncPicker();
       return;
     }
-    if (checks.busy || !view || document.hidden || !detectCodeField().ok) return;
+    if (checks.busy || !view || document.hidden || !detectCodeField().ok)
+      return;
     const checkToken = checks.start();
     const requestGeneration = polling.generation;
     let checkFailed = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
       const { collectOnly } = scanSchedule.beginCheck();
-      const response = await requestInlineCheck(chrome.runtime, "codes", collectOnly);
+      const response = await requestInlineCheck(
+        chrome.runtime,
+        "codes",
+        collectOnly,
+      );
       if (lastURL !== location.href) {
         syncPicker();
         return;
       }
       if (!polling.isCurrent(requestGeneration) || !view) return;
-      if (!response?.ok) throw new Error(response?.error || "Could not check your inboxes.");
+      if (!response?.ok)
+        throw new Error(response?.error || "Could not check your inboxes.");
       scanSchedule.recordResponse(response.scanPending);
       checkFailed = !!response.warnings?.length;
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
-      const codes = selectSuggestedCodes(response.codes, minReceivedAtMs, clock.now(), excludedMessageKeys);
+      const codes = selectSuggestedCodes(
+        response.codes,
+        minReceivedAtMs,
+        clock.now(),
+        excludedMessageKeys,
+      );
       view.renderCodes(codes, location.hostname);
       const status = response.warnings?.length
         ? formatAccountCheckWarnings(response.warnings)
@@ -142,8 +218,10 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
       }
       if (view) positionPicker();
       if (view && !polling.hasExpired()) {
-        polling.schedule(checkForCodes, polling.isCurrent(requestGeneration)
-          ? scanSchedule.pollDelayMs : 0);
+        polling.schedule(
+          checkForCodes,
+          polling.isCurrent(requestGeneration) ? scanSchedule.pollDelayMs : 0,
+        );
       } else if (view && !view.hasCodes() && !checkFailed) {
         view.setStatus("No code found. Click ↻ to check again.");
       }
@@ -173,31 +251,47 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
       return;
     }
     if (dismissed) return;
-    const field = detectCodeField({ refresh: refreshCandidates, trackedAnchor: anchor });
+    const field = detectCodeField({
+      refresh: refreshCandidates,
+      trackedAnchor: anchor,
+    });
     if (!field.ok) {
       if (field.trackedAnchorOffscreen) {
         if (view) unmountPicker({ preserveStep: true });
       } else if (anchor) resetAttempt();
       return;
     }
-    const context = refreshCandidates || !view || anchor !== field.anchor
-      ? readStepContext(field.stepContext)
-      : stepContext;
+    const context =
+      refreshCandidates || !view || anchor !== field.anchor
+        ? readStepContext(field.stepContext)
+        : stepContext;
     if (anchor && anchor !== field.anchor) {
-      const unchangedReplacement = !filledStep && anchor.isConnected === false &&
-        anchor.isEqualNode(field.anchor) && stepContext?.roots[0] &&
+      const unchangedReplacement =
+        !filledStep &&
+        anchor.isConnected === false &&
+        anchor.isEqualNode(field.anchor) &&
+        stepContext?.roots[0] &&
         stepContext.roots[0] === context.roots[0] &&
-        context.recipientKey !== null && context.recipientKey === stepContext.recipientKey;
+        context.recipientKey !== null &&
+        context.recipientKey === stepContext.recipientKey;
       // DOM replacement alone does not request new mail. Keep the selection
       // and cutoff, but validate any fill against the new live input.
       if (unchangedReplacement) anchor = field.anchor;
       else resetAttempt();
-    } else if (stepContext && context.recipientKey !== null && stepContext.recipientKey !== null && context.recipientKey !== stepContext.recipientKey)
+    } else if (
+      stepContext &&
+      context.recipientKey !== null &&
+      stepContext.recipientKey !== null &&
+      context.recipientKey !== stepContext.recipientKey
+    )
       resetAttempt({ advanceCutoff: true });
     else if (filledStep) return;
     if (!view && !dismissed) mountPicker(field, context);
     else {
-      stepContext = { ...context, recipientKey: context.recipientKey ?? stepContext.recipientKey };
+      stepContext = {
+        ...context,
+        recipientKey: context.recipientKey ?? stepContext.recipientKey,
+      };
       positionPicker(field);
     }
   }
@@ -205,7 +299,10 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
   const scheduleDiscovery = () => {
     // Throttle so a page with continuous DOM updates cannot postpone detection forever.
     if (discoveryTimer) return;
-    discoveryTimer = setTimeout(() => { discoveryTimer = undefined; syncPicker(); }, 150);
+    discoveryTimer = setTimeout(() => {
+      discoveryTimer = undefined;
+      syncPicker();
+    }, 150);
   };
   let positionFrame;
   const schedulePosition = () => {
@@ -216,35 +313,43 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
     });
   };
   page.onMutation((records) => {
-    if (mutationAffectsPicker(records, {
-      suggestionHost: view?.host,
-      fieldContextRoots: page.candidateCache?.contextRoots,
-      stepRoots: stepContext?.roots,
-      stepParent: stepContext?.parent,
-      labelRoots: page.candidateCache?.labelRoots,
-    })) scheduleDiscovery();
+    if (
+      mutationAffectsPicker(records, {
+        suggestionHost: view?.host,
+        fieldContextRoots: page.candidateCache?.contextRoots,
+        stepRoots: stepContext?.roots,
+        stepParent: stepContext?.parent,
+        labelRoots: page.candidateCache?.labelRoots,
+      })
+    )
+      scheduleDiscovery();
   });
-  document.addEventListener("click", (event) => {
-    const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
-    if (!control || !isCodeRequestControl(control)) return;
-    const field = detectCodeField();
-    if (!field.ok || !belongsToVerificationStep(control, field.anchor)) return;
-    // IMAP dates have one-second precision. Codes from the resend's current
-    // second cannot be distinguished from an unseen code sent just before it.
-    // Start with the next second so a pending check cannot revive the old code.
-    minReceivedAtMs = resendCutoff(clock.now());
-    excludeSeenMessages();
-    dismissed = false;
-    filledStep = false;
-    polling.invalidateResponses();
-    view?.clearCodes();
-    if (view) {
-      view.setStatus("Waiting for your new code…");
-      restartPolling();
-    } else {
-      syncPicker();
-    }
-  }, true);
+  document.addEventListener(
+    "click",
+    (event) => {
+      const control = event.target.closest?.(REQUEST_CONTROL_SELECTOR);
+      if (!control || !isCodeRequestControl(control)) return;
+      const field = detectCodeField();
+      if (!field.ok || !belongsToVerificationStep(control, field.anchor))
+        return;
+      // IMAP dates have one-second precision. Codes from the resend's current
+      // second cannot be distinguished from an unseen code sent just before it.
+      // Start with the next second so a pending check cannot revive the old code.
+      minReceivedAtMs = resendCutoff(clock.now());
+      excludeSeenMessages();
+      dismissed = false;
+      filledStep = false;
+      polling.invalidateResponses();
+      view?.clearCodes();
+      if (view) {
+        view.setStatus("Waiting for your new code…");
+        restartPolling();
+      } else {
+        syncPicker();
+      }
+    },
+    true,
+  );
   document.addEventListener("focusin", scheduleDiscovery);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && view) {
@@ -253,6 +358,8 @@ export function startCodePicker({ environment = globalThis, handleVerificationFi
   });
   window.addEventListener("scroll", schedulePosition, true);
   window.addEventListener("resize", schedulePosition);
-  page.onPageChange(() => lastURL !== location.href ? syncPicker() : scheduleDiscovery());
+  page.onPageChange(() =>
+    lastURL !== location.href ? syncPicker() : scheduleDiscovery(),
+  );
   syncPicker();
 }

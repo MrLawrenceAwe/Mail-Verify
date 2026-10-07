@@ -44,7 +44,7 @@ Requires Node.js 22+ and Python 3.9+ for the automated checks:
 npm test
 ```
 
-CI runs both suites on macOS. Tests do not require Yahoo credentials or access Keychain. See [the developer guide](docs/development.md) for architecture, synthetic previews and checks requiring a real inbox.
+CI runs both suites on macOS. Tests do not require Yahoo credentials or access Keychain. See [the developer guide](docs/development.md) for architecture and [testing and previews](docs/testing.md) for synthetic fixtures and checks requiring a real inbox.
 
 ## References
 

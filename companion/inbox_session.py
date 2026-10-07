@@ -253,10 +253,10 @@ class InboxSession:
 
     def _prune_pending_messages(self, now):
         # Keep deferred work bounded, fresh, and behind newly arrived mail.
-        distinct_senders = self._newest_distinct_senders()
+        newest_by_sender = self._newest_items_by_sender()
         cutoff = (
-            (distinct_senders[-1]["receivedAt"], distinct_senders[-1]["uid"])
-            if len(distinct_senders) == DISTINCT_SENDER_LIMIT else None
+            (newest_by_sender[-1]["receivedAt"], newest_by_sender[-1]["uid"])
+            if len(newest_by_sender) == DISTINCT_SENDER_LIMIT else None
         )
         eligible = sorted(
             self.pending_body_timestamps_seconds.items(), key=lambda item: item[0], reverse=True
@@ -311,13 +311,13 @@ class InboxSession:
         # from each of five distinct senders. Their overlap allows up to nine.
         newest = self._newest_items()
         newest_overall = newest[:NEWEST_OVERALL_COUNT]
-        newest_by_sender = self._newest_distinct_senders(newest)
+        newest_by_sender = self._newest_items_by_sender(newest)
         retained_uids = {item["uid"] for item in (*newest_overall, *newest_by_sender)}
         results = [item for item in newest if item["uid"] in retained_uids]
         self.items_by_uid = {item["uid"]: item for item in results}
         return results
 
-    def _newest_distinct_senders(self, newest=None):
+    def _newest_items_by_sender(self, newest=None):
         if newest is None:
             newest = self._newest_items()
         senders = set()

@@ -2,6 +2,13 @@ const HOST_NAME = "local.yahoo_code_fill";
 const COMPANION_UNAVAILABLE =
   "Mac companion unavailable. Run Install Companion.command, then try again.";
 
+export class CompanionUnavailableError extends Error {
+  constructor() {
+    super(COMPANION_UNAVAILABLE);
+    this.name = "CompanionUnavailableError";
+  }
+}
+
 function requireSuccessfulResponse(response) {
   if (!response?.ok)
     throw new Error(response?.error || "Unexpected companion response.");
@@ -30,7 +37,7 @@ function createSession(runtime, timers) {
       try {
         nativePort = runtime.connectNative(HOST_NAME);
       } catch {
-        throw new Error(COMPANION_UNAVAILABLE);
+        throw new CompanionUnavailableError();
       }
       const port = nativePort;
       port.onMessage.addListener((response) => {
@@ -47,19 +54,28 @@ function createSession(runtime, timers) {
         if (nativePort !== port) return;
         nativePort = undefined;
         if (pendingRequest) {
-          const message =
+          const error =
             pendingRequest.action === "status"
-              ? COMPANION_UNAVAILABLE
-              : "Mac companion disconnected. Try checking again.";
-          takePending().reject(new Error(message));
+              ? new CompanionUnavailableError()
+              : new Error("Mac companion disconnected. Try checking again.");
+          takePending().reject(error);
         }
       });
     }
     return new Promise((resolve, reject) => {
-      pendingRequest = { action, resolve, reject,
-        timer: timers.setTimeout(() => closeSession(new Error(
-          "Mac companion took too long to respond. Check Keychain access and try again.",
-        )), action === "saveAccount" ? 60_000 : 35_000),
+      pendingRequest = {
+        action,
+        resolve,
+        reject,
+        timer: timers.setTimeout(
+          () =>
+            closeSession(
+              new Error(
+                "Mac companion took too long to respond. Check Keychain access and try again.",
+              ),
+            ),
+          action === "saveAccount" ? 60_000 : 35_000,
+        ),
       };
       try {
         nativePort.postMessage(request);
@@ -74,12 +90,16 @@ function createSession(runtime, timers) {
 export function createCompanionClient(runtime, timers = globalThis) {
   const session = createSession(runtime, timers);
   return {
-    sendSessionRequest: (action, collectOnly = false) => session.sendRequest({ action, collectOnly }),
+    sendSessionRequest: (action, collectOnly = false) =>
+      session.sendRequest({ action, collectOnly }),
     closeSession: session.closeSession,
     async sendOneOffRequest(request) {
       const oneOff = createSession(runtime, timers);
-      try { return await oneOff.sendRequest(request); }
-      finally { oneOff.closeSession(); }
+      try {
+        return await oneOff.sendRequest(request);
+      } finally {
+        oneOff.closeSession();
+      }
     },
   };
 }

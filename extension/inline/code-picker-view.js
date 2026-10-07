@@ -1,20 +1,55 @@
-export function calculatePickerPosition(rect, width, height, viewportWidth, viewportHeight, controlRects) {
+import { formatSenderLabel } from "../shared/mail-presentation.js";
+
+export function calculatePickerPosition(
+  rect,
+  width,
+  height,
+  viewportWidth,
+  viewportHeight,
+  controlRects,
+) {
   const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
-  const clampLeft = value => Math.max(8, Math.min(value, viewportWidth - width - 8));
-  const clampTop = value => Math.max(8, Math.min(value, viewportHeight - height - 8));
+  const clampLeft = (value) =>
+    Math.max(8, Math.min(value, viewportWidth - width - 8));
+  const clampTop = (value) =>
+    Math.max(8, Math.min(value, viewportHeight - height - 8));
   const below = { left, top: rect.bottom + 4 };
   const above = { left, top: rect.top - height - 4 };
-  const positions = below.top + height <= viewportHeight - 8 ? [below, above] : [above, below];
-  positions.push({ left: rect.right + 4, top: rect.top }, { left: rect.left - width - 4, top: rect.top });
+  const positions =
+    below.top + height <= viewportHeight - 8 ? [below, above] : [above, below];
+  positions.push(
+    { left: rect.right + 4, top: rect.top },
+    { left: rect.left - width - 4, top: rect.top },
+  );
   const obstacles = [rect, ...controlRects];
-  const overlap = position => obstacles.reduce((area, obstacle) => area +
-    Math.max(0, Math.min(position.left + width, obstacle.right) - Math.max(position.left, obstacle.left)) *
-    Math.max(0, Math.min(position.top + height, obstacle.bottom) - Math.max(position.top, obstacle.top)), 0);
-  let best, leastOverlap = Infinity;
+  const overlap = (position) =>
+    obstacles.reduce(
+      (area, obstacle) =>
+        area +
+        Math.max(
+          0,
+          Math.min(position.left + width, obstacle.right) -
+            Math.max(position.left, obstacle.left),
+        ) *
+          Math.max(
+            0,
+            Math.min(position.top + height, obstacle.bottom) -
+              Math.max(position.top, obstacle.top),
+          ),
+      0,
+    );
+  let best,
+    leastOverlap = Infinity;
   for (const position of positions) {
-    const candidate = { left: clampLeft(position.left), top: clampTop(position.top) };
+    const candidate = {
+      left: clampLeft(position.left),
+      top: clampTop(position.top),
+    };
     const area = overlap(candidate);
-    if (area < leastOverlap) { best = candidate; leastOverlap = area; }
+    if (area < leastOverlap) {
+      best = candidate;
+      leastOverlap = area;
+    }
     if (area === 0) break;
   }
   return best;
@@ -25,24 +60,117 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
   host.dataset.mailVerify = "suggestion";
   host.style.cssText = "position:fixed;z-index:2147483647;left:0;top:0";
   const root = host.attachShadow({ mode: "closed" });
-  root.innerHTML = `<style>
-    :host { all:initial; }
-    section { box-sizing:border-box; width:240px; max-width:calc(100vw - 16px); max-height:45vh; overflow:auto; padding:4px; border:1px solid #d3d3ca; border-radius:8px; background:#f3f3eb; color:#343746; box-shadow:0 2px 8px #0002; font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    button { font:inherit; cursor:pointer; border:0; }
-    button:focus-visible { outline:2px solid #163fa9; outline-offset:2px; }
-    .code { width:100%; display:flex; gap:8px; align-items:center; text-align:left; border-radius:5px; padding:6px 8px; background:#6096f4; color:white; }
-    .code:hover { background:#477fdf; }
-    .code + .code { margin-top:4px; }
-    .code:disabled { opacity:.6; }
-    svg { width:24px; height:20px; flex:none; }
-    strong { display:block; font-size:14px; font-weight:500; }
-    small { display:block; font-size:11px; margin-top:0; overflow-wrap:anywhere; }
-    .controls { display:flex; align-items:center; gap:4px; padding:0 3px; }
-    #status { flex:1; font-size:10px; margin:2px 0; overflow-wrap:anywhere; }
-    #retry, #close { color:#555d6b; background:transparent; padding:1px 4px; border-radius:3px; line-height:18px; }
-    #retry:hover, #close:hover { background:#0001; }
-    [hidden] { display:none !important; }
-  </style><section aria-label="Mail Verify code suggestions"><div id="results"></div><div class="controls"><p id="status" role="status"></p><button id="retry" title="Check mail again" aria-label="Check mail again">↻</button><button id="close" aria-label="Dismiss code suggestions">×</button></div></section>`;
+  root.innerHTML = /* HTML */ `
+    <style>
+      :host {
+        all: initial;
+      }
+      section {
+        box-sizing: border-box;
+        width: 240px;
+        max-width: calc(100vw - 16px);
+        max-height: 45vh;
+        overflow: auto;
+        padding: 4px;
+        border: 1px solid #d3d3ca;
+        border-radius: 8px;
+        background: #f3f3eb;
+        color: #343746;
+        box-shadow: 0 2px 8px #0002;
+        font:
+          14px/1.35 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        border: 0;
+      }
+      button:focus-visible {
+        outline: 2px solid #163fa9;
+        outline-offset: 2px;
+      }
+      .code {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        text-align: left;
+        border-radius: 5px;
+        padding: 6px 8px;
+        background: #6096f4;
+        color: white;
+      }
+      .code:hover {
+        background: #477fdf;
+      }
+      .code + .code {
+        margin-top: 4px;
+      }
+      .code:disabled {
+        opacity: 0.6;
+      }
+      svg {
+        width: 24px;
+        height: 20px;
+        flex: none;
+      }
+      strong {
+        display: block;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      small {
+        display: block;
+        font-size: 11px;
+        margin-top: 0;
+        overflow-wrap: anywhere;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 3px;
+      }
+      #status {
+        flex: 1;
+        font-size: 10px;
+        margin: 2px 0;
+        overflow-wrap: anywhere;
+      }
+      #retry,
+      #close {
+        color: #555d6b;
+        background: transparent;
+        padding: 1px 4px;
+        border-radius: 3px;
+        line-height: 18px;
+      }
+      #retry:hover,
+      #close:hover {
+        background: #0001;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+    <section aria-label="Mail Verify code suggestions">
+      <div id="results"></div>
+      <div class="controls">
+        <p id="status" role="status"></p>
+        <button
+          id="retry"
+          title="Check mail again"
+          aria-label="Check mail again"
+        >
+          ↻
+        </button>
+        <button id="close" aria-label="Dismiss code suggestions">×</button>
+      </div>
+    </section>
+  `;
   const status = root.querySelector("#status");
   const results = root.querySelector("#results");
   let renderedCodesKey;
@@ -60,13 +188,29 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
     renderedCodesKey = key;
     results.replaceChildren();
     for (const item of codes) {
+      const sender = formatSenderLabel(item.sender);
       const button = document.createElement("button");
       button.className = "code";
-      button.innerHTML = `<svg viewBox="0 0 36 28" aria-hidden="true"><path fill="currentColor" d="M2 2h32L18 14zM1 5l12 10L1 25zm34 0v20L23 15zM3 27l12-10 3 3 3-3 12 10z"/></svg><span><strong></strong><small></small></span>`;
+      button.innerHTML = /* HTML */ `
+        <svg viewBox="0 0 36 28" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M2 2h32L18 14zM1 5l12 10L1 25zm34 0v20L23 15zM3 27l12-10 3 3 3-3 12 10z"
+          />
+        </svg>
+        <span>
+          <strong></strong>
+          <small></small>
+        </span>
+      `;
       button.querySelector("strong").textContent = `Fill code ${item.code}`;
-      button.querySelector("small").textContent = `${item.sender || "Unknown sender"} · ${item.accountEmail}`;
-      button.title = `${item.accountEmail}\n${item.sender}\n${item.subject}\nFill on ${hostname}`;
-      button.setAttribute("aria-label", `Fill code ${item.code} from ${item.sender} in ${item.accountEmail}. ${item.subject}. On ${hostname}`);
+      button.querySelector("small").textContent =
+        `${sender} · ${item.accountEmail}`;
+      button.title = `${item.accountEmail}\n${sender}\n${item.subject}\nFill on ${hostname}`;
+      button.setAttribute(
+        "aria-label",
+        `Fill code ${item.code} from ${sender} in ${item.accountEmail}. ${item.subject}. On ${hostname}`,
+      );
       button.addEventListener("mousedown", (event) => event.preventDefault());
       button.onclick = () => onFill(item, button);
       results.append(button);
@@ -85,5 +229,12 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
     button.disabled = true;
   }
 
-  return { host, clearCodes, renderCodes, setStatus, hasCodes, disableCodeButton };
+  return {
+    host,
+    clearCodes,
+    renderCodes,
+    setStatus,
+    hasCodes,
+    disableCodeButton,
+  };
 }

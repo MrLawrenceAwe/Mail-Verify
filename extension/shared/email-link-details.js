@@ -1,7 +1,9 @@
+import { formatSenderLabel } from "./mail-presentation.js";
+
 export function appendEmailLinkDetails(document, card, item, className = "") {
   const details = [
     `Inbox: ${item.accountEmail}`,
-    `From: ${item.sender?.trim() || "Unknown sender"}`,
+    `From: ${formatSenderLabel(item.sender)}`,
     item.subject?.trim(),
     `Initial destination: ${new URL(item.url).hostname}`,
   ];

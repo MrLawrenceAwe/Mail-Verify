@@ -11,16 +11,16 @@ export function createMutationInspection(matchesText) {
     return --remainingNodes >= 0;
   }
   // Inspection consumes the shared batch budget; true requests rediscovery.
-  function inspectText(value = "") {
+  function textRequiresRediscovery(value = "") {
     if (value.length > remainingTextUnits) return true;
     remainingTextUnits -= value.length;
     return matchesText(value);
   }
-  function inspectSubtree(root, selector, includeText = false) {
+  function subtreeRequiresRediscovery(root, selector, includeText = false) {
     const text = [];
     // Inspect individual text nodes; never aggregate element textContent or
     // query unrestricted descendants inside a mutation observer.
-    for (let node = root; node;) {
+    for (let node = root; node; ) {
       if (!consumeNodeBudget()) return true;
       if (node.nodeType === 1 && node.matches?.(selector)) return true;
       if (includeText && node.nodeType === 3) {
@@ -48,5 +48,10 @@ export function createMutationInspection(matchesText) {
     }
     return true;
   }
-  return { consumeNodeBudget, inspectText, inspectSubtree, claimRecord };
+  return {
+    consumeNodeBudget,
+    textRequiresRediscovery,
+    subtreeRequiresRediscovery,
+    claimRecord,
+  };
 }

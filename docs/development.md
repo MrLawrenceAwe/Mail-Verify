@@ -2,53 +2,7 @@
 
 Python uses its standard library and the macOS Security framework. JavaScript uses native ES modules without a bundler. No package installation is required.
 
-## Checks and preview
-
-Run `npm test` for the Python and JavaScript suites. To run them separately or check JavaScript syntax:
-
-```sh
-python3 -m unittest discover -s tests -v
-node --test tests/test_*.js
-find extension -name "*.js" -exec node --check {} \;
-```
-
-The installer test installs into a temporary directory, launches that copy to verify native-message framing and imports, then checks uninstall cleanup. It does not access Yahoo or Keychain.
-
-To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/docs/preview.html?interactive`. The fixture does not access Yahoo. **Resend email** and **Send again** must immediately clear the old suggestion. Wait at least one second after resending, then click **Deliver replacement code** and verify that the replacement suggestion fills `654321`.
-
-`tests/fixtures/modal-suggestions-preview.html` supplies synthetic mail for modal and link-step checks. Use `?mode=modal-code` to fill a code in a native modal, `?mode=modal-reset` to copy a reset link in a modal, or `?mode=status` for a normal waiting panel. Add `&transform=1` to test a scaled, clipped dialog. **Update connection status** must retain the offered link; **Change recipient** and **Resend email** must clear it. Add `&stacked=1` to open a second modal, or `&stacked=reverse` to put the active modal first in DOM order. Suggestions must belong to the active dialog and remain usable. These fixtures do not access Yahoo. When testing edits, serve with caching disabled or use a fresh local port so Chrome reloads imported modules.
-
-`tests/fixtures/numeric-code-preview.html` checks two independent full-length numeric verification fields in one form. Selecting the email-code suggestion must fill the email field and retain the phone field’s existing value.
-
-`tests/fixtures/mixed-numeric-code-preview.html` combines six numeric email-code boxes with a full-length numeric phone-code field. The initial suggestion must fill only the phone field. **Test split email fields** focuses an unlabelled email digit; the next suggestion must fill those six boxes and preserve the phone field.
-
-`tests/fixtures/verification-step-preview.html` checks resend scope and verification-field replacement. Use `?mode=codes`, `?mode=confirmationLinks`, or `?mode=passwordResetLinks`. **Resend SMS code** must retain the existing email result; **Resend verification email** must clear it. In code mode, **Replace identical input** must retain the unused code, and selecting it must report a successful fill in the current input. Add `&sameForm=1` to place the SMS resend in the same form as the email step; it must still retain the email result. After resending, wait at least one second before **Deliver replacement email**.
-
-The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle.
-
-| Suite | Behaviour groups | Shared harness |
-| --- | --- | --- |
-| `test_code_picker_*.js` | Steps, polling, positioning, selection | `code_picker_harness.js` |
-| `test_email_link_card_*.js` controller suites | Steps, polling, mutations, selection | `email_link_card_harness.js` |
-| `test_popup_*.js` | Polling, accounts, result selection with the real view | `popup_harness.js` |
-| `test_code_fields.js` | Detection and filling, including numeric split-digit length checks | `verification_field_harness.js` |
-
-The field harness evaluates the serialized entry point in an isolated VM to verify it has no module-scope dependencies.
-
-`tests/timer_queue.js` stores callbacks for explicit execution by insertion order or requested delay; it does not advance a clock. `tests/email_messages.py` shares `make_raw_email()` across code extraction, link extraction, and inbox-scanning tests. Its subject, subtype, and sender options describe each synthetic message; multipart and attachment cases build their own MIME structure.
-
-### Manual validation
-
-After installing the companion, reloading the extension, and refreshing the test page:
-
-1. Connect a Yahoo account and confirm that it appears in the popup.
-2. Request a fresh code on an HTTPS page. Select its on-page suggestion and verify the field value; repeat using the popup.
-3. Request a confirmation email. Select its link and verify that the intended destination opens in a new tab.
-4. Request a reset email. Copy its link, verify the clipboard value, and use **Copy again** to repeat the copy.
-5. Resend an email and confirm that older on-page results disappear. Hide the tab and confirm checking stops; return and check again.
-6. Remove the account and confirm that its results disappear.
-
-These checks require real Yahoo mail and Chrome; automated suites do not establish end-to-end success.
+Run `npm test` for the automated suites. See [testing and previews](testing.md) for commands, synthetic fixtures, shared harnesses, and manual validation.
 
 ## Extension modules
 
@@ -67,7 +21,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `popup-entry.js`, `popup/popup-controller.js`, `popup/popup-view.js` | Start the toolbar popup, manage accounts and polling, and render controls and results. |
 | `shared/email-link-details.js`, `shared/mail-presentation.js`, `shared/reset-link-copy.js` | Share link-detail rows, mail-type-specific labels and guidance, and reset-link clipboard handling. |
 | `inline/inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight native requests per mail type. |
-| `shared/companion-client.js` | Handle one-off native requests and reusable native-messaging sessions. |
+| `shared/companion-client.js` | Handle native requests and reusable sessions; distinguish unavailable connections with `CompanionUnavailableError` from operational response errors and timeouts. |
 | `shared/polling-lifecycle.js` | Manage polling deadlines, stale responses, scheduled checks, and queued retries. |
 | `shared/scan-schedule.js` | Decide when to collect pending workers or start a full scan and choose the next poll delay. |
 | `shared/mail-timing.js`, `shared/email-link-url.js` | Share freshness and link-URL rules. |
@@ -80,7 +34,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 
 The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Mail responses include the boolean `scanPending`. Requests with `collectOnly: true` collect existing workers and cached results without starting scans. All surfaces collect pending scans every second, then resume their normal check interval. While a slower account remains pending, full checks still run at the normal interval so healthy accounts can discover new mail. Update the companion and extension together when changing this contract.
 
-Automatic checking runs for up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. `beginCheck()` returns `{ collectOnly }` and updates the next full-scan time; `pollDelayMs` gives the delay before the next check. Polling lifecycle `schedule(callback, delay)` requires an explicit delay; scan cadence belongs to the scan schedule. `endPollingWindow()` clears the timer and deadline; `invalidateChecks()` invalidates inline check bookkeeping and responses and clears the timer. Neither method cancels companion workers already running. Inline `checks.finish(token)` returns `stale`, `complete`, or `retry`, so callers distinguish invalidated completions from normal completion and a queued retry.
+Automatic checking runs for up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. `beginCheck()` returns `{ collectOnly }` and updates the next full-scan time; `pollDelayMs` gives the delay before the next check. Polling lifecycle `schedule(callback, delay)` requires an explicit delay; scan cadence belongs to the scan schedule. `endPollingWindow()` clears the timer and deadline; `invalidateChecks()` invalidates inline check bookkeeping and responses and clears the timer. Neither method cancels companion workers already running. `renewDeadline()` renews the polling window independently; `queueRetryIfBusy()` queues a retry and invalidates the active response only when a check is running. Popup `resetMailCheckSession()` closes its native session and invalidates response bookkeeping without claiming to cancel active companion workers. Inline `checks.finish(token)` returns `stale`, `complete`, or `retry`, so callers distinguish invalidated completions from normal completion and a queued retry.
 
 ## Companion modules
 

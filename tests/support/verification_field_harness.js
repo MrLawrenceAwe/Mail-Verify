@@ -1,7 +1,12 @@
 import vm from "node:vm";
-import { handleVerificationFields } from "../extension/shared/code-fields.js";
+import { handleVerificationFields } from "../../extension/shared/code-fields.js";
 
-const contextStyle = node => node.fakeComputedStyle || { display: "block", visibility: "visible", opacity: "1" };
+const contextStyle = (node) =>
+  node.fakeComputedStyle || {
+    display: "block",
+    visibility: "visible",
+    opacity: "1",
+  };
 
 export class FakeInput {
   constructor(props = {}) {
@@ -55,9 +60,16 @@ export function createVerificationFieldHarness(overrides = {}) {
     HTMLInputElement: FakeInput,
     innerHeight: 800,
     innerWidth: 1200,
-    Event: class { constructor(type) { this.type = type; } },
+    Event: class {
+      constructor(type) {
+        this.type = type;
+      }
+    },
     ...overrides,
   });
-  context.handle = vm.runInContext(`(${handleVerificationFields.toString()})`, context);
+  context.handle = vm.runInContext(
+    `(${handleVerificationFields.toString()})`,
+    context,
+  );
   return context;
 }

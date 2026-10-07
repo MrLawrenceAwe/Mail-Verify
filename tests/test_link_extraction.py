@@ -1,6 +1,6 @@
 """Confirmation and password-reset link extraction and URL rejection cases."""
 from email.message import EmailMessage
-from email_messages import make_raw_email
+from support.email_messages import make_raw_email
 from pathlib import Path
 import json
 import sys

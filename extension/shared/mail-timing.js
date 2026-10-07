@@ -13,7 +13,15 @@ export function resendCutoff(now) {
   return Math.floor(now / 1000) * 1000 + 1000;
 }
 
-export function isFreshMessage(receivedAt, now, minReceivedAt = now - MAX_MESSAGE_AGE_MS) {
-  return Number.isFinite(receivedAt) && receivedAt >= minReceivedAt &&
-    receivedAt <= now && now - receivedAt <= MAX_MESSAGE_AGE_MS;
+export function isFreshMessage(
+  receivedAt,
+  now,
+  minReceivedAt = now - MAX_MESSAGE_AGE_MS,
+) {
+  return (
+    Number.isFinite(receivedAt) &&
+    receivedAt >= minReceivedAt &&
+    receivedAt <= now &&
+    now - receivedAt <= MAX_MESSAGE_AGE_MS
+  );
 }

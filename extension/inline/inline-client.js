@@ -11,7 +11,11 @@ export function requestInlineCheck(runtime, mailType, collectOnly = false) {
     port.onDisconnect.addListener(() => {
       if (settled) return;
       settled = true;
-      reject(new Error("Mail Verify disconnected. Reload the extension and try again."));
+      reject(
+        new Error(
+          "Mail Verify disconnected. Reload the extension and try again.",
+        ),
+      );
     });
     try {
       port.postMessage({ mailType, collectOnly });

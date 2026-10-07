@@ -9,7 +9,7 @@
 </div>
 <script type="module">
 import { startCodePicker } from '/extension/inline/code-picker-controller.js';
-import { inlineRuntime } from '/tests/mock_inline_port.js';
+import { inlineRuntime } from '/tests/support/mock_inline_port.js';
 // Synthetic mail response; no native bridge or real inbox access in this fixture.
 document.getElementById('previewControls').hidden = !new URL(location.href).searchParams.has('interactive');
 let item = {uid:1,accountEmail:'preview@yahoo.com',code:'331519',sender:'auth@example.test',subject:'Your security code',receivedAt:Date.now()};

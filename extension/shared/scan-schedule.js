@@ -5,15 +5,23 @@ export function createScanSchedule({ clock, intervalMs }) {
   let pending = false;
   let nextScanAt = 0;
   return {
-    get pending() { return pending; },
-    get pollDelayMs() { return pending ? PENDING_SCAN_POLL_MS : intervalMs; },
+    get pending() {
+      return pending;
+    },
+    get pollDelayMs() {
+      return pending ? PENDING_SCAN_POLL_MS : intervalMs;
+    },
     beginCheck() {
       const now = clock.now();
       const collectOnly = pending && now < nextScanAt;
       if (!collectOnly) nextScanAt = now + intervalMs;
       return { collectOnly };
     },
-    recordResponse(scanPending) { pending = scanPending === true; },
-    clearPending() { pending = false; },
+    recordResponse(scanPending) {
+      pending = scanPending === true;
+    },
+    clearPending() {
+      pending = false;
+    },
   };
 }

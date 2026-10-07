@@ -4,20 +4,46 @@ import { createEmailLinkCardView } from "../extension/inline/email-link-card-vie
 
 function setup(mailType, callbacks = {}) {
   const element = (tag) => ({
-    tag, children: [], listeners: {}, dataset: {}, style: {},
-    append(child) { this.children.push(child); },
-    replaceChildren() { this.children = []; },
-    addEventListener(event, listener) { this.listeners[event] = listener; },
+    tag,
+    children: [],
+    listeners: {},
+    dataset: {},
+    style: {},
+    append(child) {
+      this.children.push(child);
+    },
+    replaceChildren() {
+      this.children = [];
+    },
+    addEventListener(event, listener) {
+      this.listeners[event] = listener;
+    },
   });
-  const controls = Object.fromEntries(["#status", "#results", "#retry", "#close"].map(id => [id, element("div")]));
-  const root = { querySelector: id => controls[id] };
-  const document = { createElement(tag) {
-    const node = element(tag);
-    node.attachShadow = () => root;
-    return node;
-  } };
-  const view = createEmailLinkCardView(document, { mailType, onSelectLink: () => true, ...callbacks });
-  const item = { accountEmail: "me@yahoo.com", sender: "sender@example.com", subject: "Your email", url: "https://example.com/action" };
+  const controls = Object.fromEntries(
+    ["#status", "#results", "#retry", "#close"].map((id) => [
+      id,
+      element("div"),
+    ]),
+  );
+  const root = { querySelector: (id) => controls[id] };
+  const document = {
+    createElement(tag) {
+      const node = element(tag);
+      node.attachShadow = () => root;
+      return node;
+    },
+  };
+  const view = createEmailLinkCardView(document, {
+    mailType,
+    onSelectLink: () => true,
+    ...callbacks,
+  });
+  const item = {
+    accountEmail: "me@yahoo.com",
+    sender: "sender@example.com",
+    subject: "Your email",
+    url: "https://example.com/action",
+  };
   view.renderLinks([item]);
   const card = controls["#results"].children[0];
   return { root, controls, view, item, card, action: card.children.at(-1) };
@@ -26,8 +52,15 @@ function setup(mailType, callbacks = {}) {
 test("both link-card mail types show email details and their own action and guidance", () => {
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     const { card, action, root, item } = setup(mailType);
-    assert.deepEqual(card.children.slice(0, 4).map(line => line.textContent),
-      [`Inbox: ${item.accountEmail}`, `From: ${item.sender}`, item.subject, "Initial destination: example.com"]);
+    assert.deepEqual(
+      card.children.slice(0, 4).map((line) => line.textContent),
+      [
+        `Inbox: ${item.accountEmail}`,
+        `From: ${item.sender}`,
+        item.subject,
+        "Initial destination: example.com",
+      ],
+    );
     if (mailType === "confirmationLinks") {
       assert.equal(action.tag, "a");
       assert.equal(action.href, item.url);
@@ -36,7 +69,10 @@ test("both link-card mail types show email details and their own action and guid
     } else {
       assert.equal(action.tag, "button");
       assert.equal(action.href, undefined);
-      assert.match(root.innerHTML, /sender and initial destination before copying/);
+      assert.match(
+        root.innerHTML,
+        /sender and initial destination before copying/,
+      );
       assert.doesNotMatch(root.innerHTML, /Opening a link/);
     }
   }
@@ -47,7 +83,7 @@ test("reset-card action copies only an approved selection and reports success", 
   const copied = [];
   const { action, item, controls } = setup("passwordResetLinks", {
     onSelectLink: () => approved,
-    copyLink: async item => copied.push(item.url),
+    copyLink: async (item) => copied.push(item.url),
   });
   await action.listeners.click();
   assert.deepEqual(copied, []);
@@ -62,10 +98,11 @@ test("reset-card action copies only an approved selection and reports success", 
   assert.equal(action.textContent, "Copy again");
 });
 
-
 test("failed reset-card copies show the error and allow another attempt", async () => {
   const { action, controls } = setup("passwordResetLinks", {
-    copyLink: async () => { throw new Error("Clipboard denied. Use the toolbar popup."); },
+    copyLink: async () => {
+      throw new Error("Clipboard denied. Use the toolbar popup.");
+    },
   });
   await action.listeners.click();
   assert.equal(action.disabled, false);
@@ -73,14 +110,18 @@ test("failed reset-card copies show the error and allow another attempt", async 
   assert.match(controls["#status"].textContent, /Clipboard denied/);
 });
 
-
 test("link cards identify inbox and missing sender without empty subject rows", () => {
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     const { view, controls, item } = setup(mailType);
     view.renderLinks([{ ...item, sender: "  ", subject: " " }]);
     const card = controls["#results"].children[0];
-    assert.deepEqual(card.children.slice(0, -1).map(line => line.textContent), [
-      `Inbox: ${item.accountEmail}`, "From: Unknown sender", "Initial destination: example.com",
-    ]);
+    assert.deepEqual(
+      card.children.slice(0, -1).map((line) => line.textContent),
+      [
+        `Inbox: ${item.accountEmail}`,
+        "From: Unknown sender",
+        "Initial destination: example.com",
+      ],
+    );
   }
 });

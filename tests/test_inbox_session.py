@@ -5,12 +5,12 @@ import sys
 import time
 import socket
 import unittest
-from email_messages import make_raw_email
+from support.email_messages import make_raw_email
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 import inbox_session
-from imap_responses import body_response, metadata_response
+from support.imap_responses import body_response, metadata_response
 
 
 class InboxSessionTests(unittest.TestCase):

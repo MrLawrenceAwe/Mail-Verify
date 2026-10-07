@@ -16,8 +16,17 @@ export function mountSuggestion(document, host) {
   root.append(host);
   if (root !== document.documentElement) {
     const { left, right, top, bottom } = host.style;
-    Object.assign(host.style, { inset:"auto", margin:"0", padding:"0",
-      border:"0", background:"transparent", left, right, top, bottom });
+    Object.assign(host.style, {
+      inset: "auto",
+      margin: "0",
+      padding: "0",
+      border: "0",
+      background: "transparent",
+      left,
+      right,
+      top,
+      bottom,
+    });
     host.setAttribute("popover", "manual");
     host.showPopover();
   }

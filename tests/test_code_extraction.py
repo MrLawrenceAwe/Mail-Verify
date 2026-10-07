@@ -3,7 +3,7 @@
 from pathlib import Path
 import sys
 import unittest
-from email_messages import make_raw_email
+from support.email_messages import make_raw_email
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 from code_extraction import extract_code_details

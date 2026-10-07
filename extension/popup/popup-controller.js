@@ -1,11 +1,18 @@
 import { createScanSchedule } from "../shared/scan-schedule.js";
-import { MAIL_PRESENTATION, formatAccountCheckWarnings } from "../shared/mail-presentation.js";
+import {
+  MAIL_PRESENTATION,
+  formatAccountCheckWarnings,
+} from "../shared/mail-presentation.js";
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
 import { handleVerificationFields } from "../shared/code-fields.js";
-import { isFreshMessage, DEFAULT_SCAN_INTERVAL_MS } from "../shared/mail-timing.js";
+import {
+  isFreshMessage,
+  DEFAULT_SCAN_INTERVAL_MS,
+} from "../shared/mail-timing.js";
 import { createPopupView } from "./popup-view.js";
 import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import { createPollingLifecycle } from "../shared/polling-lifecycle.js";
+import { CompanionUnavailableError } from "../shared/companion-client.js";
 
 const MIN_POLL_PAUSE_MS = 2_000;
 
@@ -26,7 +33,10 @@ export function createPopupController({
     usingResult = false,
     removingAccount = false,
     savingAccount = false;
-  const scanSchedule = createScanSchedule({ clock, intervalMs: DEFAULT_SCAN_INTERVAL_MS });
+  const scanSchedule = createScanSchedule({
+    clock,
+    intervalMs: DEFAULT_SCAN_INTERVAL_MS,
+  });
   const view = createPopupView(document, {
     onRemoveAccount: removeAccount,
     onFillCode: fillSelectedCode,
@@ -35,7 +45,7 @@ export function createPopupController({
     onSaveAccount: saveAccount,
   });
   function applyConnectedAccounts(accountEmails) {
-    abortCheck();
+    resetMailCheckSession();
     view.renderAccounts(accountEmails);
     view.clearResults();
     if (!accountEmails.length) {
@@ -49,7 +59,7 @@ export function createPopupController({
     polling.renewDeadline();
     checkInbox();
   }
-  function abortCheck() {
+  function resetMailCheckSession() {
     scanSchedule.clearPending();
     polling.cancelScheduledCheck();
     polling.invalidateResponses();
@@ -59,7 +69,7 @@ export function createPopupController({
   async function useSelectedResult(action, { reusable = false } = {}) {
     if (usingResult || removingAccount || savingAccount) return;
     usingResult = true;
-    abortCheck();
+    resetMailCheckSession();
     view.setCheckAndRemoveButtonsDisabled(true);
     view.setResultButtonsDisabled(true);
     try {
@@ -101,37 +111,46 @@ export function createPopupController({
     });
   }
   async function useSelectedLink(item, button) {
-    await useSelectedResult(async () => {
-      if (!isFreshMessage(item.receivedAt, clock.now()))
-        throw new Error("This link is too old. Request a new email.");
-      if (!isSupportedEmailLinkUrl(item.url))
-        throw new Error("This link is not supported.");
-      if (mailType === "passwordResetLinks") {
-        await copyPasswordResetLink(clipboard, item.url,
-          "Clipboard unavailable. Close and reopen this popup, then try again.");
-        view.markLinkCopied(button);
-        view.setStatus(MAIL_PRESENTATION.passwordResetLinks.copySuccessStatus);
-        return;
-      }
-      await chrome.tabs.create({ url: item.url });
-      view.markLinkOpened(button);
-      view.setStatus("Confirmation link opened in a new tab.");
-    }, { reusable: mailType === "passwordResetLinks" });
+    await useSelectedResult(
+      async () => {
+        if (!isFreshMessage(item.receivedAt, clock.now()))
+          throw new Error("This link is too old. Request a new email.");
+        if (!isSupportedEmailLinkUrl(item.url))
+          throw new Error("This link is not supported.");
+        if (mailType === "passwordResetLinks") {
+          await copyPasswordResetLink(
+            clipboard,
+            item.url,
+            "Clipboard unavailable. Close and reopen this popup, then try again.",
+          );
+          view.markLinkCopied(button);
+          view.setStatus(
+            MAIL_PRESENTATION.passwordResetLinks.copySuccessStatus,
+          );
+          return;
+        }
+        await chrome.tabs.create({ url: item.url });
+        view.markLinkOpened(button);
+        view.setStatus("Confirmation link opened in a new tab.");
+      },
+      { reusable: mailType === "passwordResetLinks" },
+    );
   }
   function scheduleCheck(delay = DEFAULT_SCAN_INTERVAL_MS) {
     if (polling.hasExpired()) {
       finishPolling();
       return;
     }
-    if (!usingResult && !removingAccount)
-      polling.schedule(checkInbox, delay);
+    if (!usingResult && !removingAccount) polling.schedule(checkInbox, delay);
     else polling.cancelScheduledCheck();
   }
   function finishPolling() {
     polling.cancelScheduledCheck();
     closeSession();
     if (!usingResult && !removingAccount)
-      view.setStatus(`Automatic checking finished. Check again for newer ${MAIL_PRESENTATION[mailType].resultLabel}.`);
+      view.setStatus(
+        `Automatic checking finished. Check again for newer ${MAIL_PRESENTATION[mailType].resultLabel}.`,
+      );
   }
   async function checkInbox() {
     if (usingResult || removingAccount) return;
@@ -139,7 +158,7 @@ export function createPopupController({
       finishPolling();
       return;
     }
-    if (checking) abortCheck();
+    if (checking) resetMailCheckSession();
     polling.cancelScheduledCheck();
     checking = true;
     const requestGeneration = polling.generation;
@@ -157,8 +176,11 @@ export function createPopupController({
         view.setStatus(
           response.warnings?.length
             ? formatAccountCheckWarnings(response.warnings)
-            : results.length ? MAIL_PRESENTATION[mailType].foundStatus
-              : scanSchedule.pending ? "Checking your connected inboxes…" : MAIL_PRESENTATION[mailType].popupEmptyStatus,
+            : results.length
+              ? MAIL_PRESENTATION[mailType].foundStatus
+              : scanSchedule.pending
+                ? "Checking your connected inboxes…"
+                : MAIL_PRESENTATION[mailType].popupEmptyStatus,
         );
       }
     } catch (error) {
@@ -171,21 +193,25 @@ export function createPopupController({
     } finally {
       if (polling.isCurrent(requestGeneration)) {
         checking = false;
-        view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount || savingAccount);
+        view.setCheckAndRemoveButtonsDisabled(
+          usingResult || removingAccount || savingAccount,
+        );
         scheduleCheck(
           failed
             ? DEFAULT_SCAN_INTERVAL_MS
-            : scanSchedule.pending ? scanSchedule.pollDelayMs : Math.max(
-                MIN_POLL_PAUSE_MS,
-                DEFAULT_SCAN_INTERVAL_MS - (clock.now() - startedAt),
-              ),
+            : scanSchedule.pending
+              ? scanSchedule.pollDelayMs
+              : Math.max(
+                  MIN_POLL_PAUSE_MS,
+                  DEFAULT_SCAN_INTERVAL_MS - (clock.now() - startedAt),
+                ),
         );
       }
     }
   }
   function startMailCheck(nextMailType) {
     if (usingResult || removingAccount || savingAccount) return;
-    abortCheck();
+    resetMailCheckSession();
     if (mailType !== nextMailType) view.clearResults();
     mailType = nextMailType;
     // Unchanged results retain their buttons, including the disabled state
@@ -221,10 +247,13 @@ export function createPopupController({
     if (savingAccount || removingAccount) return;
     polling.endPollingWindow();
     removingAccount = true;
-    abortCheck();
+    resetMailCheckSession();
     view.setCheckAndRemoveButtonsDisabled(true);
     try {
-      const result = await sendOneOffRequest({ action: "removeAccount", email });
+      const result = await sendOneOffRequest({
+        action: "removeAccount",
+        email,
+      });
       removingAccount = false;
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
@@ -243,17 +272,18 @@ export function createPopupController({
       currentWindow: true,
     });
     if (tab?.url?.startsWith("https://")) targetTab = tab;
-    view.setCodeDestination(targetTab);
+    view.setCodeTargetPage(targetTab);
     try {
       const result = await sendSessionRequest("status");
-      if (result.accountEmails?.length) applyConnectedAccounts(result.accountEmails);
+      if (result.accountEmails?.length)
+        applyConnectedAccounts(result.accountEmails);
       else {
         view.showAccountSetup();
         view.setStatus("Connect once. No webmail tab needed.");
       }
     } catch (error) {
       view.setStatus(error.message, true);
-      view.showCompanionSetup();
+      if (error instanceof CompanionUnavailableError) view.showCompanionSetup();
     }
   }
 

@@ -1,6 +1,7 @@
+import { waitForAsyncCallbacks } from "./async_callbacks.js";
 import { createTimerQueue } from "./timer_queue.js";
 import assert from "node:assert/strict";
-import { createPopupController } from "../extension/popup/popup-controller.js";
+import { createPopupController } from "../../extension/popup/popup-controller.js";
 
 class FakeElement {
   constructor(tag = "div") {
@@ -37,8 +38,7 @@ class FakeElement {
   }
 }
 
-export const settle = () => new Promise((resolve) => setImmediate(resolve));
-export const code = {
+export const verificationCodeMessage = {
   code: "123456",
   accountEmail: "test@yahoo.com",
   sender: "sender@example.com",
@@ -46,7 +46,14 @@ export const code = {
   receivedAt: 1000,
 };
 
-export async function createPopupHarness({ codes = [code], account = "test@yahoo.com", remainingAccountEmails = [], tabUrl = "https://example.com/login", clipboardAvailable = true } = {}) {
+export async function createPopupHarness({
+  codes = [verificationCodeMessage],
+  account = "test@yahoo.com",
+  remainingAccountEmails = [],
+  tabUrl = "https://example.com/login",
+  clipboardAvailable = true,
+  statusError,
+} = {}) {
   const controls = Object.fromEntries(
     [
       "checkCodes",
@@ -63,7 +70,7 @@ export async function createPopupHarness({ codes = [code], account = "test@yahoo
       "saveAccountSubmit",
       "password",
       "email",
-      "destination",
+      "targetPage",
       "codeContext",
       "codePageHelp",
       "linkGuidance",
@@ -95,21 +102,49 @@ export async function createPopupHarness({ codes = [code], account = "test@yahoo
     },
     async sendSessionRequest(action, collectOnly = false) {
       state.sessionRequests.push({ action, collectOnly });
+      if (action === "status" && statusError) throw statusError;
       return action === "status"
         ? { accountEmails: account ? [account] : [] }
-        : action === "passwordResetLinks" ? { passwordResetLinks: await state.fetchPasswordResetLinks(), scanPending: state.scanPending, warnings: state.warnings }
-        : action === "confirmationLinks" ? { confirmationLinks: await state.fetchConfirmationLinks(), scanPending: state.scanPending, warnings: state.warnings }
-        : { codes: await state.fetchCodes(), scanPending: state.scanPending, warnings: state.warnings };
+        : action === "passwordResetLinks"
+          ? {
+              passwordResetLinks: await state.fetchPasswordResetLinks(),
+              scanPending: state.scanPending,
+              warnings: state.warnings,
+            }
+          : action === "confirmationLinks"
+            ? {
+                confirmationLinks: await state.fetchConfirmationLinks(),
+                scanPending: state.scanPending,
+                warnings: state.warnings,
+              }
+            : {
+                codes: await state.fetchCodes(),
+                scanPending: state.scanPending,
+                warnings: state.warnings,
+              };
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);
       if (state.sendOneOff) return state.sendOneOff(request);
       if (state.failRemove) throw Error("Keychain unavailable");
-      return { accountEmails: request.action === "removeAccount" ? remainingAccountEmails : [request.email] };
+      return {
+        accountEmails:
+          request.action === "removeAccount"
+            ? remainingAccountEmails
+            : [request.email],
+      };
     },
   };
   const popup = createPopupController({
-    clipboard: clipboardAvailable ? { async writeText(value) { if (state.failCopy) throw Error("Clipboard denied"); if (state.copyWait) await state.copyWait; state.copied.push(value); } } : null,
+    clipboard: clipboardAvailable
+      ? {
+          async writeText(value) {
+            if (state.failCopy) throw Error("Clipboard denied");
+            if (state.copyWait) await state.copyWait;
+            state.copied.push(value);
+          },
+        }
+      : null,
     document: {
       getElementById: (id) => controls[id],
       createElement: (tag) => new FakeElement(tag),
@@ -118,16 +153,20 @@ export async function createPopupHarness({ codes = [code], account = "test@yahoo
       runtime: { id: "test-extension" },
       tabs: {
         query: async () => [tab],
-        create: async (options) => { state.opened.push(options); },
+        create: async (options) => {
+          state.opened.push(options);
+        },
         get: async () => {
           if (state.failFill) throw Error("Tab unavailable");
           return tab;
         },
       },
-      scripting: { executeScript: async (args) => {
-        state.scriptArgs = args;
-        return [{ result: { ok: true } }];
-      } },
+      scripting: {
+        executeScript: async (args) => {
+          state.scriptArgs = args;
+          return [{ result: { ok: true } }];
+        },
+      },
     },
     client,
     clock: { now: () => state.now },
@@ -135,9 +174,11 @@ export async function createPopupHarness({ codes = [code], account = "test@yahoo
     clearTimeout: timers.clearTimeout,
   });
   await popup.initialize();
-  await settle();
+  await waitForAsyncCallbacks();
   return { controls, timers, state };
 }
 
-
-export const link = { ...code, url: "https://example.com/confirm?token=secret" };
+export const emailLinkMessage = {
+  ...verificationCodeMessage,
+  url: "https://example.com/confirm?token=secret",
+};
