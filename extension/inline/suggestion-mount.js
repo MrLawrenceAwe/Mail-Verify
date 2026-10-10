@@ -1,4 +1,4 @@
-import { findActiveModal } from "../shared/active-modal.js";
+import { findActiveModal } from "./active-modal.js";
 
 // Modal dialogs make the rest of the document inert, regardless of z-index.
 export function suggestionMountRoot(document) {

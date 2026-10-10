@@ -1,9 +1,9 @@
 import { startCodePicker } from "../../extension/inline/code-picker-controller.js";
-import { inlineRuntime } from "./mock_inline_port.js";
+import { createMockInlineRuntime } from "./mock_inline_port.js";
 import { createTimerQueue } from "./timer_queue.js";
 
 export function createCodePickerHarness({
-  handleVerificationFields,
+  detectOrFillCodeFields,
   now = Date.now,
   check,
   activeElement,
@@ -84,10 +84,10 @@ export function createCodePickerHarness({
     requestAnimationFrame: onFrame,
     setTimeout: timers.setTimeout,
     clearTimeout: timers.clearTimeout,
-    chrome: { runtime: inlineRuntime(check) },
+    chrome: { runtime: createMockInlineRuntime(check) },
   };
   const detectOrFill = (request) => {
-    const result = handleVerificationFields(request);
+    const result = detectOrFillCodeFields(request);
     for (const root of result.stepContext?.roots || []) {
       // Model text nodes so production traversal never needs a mock-only fallback.
       if (
@@ -109,6 +109,6 @@ export function createCodePickerHarness({
       ? { stepContext: { roots: [], parent: undefined }, ...result }
       : result;
   };
-  startCodePicker({ environment, handleVerificationFields: detectOrFill });
+  startCodePicker({ environment, detectOrFillCodeFields: detectOrFill });
   return { environment, events, timers, results, elements };
 }

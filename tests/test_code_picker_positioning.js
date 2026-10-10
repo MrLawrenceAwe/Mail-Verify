@@ -7,7 +7,7 @@ test("picker repositions using the current viewport after resize", () => {
   const anchor = {};
   let mounted;
   const { environment, events } = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: true,
       anchor,
       rect: { left: 900, right: 1100, top: 100, bottom: 130 },
@@ -36,7 +36,7 @@ test("picker avoids page controls and reuses their discovery during scroll", asy
     queries = 0;
   const controls = [];
   const { events, timers } = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: true,
       anchor: {},
       rect: { left: 20, right: 200, top: 100, bottom: 130 },
@@ -89,7 +89,7 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   const anchor = {};
   const cached = { inputs: [], contextRoots: [] };
   const { events, timers, elements } = createCodePickerHarness({
-    handleVerificationFields: ({ candidateCache: candidates }) => {
+    detectOrFillCodeFields: ({ candidateCache: candidates }) => {
       detections++;
       if (!candidates) discoveries++;
       return {
@@ -148,7 +148,7 @@ test("oversized picker mutations coalesce into one deferred discovery", async ()
     discoveries = 0;
   const contextRoots = [{ contains: () => true }];
   const { timers } = createCodePickerHarness({
-    handleVerificationFields: () => {
+    detectOrFillCodeFields: () => {
       discoveries++;
       return { ok: false, candidateCache: { inputs: [], contextRoots } };
     },

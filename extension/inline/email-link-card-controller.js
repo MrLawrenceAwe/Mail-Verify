@@ -188,14 +188,14 @@ export function startEmailLinkCard({
       onClose: dismissCard,
       onRetry: restartPolling,
       mailType,
-      async copyLink(item) {
+      async copyResetLink(item) {
         await copyPasswordResetLink(
           environment.navigator?.clipboard,
           item.url,
           "Clipboard unavailable. Use Find password reset links in the toolbar popup.",
         );
       },
-      onSelectLink(item) {
+      acceptLinkSelection(item) {
         if (
           document.hidden ||
           lastURL !== location.href ||

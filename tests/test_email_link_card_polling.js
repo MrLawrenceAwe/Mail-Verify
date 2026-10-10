@@ -58,7 +58,7 @@ test("a failed inbox check removes previously offered links", async () => {
   await harness.run(8000);
   assert.deepEqual(view.links, []);
   assert.match(view.status, /Connect Yahoo Mail first/);
-  assert.equal(view.callbacks.onSelectLink(emailLinkMessage), false);
+  assert.equal(view.callbacks.acceptLinkSelection(emailLinkMessage), false);
 });
 
 test("hides when tab is hidden and does not reset the polling deadline", async () => {
@@ -165,6 +165,6 @@ test("partial account failures retain healthy links and clear after recovery", a
     });
     await harness.run(8000);
     assert.doesNotMatch(view.status, /could not be checked/);
-    assert.equal(view.callbacks.onSelectLink(emailLinkMessage), true);
+    assert.equal(view.callbacks.acceptLinkSelection(emailLinkMessage), true);
   }
 });

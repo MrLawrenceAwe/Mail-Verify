@@ -6,13 +6,13 @@ Run `npm test` for the automated suites. See [testing and previews](testing.md) 
 
 ## Extension modules
 
-Chrome entry points and `popup.html` stay at the extension root. `popup/` contains toolbar controllers, rendering, and styles; `inline/` contains on-page controllers, views, and coordination; `shared/` contains transport, polling, extraction policy, and shared presentation helpers.
+Chrome entry points and `popup.html` stay at the extension root. `popup/` contains toolbar controllers, rendering, and styles; `inline/` contains on-page controllers, views, and coordination; `shared/` contains transport, polling, freshness and URL rules, field handling, and presentation helpers used across surfaces.
 
 | Module | Responsibility |
 | --- | --- |
 | `content-entry.js` | Starts the code picker and email-link card with one page coordinator. |
 | `inline/page-coordinator.js` | Shares code-field candidates, DOM observation, and page-change notifications. |
-| `inline/suggestion-mount.js` | Mounts suggestions inside the active native modal so they remain clickable above its backdrop. |
+| `inline/active-modal.js`, `inline/suggestion-mount.js` | Select the active native modal and mount suggestions above its backdrop. |
 | `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control, position, and render code suggestions beside a detected field. |
 | `inline/code-picker-policy.js`, `inline/email-link-card-policy.js` | Filter suggestions and classify request controls and mutations. |
 | `inline/email-link-step.js` | Detect confirmation/reset waiting prompts and return a step identity and mail type. |
@@ -26,15 +26,24 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `shared/scan-schedule.js` | Decide when to collect pending workers or start a full scan and choose the next poll delay. |
 | `shared/mail-timing.js`, `shared/email-link-url.js` | Share freshness and link-URL rules. |
 | `inline/request-controls.js` | Share on-page request-control labels and selectors. |
-| `shared/code-fields.js` | Detect and fill verification inputs through `handleVerificationFields()` and return verification-context roots for step tracking; helpers stay inside the injected function because Chrome serializes it. |
+| `shared/code-fields.js` | Detect and fill verification inputs through `detectOrFillCodeFields()` and return verification-context roots for step tracking; helpers stay inside the injected function because Chrome serializes it. |
 | `inline/code-step-context.js` | Read bounded verification-context text and return `recipientKey`: `null` for an incomplete read, or a serialised recipient list (including `"[]"` when no recipient is recognised). |
 | `inline/recipient-identity.js` | Match ordinary and masked email addresses and serialise recipient identities; code and link detectors supply their own instruction classifiers. |
 
 ### Request contract
 
-The inline request field is `mailType`; native requests use `action`. Mail type values and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Mail responses include the boolean `scanPending`. Requests with `collectOnly: true` collect existing workers and cached results without starting scans. All surfaces collect pending scans every second, then resume their normal check interval. While a slower account remains pending, full checks still run at the normal interval so healthy accounts can discover new mail. Update the companion and extension together when changing this contract.
+The inline request field is `mailType`; native requests use `action`. Mail types and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Responses include `scanPending`; requests with `collectOnly: true` collect existing workers and cached results without starting scans. Update the companion and extension together when changing this contract.
 
-Automatic checking runs for up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. `beginCheck()` returns `{ collectOnly }` and updates the next full-scan time; `pollDelayMs` gives the delay before the next check. Polling lifecycle `schedule(callback, delay)` requires an explicit delay; scan cadence belongs to the scan schedule. `endPollingWindow()` clears the timer and deadline; `invalidateChecks()` invalidates inline check bookkeeping and responses and clears the timer. Neither method cancels companion workers already running. `renewDeadline()` renews the polling window independently; `queueRetryIfBusy()` queues a retry and invalidates the active response only when a check is running. Popup `resetMailCheckSession()` closes its native session and invalidates response bookkeeping without claiming to cancel active companion workers. Inline `checks.finish(token)` returns `stale`, `complete`, or `retry`, so callers distinguish invalidated completions from normal completion and a queued retry.
+### Polling lifecycle
+
+Automatic checking lasts up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. Pending scans are collected every second, while full checks continue at the normal interval so healthy accounts can discover new mail.
+
+[Scan scheduling](../extension/shared/scan-schedule.js) decides between collection and full checks and supplies the next delay. [Polling lifecycle](../extension/shared/polling-lifecycle.js) owns timers, deadlines, response invalidation, and queued retries:
+
+- Scheduling requires an explicit delay. Cancelling a timer retains the polling deadline.
+- Ending the polling window clears its timer and deadline; invalidating inline checks also invalidates active response bookkeeping. Neither cancels companion workers.
+- A retry during an active check invalidates its response and queues another check. Check completion distinguishes stale responses, normal completion, and queued retries.
+- The [popup controller](../extension/popup/popup-controller.js) closes its native session when resetting a check, separately from the polling deadline.
 
 ## Companion modules
 
@@ -55,11 +64,13 @@ Each worker uses a 25-second scan budget, applying the remaining budget to block
 
 Background sessions close after 15 seconds without a new check; the popup reuses its session while open. Simultaneous requests of the same type share an in-flight native request. Separate sessions per type prevent one request from consuming another type’s results.
 
-A scan downloads eligible messages in batches of at most five, newest first. It processes every returned body in a batch and returns as soon as that batch yields results. Older candidates remain unfetched and queued for later polls, behind newly arrived mail; empty batches continue through remaining candidates within the scan budget. Missing metadata and bodies are retried. Each check reloads credentials so removed or changed accounts cannot retain an active connection.
+### Inbox scan invariants
 
-Initial discovery starts with the latest 30 inbox messages. `MAX_CANDIDATE_MESSAGES` also bounds the metadata and body candidate queues; it is separate from download batch size and retained result limits. `discovery_cursor_uid` tracks discovered UIDs even when their metadata or bodies still need fetching; `pending_body_timestamps_seconds` maps queued body UIDs to arrival times in seconds. Each inbox retains the union of its five newest results (`NEWEST_OVERALL_COUNT`) and its newest result from each of five distinct senders. These groups overlap, so an inbox can retain up to nine results.
+[InboxSession](../companion/inbox_session.py) discovers and queues at most 30 recent messages, then downloads eligible bodies newest first in batches of five. It processes every returned body before returning a batch's results; empty batches continue within the scan budget. Deferred bodies remain queued behind newly arrived mail.
 
-When initial metadata is incomplete, discovery retries the latest 30 messages. `initial_processed_body_uids` remembers up to 30 processed bodies, including messages without results, so retries advance through deferred mail instead of downloading the same newest batch. Missing bodies remain queued. This tracking clears when initial discovery completes or the connection closes.
+Missing metadata and bodies are retried. Initial discovery remembers processed bodies, including messages without results, so retries advance rather than repeatedly downloading the newest batch. Discovery progress and body completion are tracked separately; retry state clears when discovery completes or the connection closes.
+
+Each inbox retains the union of its five newest results and the newest result from each of five distinct senders, giving at most nine results. Cached results and queued bodies expire after ten minutes. Each check reloads credentials; removed or changed accounts cannot retain an active connection.
 
 ## Detection and freshness rules
 
@@ -79,7 +90,7 @@ Scroll and resize reuse cached field and page-control candidates and position th
 
 Native modal dialogs take precedence over background forms. Their inputs use a separate discovery scope, and both suggestion types mount inside the modal rather than in the inert background. The active dialog is selected from focus or its viewport backdrop, rather than DOM order, including when multiple dialogs are open. Modal suggestions use manual popovers to keep viewport positioning and escape dialog transforms or clipping. Dialog opening and closing refresh detection.
 
-Code-step tracking identifies email recipients (including masked addresses) in nearby code-delivery instructions. Recipient changes, field changes, navigation, and explicit resend clicks start new attempts; incidental status messages retain valid codes. An identical detached input replaced inside the same unchanged context retains unused codes and their original freshness cutoff; fills validate the replacement input. Controls explicitly requesting only SMS, text messages, or phone delivery do not restart email checking. Resend controls belong to their owning form or task panel, so another form cannot invalidate active email results. Standalone resend controls beside a panel remain supported. Step tracking never reads aggregate element `textContent`, and skips explicitly hidden content, content hidden by computed CSS display, visibility, or opacity, scripts, styles, and templates. An incomplete context retains the last known recipient identity instead of guessing from truncated text.
+Code-step tracking identifies email recipients (including masked addresses) in nearby code-delivery instructions. Recipient changes, field changes, navigation, and explicit resend clicks start new attempts; incidental status messages retain valid codes. An identical detached input replaced inside the same unchanged context retains unused codes and their original freshness cutoff; fills validate the replacement input. Controls explicitly requesting only SMS, text messages, or phone delivery do not restart email checking. Resend controls belong to their owning form or task panel, so another form cannot invalidate active email results. Standalone resend controls beside a panel remain supported. An incomplete context retains the last known recipient identity.
 
 | Inspection | Node budget | Text budget | Exhaustion behaviour |
 | --- | --- | --- | --- |
@@ -89,11 +100,9 @@ Code-step tracking identifies email recipients (including masked addresses) in n
 | Link panel, before layout/text extraction | 500 per panel | 10,000 raw code units per panel | Skip the panel, including an oversized body fallback; continue with later panels. |
 | Rendered link-panel text | — | 2,500 characters per panel | Skip the panel. |
 
-Mutation inspection walks changed subtrees directly without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per batch. Both code-picker and link-card attribute inspection traverse descendants under the same batch node budget.
+Mutation and code-context inspection read individual text nodes without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per mutation batch. Code-context reads skip hidden content, scripts, styles, and templates and reuse each root within a discovery or fill. See [mutation inspection](../extension/inline/mutation-inspection.js), [code-step context](../extension/inline/code-step-context.js), and [field handling](../extension/shared/code-fields.js).
 
-Generic code-field context reads individual visible text nodes and skips hidden content, scripts, styles, and templates. Each context root is read once per discovery or fill. Focus on an unlabelled digit selects its validated OTP group, using a labelled digit as the stable suggestion anchor.
-
-Link-panel detection skips explicitly hidden subtrees, scripts, styles, and templates before requesting layout or reading `innerText`. Extensive markup hidden only by CSS can still exhaust the raw-text budget.
+[Link-panel detection](../extension/inline/email-link-step.js) bounds traversal before layout or `innerText` reads. It skips explicitly hidden subtrees, scripts, styles, and templates; markup hidden only by CSS can still exhaust the raw-text budget.
 
 ## Installation identity and updates
 

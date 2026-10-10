@@ -4,7 +4,7 @@ import {
   formatAccountCheckWarnings,
 } from "../shared/mail-presentation.js";
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
-import { handleVerificationFields } from "../shared/code-fields.js";
+import { detectOrFillCodeFields } from "../shared/code-fields.js";
 import {
   isFreshMessage,
   DEFAULT_SCAN_INTERVAL_MS,
@@ -70,7 +70,7 @@ export function createPopupController({
     if (usingResult || removingAccount || savingAccount) return;
     usingResult = true;
     resetMailCheckSession();
-    view.setCheckAndRemoveButtonsDisabled(true);
+    view.setAccountAndCheckControlsDisabled(true);
     view.setResultButtonsDisabled(true);
     try {
       await action();
@@ -81,7 +81,7 @@ export function createPopupController({
     } finally {
       usingResult = false;
       if (reusable) view.setResultButtonsDisabled(false);
-      view.setCheckAndRemoveButtonsDisabled(savingAccount);
+      view.setAccountAndCheckControlsDisabled(savingAccount);
       if (polling.deadline) scheduleCheck();
       else closeSession();
     }
@@ -101,7 +101,7 @@ export function createPopupController({
         );
       const [{ result }] = await chrome.scripting.executeScript({
         target: { tabId: targetTab.id },
-        func: handleVerificationFields,
+        func: detectOrFillCodeFields,
         args: [{ action: "fill", code: item.code }],
       });
       if (!result?.ok)
@@ -193,7 +193,7 @@ export function createPopupController({
     } finally {
       if (polling.isCurrent(requestGeneration)) {
         checking = false;
-        view.setCheckAndRemoveButtonsDisabled(
+        view.setAccountAndCheckControlsDisabled(
           usingResult || removingAccount || savingAccount,
         );
         scheduleCheck(
@@ -224,7 +224,7 @@ export function createPopupController({
     if (savingAccount || removingAccount) return;
     savingAccount = true;
     view.setAccountSaveDisabled(true);
-    view.setCheckAndRemoveButtonsDisabled(true);
+    view.setAccountAndCheckControlsDisabled(true);
     view.setStatus("Checking your Yahoo connection…");
     const { email, password } = view.readCredentialsAndClearPassword();
     try {
@@ -240,7 +240,7 @@ export function createPopupController({
     } finally {
       savingAccount = false;
       view.setAccountSaveDisabled(false);
-      view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount);
+      view.setAccountAndCheckControlsDisabled(usingResult || removingAccount);
     }
   }
   async function removeAccount(email) {
@@ -248,7 +248,7 @@ export function createPopupController({
     polling.endPollingWindow();
     removingAccount = true;
     resetMailCheckSession();
-    view.setCheckAndRemoveButtonsDisabled(true);
+    view.setAccountAndCheckControlsDisabled(true);
     try {
       const result = await sendOneOffRequest({
         action: "removeAccount",
@@ -261,7 +261,7 @@ export function createPopupController({
       polling.renewDeadline();
     } finally {
       removingAccount = false;
-      view.setCheckAndRemoveButtonsDisabled(false);
+      view.setAccountAndCheckControlsDisabled(false);
       if (polling.deadline && !checking) scheduleCheck();
     }
   }

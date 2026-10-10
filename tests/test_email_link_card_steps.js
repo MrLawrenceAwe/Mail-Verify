@@ -120,7 +120,7 @@ test("incidental panel status preserves links, selection, dismissal and the poll
     await harness.run(8000);
     assert.equal(harness.state.requests, 1);
     assert.match(view.status, /Checking finished/);
-    assert.equal(view.callbacks.onSelectLink(emailLinkMessage), true);
+    assert.equal(view.callbacks.acceptLinkSelection(emailLinkMessage), true);
     view.callbacks.onClose();
     panel.innerText += "\nStatus updated.";
     harness.state.mutate(stepMutation());
@@ -191,7 +191,7 @@ test("resend clears old links and expiry prevents opening", async () => {
   assert.deepEqual(harness.state.views.at(-1).links, []);
   harness.state.now += 700000;
   assert.equal(
-    harness.state.views.at(-1).callbacks.onSelectLink(emailLinkMessage),
+    harness.state.views.at(-1).callbacks.acceptLinkSelection(emailLinkMessage),
     false,
   );
 });
@@ -230,7 +230,7 @@ test("input-button resends invalidate old confirmation and reset links", async (
     assert.equal(oldView.removed, true);
     assert.deepEqual(harness.state.views.at(-1).links, []);
     assert.equal(
-      oldView.callbacks.onSelectLink(emailLinkMessage),
+      oldView.callbacks.acceptLinkSelection(emailLinkMessage),
       false,
     );
     harness.state.now = 12000;
@@ -258,7 +258,7 @@ test("a text update after resend cannot restore an earlier link", async () => {
   await harness.run(250);
   assert.deepEqual(harness.state.views.at(-1).links, []);
   assert.equal(
-    harness.state.views.at(-1).callbacks.onSelectLink(emailLinkMessage),
+    harness.state.views.at(-1).callbacks.acceptLinkSelection(emailLinkMessage),
     false,
   );
 });
@@ -277,7 +277,7 @@ test("a send confirmation control clears old links on the same screen", async ()
   await waitForAsyncCallbacks();
   assert.deepEqual(harness.state.views.at(-1).links, []);
   assert.equal(
-    harness.state.views[0].callbacks.onSelectLink(emailLinkMessage),
+    harness.state.views[0].callbacks.acceptLinkSelection(emailLinkMessage),
     false,
   );
 });
@@ -292,7 +292,7 @@ test("a new confirmation step on the same URL clears links from the previous ste
   harness.state.mutate(stepMutation());
   await harness.run(250);
   assert.equal(oldView.removed, true);
-  assert.equal(oldView.callbacks.onSelectLink(emailLinkMessage), false);
+  assert.equal(oldView.callbacks.acceptLinkSelection(emailLinkMessage), false);
   assert.deepEqual(harness.state.views.at(-1).links, []);
   harness.state.now = 21_000;
   harness.state.respond = async () => ({
@@ -321,7 +321,7 @@ test("a confirmation step change excludes a link received moments before it", as
   assert.equal(oldView.removed, true);
   assert.deepEqual(harness.state.views.at(-1).links, []);
   assert.equal(
-    harness.state.views.at(-1).callbacks.onSelectLink(emailLinkMessage),
+    harness.state.views.at(-1).callbacks.acceptLinkSelection(emailLinkMessage),
     false,
   );
 });
@@ -341,7 +341,7 @@ test("a reused confirmation panel resets links when its signup changes", async (
   harness.state.mutate(stepMutation());
   await harness.run(250);
   assert.equal(oldView.removed, true);
-  assert.equal(oldView.callbacks.onSelectLink(emailLinkMessage), false);
+  assert.equal(oldView.callbacks.acceptLinkSelection(emailLinkMessage), false);
   assert.deepEqual(harness.state.views.at(-1).links, []);
   harness.state.now = 21_000;
   harness.state.respond = async () => ({
@@ -465,7 +465,7 @@ test("another form's resend retains links while the waiting form's resend clears
     await waitForAsyncCallbacks();
     assert.equal(view.removed, false);
     assert.deepEqual(view.links, [emailLinkMessage]);
-    assert.equal(view.callbacks.onSelectLink(emailLinkMessage), true);
+    assert.equal(view.callbacks.acceptLinkSelection(emailLinkMessage), true);
     // Confirmation selection dismisses the card; use a fresh setup for resend.
     const next = createEmailLinkCardHarness(panel, mailType);
     await waitForAsyncCallbacks();

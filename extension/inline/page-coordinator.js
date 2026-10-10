@@ -1,10 +1,10 @@
-import { handleVerificationFields as defaultVerificationFieldsHandler } from "../shared/code-fields.js";
+import { detectOrFillCodeFields as defaultDetectOrFillCodeFields } from "../shared/code-fields.js";
 
 const coordinators = new WeakMap();
 
 export function getPageCoordinator(
   environment,
-  handleVerificationFields = defaultVerificationFieldsHandler,
+  detectOrFillCodeFields = defaultDetectOrFillCodeFields,
 ) {
   const { document, window, MutationObserver } = environment;
   if (coordinators.has(document)) return coordinators.get(document);
@@ -18,7 +18,7 @@ export function getPageCoordinator(
     },
     detectCodeField({ refresh = false, trackedAnchor } = {}) {
       if (refresh) candidateCache = undefined;
-      const field = handleVerificationFields({
+      const field = detectOrFillCodeFields({
         action: "detect",
         candidateCache,
         trackedAnchor,

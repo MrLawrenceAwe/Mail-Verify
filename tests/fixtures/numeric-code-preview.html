@@ -14,9 +14,9 @@
 <p id="feedback" aria-live="polite"></p>
 <script type="module">
   import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
-  import { inlineRuntime } from '../support/mock_inline_port.js';
+  import { createMockInlineRuntime } from '../support/mock_inline_port.js';
   const inputs = document.querySelectorAll('input');
-  window.chrome = { runtime:inlineRuntime(() => ({ ok:true, codes:[{
+  window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true, codes:[{
     uid:1, accountEmail:'preview@yahoo.com', code:'331519', sender:'auth@example.test',
     subject:'Your email security code', receivedAt:Date.now(),
   }], scanPending:false })) };

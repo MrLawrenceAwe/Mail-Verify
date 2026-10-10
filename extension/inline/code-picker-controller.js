@@ -11,7 +11,7 @@ import {
   belongsToVerificationStep,
 } from "./request-controls.js";
 import { readCodeStepContext } from "./code-step-context.js";
-import { handleVerificationFields as defaultVerificationFieldsHandler } from "../shared/code-fields.js";
+import { detectOrFillCodeFields as defaultDetectOrFillCodeFields } from "../shared/code-fields.js";
 import {
   calculatePickerPosition,
   createCodePickerView,
@@ -30,8 +30,8 @@ import { mountSuggestion, suggestionMountRoot } from "./suggestion-mount.js";
 
 export function startCodePicker({
   environment = globalThis,
-  handleVerificationFields = defaultVerificationFieldsHandler,
-  page = getPageCoordinator(environment, handleVerificationFields),
+  detectOrFillCodeFields = defaultDetectOrFillCodeFields,
+  page = getPageCoordinator(environment, detectOrFillCodeFields),
 } = {}) {
   const {
     document,
@@ -139,7 +139,7 @@ export function startCodePicker({
           positionPicker();
           return;
         }
-        const result = handleVerificationFields({
+        const result = detectOrFillCodeFields({
           action: "fill",
           code: item.code,
           expectedAnchor: anchor,
@@ -170,7 +170,7 @@ export function startCodePicker({
       return;
     const checkToken = checks.start();
     const requestGeneration = polling.generation;
-    let checkFailed = false;
+    let hasCheckIssues = false;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
       const { collectOnly } = scanSchedule.beginCheck();
@@ -187,7 +187,7 @@ export function startCodePicker({
       if (!response?.ok)
         throw new Error(response?.error || "Could not check your inboxes.");
       scanSchedule.recordResponse(response.scanPending);
-      checkFailed = !!response.warnings?.length;
+      hasCheckIssues = !!response.warnings?.length;
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
       const codes = selectSuggestedCodes(
         response.codes,
@@ -203,7 +203,7 @@ export function startCodePicker({
           : "Waiting for an email code…";
       view.setStatus(status);
     } catch (error) {
-      checkFailed = true;
+      hasCheckIssues = true;
       if (polling.isCurrent(requestGeneration) && view) {
         scanSchedule.clearPending();
         view.clearCodes();
@@ -222,7 +222,7 @@ export function startCodePicker({
           checkForCodes,
           polling.isCurrent(requestGeneration) ? scanSchedule.pollDelayMs : 0,
         );
-      } else if (view && !view.hasCodes() && !checkFailed) {
+      } else if (view && !view.hasCodes() && !hasCheckIssues) {
         view.setStatus("No code found. Click ↻ to check again.");
       }
     }

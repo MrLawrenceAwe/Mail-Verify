@@ -1,4 +1,4 @@
-export function handleVerificationFields({
+export function detectOrFillCodeFields({
   action,
   code,
   candidateCache,
@@ -209,7 +209,7 @@ export function handleVerificationFields({
   };
   const focused = document.activeElement;
   // Keep modal selection inline because Chrome serializes this function for
-  // popup fills. This follows the same rule as shared/active-modal.js.
+  // popup fills. This follows the same rule as inline/active-modal.js.
   const scope =
     focused?.closest?.("dialog:modal") ||
     document.elementFromPoint?.(0, 0)?.closest?.("dialog:modal") ||

@@ -1,4 +1,4 @@
-export function inlineRuntime(check) {
+export function createMockInlineRuntime(check) {
   return {
     connect({ name }) {
       let onMessage,

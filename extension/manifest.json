@@ -32,6 +32,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "inline/active-modal.js",
         "inline/code-picker-controller.js",
         "inline/code-picker-policy.js",
         "inline/code-picker-view.js",
@@ -46,7 +47,6 @@
         "inline/recipient-identity.js",
         "inline/request-controls.js",
         "inline/suggestion-mount.js",
-        "shared/active-modal.js",
         "shared/code-fields.js",
         "shared/email-link-details.js",
         "shared/email-link-url.js",

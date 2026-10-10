@@ -2,7 +2,7 @@ import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import { handleVerificationFields } from "../extension/shared/code-fields.js";
+import { detectOrFillCodeFields } from "../extension/shared/code-fields.js";
 import { createCodePickerHarness } from "./support/code_picker_harness.js";
 
 test("initial code suggestions accept recent mail received before field discovery", async () => {
@@ -17,7 +17,7 @@ test("initial code suggestions accept recent mail received before field discover
   let fills = 0;
   const anchor = {};
   const { results } = createCodePickerHarness({
-    handleVerificationFields: ({ action }) => {
+    detectOrFillCodeFields: ({ action }) => {
       if (action === "fill") {
         fills++;
         return { ok: true };
@@ -66,7 +66,7 @@ test("code suggestions mount beside their field inside a modal dialog", async ()
     closest: (selector) => (selector === "dialog:modal" ? modal : null),
   };
   const harness = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: true,
       anchor,
       rect: { top: 100, bottom: 130, left: 20, right: 200 },
@@ -130,7 +130,7 @@ test("focus moves within split digits preserve suggestions, but another group st
       innerWidth: 1200,
     });
     const detect = vm.runInContext(
-      `(${handleVerificationFields.toString()})`,
+      `(${detectOrFillCodeFields.toString()})`,
       context,
     );
     const code = {
@@ -141,7 +141,7 @@ test("focus moves within split digits preserve suggestions, but another group st
       receivedAt: 9000,
     };
     const { events, timers, results } = createCodePickerHarness({
-      handleVerificationFields: detect,
+      detectOrFillCodeFields: detect,
       now: () => 10000,
       onMount: () => {
         mounts++;
@@ -209,7 +209,7 @@ test("a successful fill allows a new code field on the same URL", async () => {
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20_000 };
   let codes = [oldCode];
   const { timers, results } = createCodePickerHarness({
-    handleVerificationFields: (request) =>
+    detectOrFillCodeFields: (request) =>
       request.action === "fill"
         ? { ok: true }
         : {
@@ -255,7 +255,7 @@ test("a successful fill keeps the same field closed until a resend", async () =>
   let codes = [oldCode],
     mounts = 0;
   const { events, timers, results } = createCodePickerHarness({
-    handleVerificationFields: (request) =>
+    detectOrFillCodeFields: (request) =>
       request.action === "fill"
         ? { ok: true }
         : {
@@ -308,7 +308,7 @@ for (const resend of [
     };
     let codes = [oldCode];
     const { events, timers, results } = createCodePickerHarness({
-      handleVerificationFields: () => ({
+      detectOrFillCodeFields: () => ({
         ok: true,
         anchor: {},
         candidateCache: { contextRoots: [] },
@@ -357,7 +357,7 @@ for (const textContent of [
     };
     let codes = [oldCode];
     const { events, timers, results } = createCodePickerHarness({
-      handleVerificationFields: () => ({
+      detectOrFillCodeFields: () => ({
         ok: true,
         anchor: {},
         rect: { top: 100, bottom: 130, left: 20, right: 200 },
@@ -394,7 +394,7 @@ test("resend before the first check returns does not revive an unseen old code",
   const requests = [];
   let now = 9500;
   const { events, timers, results } = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: true,
       anchor: {},
       candidateCache: { contextRoots: [] },
@@ -449,7 +449,7 @@ test("new route clears suggestions even when the code field is reused", async ()
   let responses = [oldCode];
   const anchor = {};
   const { environment, events, timers, results } = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: true,
       anchor,
       candidateCache: { contextRoots: [] },
@@ -494,7 +494,7 @@ test("scrolling away and back keeps a code from the same verification step", asy
     receivedAt: 9_000,
   };
   const { events, results } = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: visible,
       anchor,
       trackedAnchorOffscreen: !visible,
@@ -542,7 +542,7 @@ test("countdown completion retains codes without starting a new attempt", async 
     };
     let requests = 0;
     const { timers, results, elements } = createCodePickerHarness({
-      handleVerificationFields: () => ({
+      detectOrFillCodeFields: () => ({
         ok: true,
         anchor,
         stepContext: {
@@ -608,7 +608,7 @@ test("changed verification instructions reset codes on the same field and URL", 
   };
   let responses = [oldCode];
   const { timers, results } = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: true,
       anchor,
       stepContext: {
@@ -688,7 +688,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
     },
   ];
   const { events, timers, results, elements } = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: visible,
       anchor,
       candidateCache: { contextRoots: [] },
@@ -789,7 +789,7 @@ test("incidental form messages retain codes through discovery, retry and selecti
     receivedAt: 9000,
   };
   const { timers, results, elements } = createCodePickerHarness({
-    handleVerificationFields: ({ action }) => {
+    detectOrFillCodeFields: ({ action }) => {
       if (action === "fill") {
         fills++;
         return { ok: true };
@@ -844,7 +844,7 @@ test("an oversized step keeps the last known recipient and remains selectable", 
     receivedAt: 9000,
   };
   const { timers, results } = createCodePickerHarness({
-    handleVerificationFields: ({ action }) => {
+    detectOrFillCodeFields: ({ action }) => {
       if (action === "fill") {
         fills++;
         return { ok: true };
@@ -890,7 +890,7 @@ test("resends in an independent form leave the active code usable", async () => 
     receivedAt: 9000,
   };
   const harness = createCodePickerHarness({
-    handleVerificationFields: () => ({
+    detectOrFillCodeFields: () => ({
       ok: true,
       anchor,
       stepContext: { roots: [form] },
@@ -934,7 +934,7 @@ test("an identical detached field replacement retains old mail and fills the liv
       receivedAt: 9000,
     };
     const harness = createCodePickerHarness({
-      handleVerificationFields: (request) => {
+      detectOrFillCodeFields: (request) => {
         if (request.action === "fill") {
           filledAnchor = request.expectedAnchor;
           return { ok: true };
@@ -983,7 +983,7 @@ test("a changed recipient or changed field is not treated as an identical replac
       receivedAt: 9000,
     };
     const harness = createCodePickerHarness({
-      handleVerificationFields: () => ({
+      detectOrFillCodeFields: () => ({
         ok: true,
         anchor,
         stepContext: { roots: [root] },

@@ -8,12 +8,7 @@ Find email verification codes, account confirmation links, and password reset li
 
 *Local preview with a synthetic email and verification code; no real inbox is accessed.*
 
-## Engineering highlights
-
-- Connects a Chrome extension to a Python companion through native messaging.
-- Uses macOS Keychain for credentials and read-only IMAP checks for Yahoo mail.
-- Extracts codes and links locally, with freshness filtering and bounded page inspection.
-- Automated Python and JavaScript suites use synthetic mail and fake browser/IMAP connections.
+The Chrome extension uses native messaging to request local email checks from a Python companion.
 
 For a preview without an inbox, serve the repository with `python3 -m http.server 8767 --bind 127.0.0.1` and open `/docs/preview.html`. This renders the real suggestion interface with synthetic mail.
 

@@ -2,7 +2,7 @@ import { waitForAsyncCallbacks } from "./async_callbacks.js";
 import assert from "node:assert/strict";
 import { detectEmailLinkStep } from "../../extension/inline/email-link-step.js";
 import { startEmailLinkCard } from "../../extension/inline/email-link-card-controller.js";
-import { inlineRuntime } from "./mock_inline_port.js";
+import { createMockInlineRuntime } from "./mock_inline_port.js";
 import { createTimerQueue } from "./timer_queue.js";
 
 export const emailLinkMessage = {
@@ -71,7 +71,7 @@ export function createEmailLinkCardHarness(
         },
       },
       chrome: {
-        runtime: inlineRuntime(async (mailType, collectOnly) => {
+        runtime: createMockInlineRuntime(async (mailType, collectOnly) => {
           assert.equal(mailType, state.mailType);
           state.collectionModes.push(collectOnly);
           state.requests++;

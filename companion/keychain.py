@@ -9,10 +9,10 @@ KEYCHAIN_ACCOUNT = b"mailbox"
 
 
 def access_saved_credentials(action, credentials_record=None):
-    lib = ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
+    security = ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
     void = ctypes.c_void_p
     uint = ctypes.c_uint32
-    lib.SecKeychainFindGenericPassword.argtypes = [
+    security.SecKeychainFindGenericPassword.argtypes = [
         void,
         uint,
         void,
@@ -22,10 +22,10 @@ def access_saved_credentials(action, credentials_record=None):
         ctypes.POINTER(void),
         ctypes.POINTER(void),
     ]
-    lib.SecKeychainFindGenericPassword.restype = ctypes.c_int32
-    lib.SecKeychainItemFreeContent.argtypes = [void, void]
-    lib.SecKeychainItemModifyAttributesAndData.argtypes = [void, void, uint, void]
-    lib.SecKeychainAddGenericPassword.argtypes = [
+    security.SecKeychainFindGenericPassword.restype = ctypes.c_int32
+    security.SecKeychainItemFreeContent.argtypes = [void, void]
+    security.SecKeychainItemModifyAttributesAndData.argtypes = [void, void, uint, void]
+    security.SecKeychainAddGenericPassword.argtypes = [
         void,
         uint,
         void,
@@ -35,13 +35,13 @@ def access_saved_credentials(action, credentials_record=None):
         void,
         ctypes.POINTER(void),
     ]
-    lib.SecKeychainItemDelete.argtypes = [void]
-    cf = ctypes.CDLL(
+    security.SecKeychainItemDelete.argtypes = [void]
+    core_foundation = ctypes.CDLL(
         "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
     )
-    cf.CFRelease.argtypes = [void]
+    core_foundation.CFRelease.argtypes = [void]
     size, data, item = uint(), void(), void()
-    status = lib.SecKeychainFindGenericPassword(
+    status = security.SecKeychainFindGenericPassword(
         None,
         len(KEYCHAIN_SERVICE),
         KEYCHAIN_SERVICE,
@@ -61,15 +61,15 @@ def access_saved_credentials(action, credentials_record=None):
                 json.loads(ctypes.string_at(data, size.value)) if status == 0 else None
             )
         if action == "delete":
-            result = lib.SecKeychainItemDelete(item) if status == 0 else 0
+            result = security.SecKeychainItemDelete(item) if status == 0 else 0
         elif action == "set":
             payload = json.dumps(credentials_record).encode()
             result = (
-                lib.SecKeychainItemModifyAttributesAndData(
+                security.SecKeychainItemModifyAttributesAndData(
                     item, None, len(payload), payload
                 )
                 if status == 0
-                else lib.SecKeychainAddGenericPassword(
+                else security.SecKeychainAddGenericPassword(
                     None,
                     len(KEYCHAIN_SERVICE),
                     KEYCHAIN_SERVICE,
@@ -86,6 +86,6 @@ def access_saved_credentials(action, credentials_record=None):
             raise UserError("Could not update the login Keychain.")
     finally:
         if data:
-            lib.SecKeychainItemFreeContent(None, data)
+            security.SecKeychainItemFreeContent(None, data)
         if item:
-            cf.CFRelease(item)
+            core_foundation.CFRelease(item)

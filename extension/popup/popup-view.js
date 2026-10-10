@@ -59,7 +59,7 @@ export function createPopupView(
     getElement("email").value = "";
   }
 
-  function setCheckAndRemoveButtonsDisabled(disabled) {
+  function setAccountAndCheckControlsDisabled(disabled) {
     for (const [id] of checkButtonMailTypes) getElement(id).disabled = disabled;
     for (const button of getElement("accounts").querySelectorAll("button"))
       button.disabled = disabled;
@@ -93,7 +93,7 @@ export function createPopupView(
       const label = document.createElement("span");
       label.textContent = email;
       const remove = document.createElement("button");
-      remove.className = "quiet";
+      remove.className = "button-secondary button-compact";
       remove.textContent = "Remove";
       remove.setAttribute("aria-label", `Remove ${email}`);
       remove.addEventListener("click", () => onRemoveAccount(email));
@@ -169,7 +169,7 @@ export function createPopupView(
     setAccountSaveDisabled,
     readCredentialsAndClearPassword,
     clearAccountEmail,
-    setCheckAndRemoveButtonsDisabled,
+    setAccountAndCheckControlsDisabled,
     setResultButtonsDisabled,
     markCodeFilled,
     markLinkOpened,

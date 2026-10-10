@@ -1,5 +1,5 @@
 import { recipientKeyFromText } from "./recipient-identity.js";
-import { findActiveModal } from "../shared/active-modal.js";
+import { findActiveModal } from "./active-modal.js";
 
 const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;
@@ -21,7 +21,7 @@ function recipientIdentity(text) {
   });
 }
 
-function isBoundedPanel(panel) {
+function isWithinPanelBudget(panel) {
   // Bound traversal before any layout or full rendered-text reads. Hidden
   // templates and non-rendered content do not consume the text budget.
   let count = 0,
@@ -44,7 +44,8 @@ function isBoundedPanel(panel) {
   return true;
 }
 
-function matchesConfirmationOrGenericWaitingPrompt(text) {
+function matchesConfirmationWaitingPrompt(text) {
+  // Generic “Check your email” prompts qualify when no reset purpose is detected.
   const value = text.replace(/\s+/g, " ").trim();
   if (
     !value ||
@@ -115,7 +116,7 @@ export function detectEmailLinkStep(document) {
     if (detectedStep && !detectedStep.panel.contains?.(panel)) continue;
     if (
       !panel ||
-      !isBoundedPanel(panel) ||
+      !isWithinPanelBudget(panel) ||
       !panel.getClientRects().length ||
       !panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
     )
@@ -123,7 +124,7 @@ export function detectEmailLinkStep(document) {
     const text = panel.innerText || "";
     const mailType = matchesPasswordResetWaitingPrompt(text)
       ? "passwordResetLinks"
-      : matchesConfirmationOrGenericWaitingPrompt(text)
+      : matchesConfirmationWaitingPrompt(text)
         ? "confirmationLinks"
         : null;
     if (!mailType) continue;

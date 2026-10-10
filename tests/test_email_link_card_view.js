@@ -35,7 +35,7 @@ function setup(mailType, callbacks = {}) {
   };
   const view = createEmailLinkCardView(document, {
     mailType,
-    onSelectLink: () => true,
+    acceptLinkSelection: () => true,
     ...callbacks,
   });
   const item = {
@@ -82,8 +82,8 @@ test("reset-card action copies only an approved selection and reports success", 
   let approved = false;
   const copied = [];
   const { action, item, controls } = setup("passwordResetLinks", {
-    onSelectLink: () => approved,
-    copyLink: async (item) => copied.push(item.url),
+    acceptLinkSelection: () => approved,
+    copyResetLink: async (item) => copied.push(item.url),
   });
   await action.listeners.click();
   assert.deepEqual(copied, []);
@@ -100,7 +100,7 @@ test("reset-card action copies only an approved selection and reports success", 
 
 test("failed reset-card copies show the error and allow another attempt", async () => {
   const { action, controls } = setup("passwordResetLinks", {
-    copyLink: async () => {
+    copyResetLink: async () => {
       throw new Error("Clipboard denied. Use the toolbar popup.");
     },
   });

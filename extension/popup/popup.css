@@ -114,16 +114,18 @@ button:disabled {
   opacity: 0.5;
   cursor: wait;
 }
-.quiet {
-  width: auto;
+.button-secondary {
   background: transparent;
   color: #70558b;
+}
+.button-secondary:hover {
+  background: #eee5fc;
+}
+.button-compact {
+  width: auto;
   padding: 4px;
   font-size: 11px;
   margin: 0;
-}
-.quiet:hover {
-  background: #eee5fc;
 }
 .account {
   display: flex;

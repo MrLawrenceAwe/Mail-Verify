@@ -1,11 +1,11 @@
 import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
 import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
-// onSelectLink returns true to accept a selection; false prevents its action.
+// acceptLinkSelection returns true to accept a selection; false prevents its action.
 // Acceptance may dismiss the card and cancel checks before a confirmation link opens.
 export function createEmailLinkCardView(
   document,
-  { onClose, onRetry, onSelectLink, copyLink, mailType },
+  { onClose, onRetry, acceptLinkSelection, copyResetLink, mailType },
 ) {
   const isPasswordReset = mailType === "passwordResetLinks";
   const {
@@ -127,10 +127,10 @@ export function createEmailLinkCardView(
         actionElement.textContent = actionLabel;
         if (isPasswordReset) {
           actionElement.addEventListener("click", async () => {
-            if (actionElement.disabled || !onSelectLink(item)) return;
+            if (actionElement.disabled || !acceptLinkSelection(item)) return;
             actionElement.disabled = true;
             try {
-              await copyLink(item);
+              await copyResetLink(item);
               actionElement.textContent = copyAgainLabel;
               root.querySelector("#status").textContent = copySuccessStatus;
             } catch (error) {
@@ -144,10 +144,10 @@ export function createEmailLinkCardView(
           actionElement.target = "_blank";
           actionElement.rel = "noopener noreferrer";
           actionElement.addEventListener("click", (event) => {
-            if (!onSelectLink(item)) event.preventDefault();
+            if (!acceptLinkSelection(item)) event.preventDefault();
           });
           actionElement.addEventListener("auxclick", (event) => {
-            if (!onSelectLink(item)) event.preventDefault();
+            if (!acceptLinkSelection(item)) event.preventDefault();
           });
         }
         card.append(actionElement);

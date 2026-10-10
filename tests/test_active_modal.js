@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findActiveModal } from "../extension/shared/active-modal.js";
+import { findActiveModal } from "../extension/inline/active-modal.js";
 import { suggestionMountRoot } from "../extension/inline/suggestion-mount.js";
 
 test("modal selection and mounting follow focus rather than DOM order", () => {
