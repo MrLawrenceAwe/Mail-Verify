@@ -307,10 +307,6 @@ export function detectOrFillCodeFields({
       candidateCache: candidates,
     };
   }
-  const getDigitInputs = () =>
-    [...scope.querySelectorAll("input")].filter(
-      (input) => isPotentialDigitInput(input) && isUsableInput(input),
-    );
   const findUniqueDigitGroup = (digitInputs, length) => {
     const groups = [];
     for (const anchor of digitInputs.filter(hasCodeHint)) {
@@ -359,6 +355,22 @@ export function detectOrFillCodeFields({
     input.dispatchEvent(new Event("change", { bubbles: true }));
   };
   if (fields) {
+    const form = fields[0].form;
+    let groupRoot = fields[0].parentElement;
+    while (groupRoot && !fields.every((input) => isInside(input, groupRoot)))
+      groupRoot = groupRoot.parentElement;
+    // Box replacements may retain the same step, but a removed group must
+    // never redirect the remaining digits into another verification widget.
+    const getDigitInputs = () =>
+      !groupRoot || groupRoot.isConnected === false || form?.isConnected === false
+        ? []
+        : [...scope.querySelectorAll("input")].filter(
+            (input) =>
+              input.form === form &&
+              isInside(input, groupRoot) &&
+              isPotentialDigitInput(input) &&
+              isUsableInput(input),
+          );
     let group = fields;
     for (let index = 0; index < code.length; index++) {
       // Reuse discovery until the first write; input handlers may replace the

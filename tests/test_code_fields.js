@@ -320,33 +320,34 @@ test("fills named numeric digit boxes in a shared form", () => {
 
 test("follows split fields replaced after each digit", () => {
   let queries = 0;
-  let rerenderParent = {};
-  let current = Array.from(
+  const rerenderParent = {};
+  const makeDigits = (previous = []) => Array.from(
     { length: 6 },
     (_, i) =>
       new FakeInput({
         maxLength: 1,
         parentElement: rerenderParent,
         name: i === 0 ? "verification_code" : "",
+        value: previous[i]?.value,
       }),
   );
+  let current = makeDigits();
   const original = current;
-  original[0].dispatchEvent = function (event) {
-    this.events.push(event.type);
-    if (event.type === "input") {
-      assert.equal(queries, 1, "reuse initial discovery before the first write");
-      rerenderParent = {};
-      current = current.map(
-        (old, i) =>
-          new FakeInput({
-            maxLength: 1,
-            parentElement: rerenderParent,
-            name: i === 0 ? "verification_code" : "",
-            value: old.value,
-          }),
-      );
-    }
+  let replacements = 0;
+  const wireReplacements = () => {
+    for (const digit of current) digit.dispatchEvent = function (event) {
+      this.events.push(event.type);
+      if (event.type !== "input") return;
+      if (!replacements)
+        assert.equal(queries, 1, "reuse initial discovery before the first write");
+      const previous = current;
+      previous.forEach((input) => { input.isConnected = false; });
+      current = makeDigits(previous);
+      replacements++;
+      wireReplacements();
+    };
   };
+  wireReplacements();
   const rerenderCtx = {
     document: {
       querySelectorAll: () => {
@@ -362,6 +363,54 @@ test("follows split fields replaced after each digit", () => {
     true,
   );
   assert.equal(current.map((x) => x.value).join(""), "123456");
+  assert.equal(replacements, 6);
+});
+
+test("split fills stop when their form or group is removed without touching another group", () => {
+  for (const sameForm of [false, true]) {
+    for (const finalDigit of [false, true]) {
+      for (const inline of [false, true]) {
+        const form = { isConnected: true };
+        const firstRoot = { parentElement: form, isConnected: true };
+        const secondForm = sameForm ? form : { isConnected: true };
+        const secondRoot = { parentElement: secondForm, isConnected: true };
+        const makeDigits = (parentElement, owner) => Array.from(
+          { length: 6 },
+          (_, index) => new FakeInput({
+            maxLength: 1, parentElement, form: owner,
+            name: index === 0 ? "verification_code" : "", value: "9",
+          }),
+        );
+        const first = makeDigits(firstRoot, form);
+        const second = makeDigits(secondRoot, secondForm);
+        // A matching remaining group must not authorize success or take focus
+        // when the selected group disappears after its final digit.
+        if (finalDigit)
+          second.forEach((input, index) => { input.value = String(index + 1); });
+        const otherValue = second.map((input) => input.value).join("");
+        let current = [...first, ...second];
+        first[finalDigit ? 5 : 0].dispatchEvent = function (event) {
+          this.events.push(event.type);
+          if (event.type !== "input") return;
+          firstRoot.isConnected = false;
+          if (!sameForm) form.isConnected = false;
+          first.forEach((input) => { input.isConnected = false; });
+          current = second;
+        };
+        const { handle } = createVerificationFieldHarness({
+          document: { querySelectorAll: () => current, activeElement: first[0] },
+        });
+        const result = handle({
+          action: "fill", code: "123456",
+          expectedAnchor: inline ? first[0] : undefined,
+        });
+        assert.equal(result.ok, false);
+        assert.equal(second.map((input) => input.value).join(""), otherValue);
+        assert.equal(second.every((input) => input.events.length === 0), true);
+        assert.equal(second.every((input) => !input.focused), true);
+      }
+    }
+  }
 });
 
 test("stops if a rerender inserts another digit in the verification group", () => {
