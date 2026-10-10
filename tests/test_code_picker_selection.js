@@ -2,6 +2,7 @@ import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCodePickerHarness } from "./support/code_picker_harness.js";
+import { createTextElement } from "./support/dom_nodes.js";
 
 test("picker passes its mounted field to the fill action", async () => {
   const anchor = {};
@@ -39,10 +40,11 @@ test("selection revalidates the verification step before the queued discovery ru
   for (const changed of [true, false]) {
     let observer,
       fills = 0;
-    const form = {
-      textContent: "We sent a code to alice@example.test. Resend in 30 seconds",
-      contains: () => true,
-    };
+    const form = createTextElement(
+      "FORM",
+      "We sent a code to alice@example.test. Resend in 30 seconds",
+      { contains: () => true },
+    );
     const anchor = { form };
     const code = {
       uid: 1,
@@ -73,7 +75,7 @@ test("selection revalidates the verification step before the queued discovery ru
     });
     await waitForAsyncCallbacks();
     const button = results.children[0];
-    form.textContent = changed
+    form.firstChild.data = changed
       ? "We sent a code to bob@example.test. Resend in 30 seconds"
       : "We sent a code to alice@example.test. Resend in 29 seconds";
     observer([{ type: "characterData", target: {} }]);

@@ -50,15 +50,15 @@ export function detectOrFillCodeFields({
       })
       .join(" ");
   };
-  const getInputHints = (input) => [
-    input.autocomplete,
-    input.name,
-    input.id,
-    input.placeholder,
-    input.getAttribute("aria-label"),
-    referencedLabels(input),
-    ...[...(input.labels || [])].map((label) => label.textContent),
-  ];
+  const getInputHints = (input) => ({
+    autocomplete: input.autocomplete,
+    name: input.name,
+    id: input.id,
+    placeholder: input.placeholder,
+    ariaLabel: input.getAttribute("aria-label"),
+    referencedLabels: referencedLabels(input),
+    labels: [...(input.labels || [])].map((label) => label.textContent),
+  });
   const verificationContext = (input) => {
     const container = input.form || input.parentElement;
     if (!container) return { roots: [], parent: undefined };
@@ -135,7 +135,7 @@ export function detectOrFillCodeFields({
     return false;
   };
   const hasCodeHint = (input) => {
-    const hints = getInputHints(input);
+    const hints = Object.values(getInputHints(input)).flat();
     return (
       hints.some((value) =>
         /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|sign[-_ ]?in[-_ ]?code|login[-_ ]?code)(?:$|[^\w])/i.test(
@@ -161,7 +161,7 @@ export function detectOrFillCodeFields({
   };
   const isCodeDigit = (input) =>
     hasCodeHint(input) ||
-    getInputHints(input).every(
+    Object.values(getInputHints(input)).flat().every(
       (hint) =>
         !hint ||
         /^(?:(?:enter )?(?:digit|character|box|cell|otp|pin|code)[\s_-]*\d*|\d)$/i.test(
@@ -174,7 +174,14 @@ export function detectOrFillCodeFields({
       const hints = getInputHints(input);
       // Accessible names outrank implementation names. Ignore digit indices
       // and generic box labels, but keep separate email/phone code identities.
-      return [hints[4], hints[5], ...hints.slice(6), hints[3], hints[1], hints[2]]
+      return [
+        hints.ariaLabel,
+        hints.referencedLabels,
+        ...hints.labels,
+        hints.placeholder,
+        hints.name,
+        hints.id,
+      ]
         .map((hint) =>
           (hint || "").trim().toLowerCase()
             .replace(/[\s_-]*\d+$/, "")

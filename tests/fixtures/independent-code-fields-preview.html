@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mail Verify independent code fields preview</title>
+    <style>
+      body { font: 18px system-ui; margin: 40px; }
+      input { display: block; margin: 8px 0; padding: 8px; font: inherit; }
+      button { margin: 8px; padding: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <form>
+        <h1>Independent numeric codes</h1>
+        <label>Email verification code<input type="number" autocomplete="one-time-code" value="1111" /></label>
+        <label>Phone verification code<input type="number" autocomplete="one-time-code" value="2222" /></label>
+        <label>Backup verification code<input type="number" autocomplete="one-time-code" value="3333" /></label>
+        <label>Account verification code<input type="number" autocomplete="one-time-code" value="4444" /></label>
+        <button type="button" id="fill">Fill selected email code</button>
+      </form>
+    </main>
+    <p id="feedback" role="status"></p>
+    <script type="module">
+      import { detectOrFillCodeFields } from "../../extension/shared/code-fields.js";
+
+      const inputs = [...document.querySelectorAll("input")];
+      const feedback = document.querySelector("#feedback");
+      document.querySelector("#fill").onclick = () => {
+        inputs[0].focus();
+        const result = detectOrFillCodeFields({ action: "fill", code: "9876" });
+        const values = inputs.map((input) => input.value);
+        feedback.textContent = result.ok && values.join(",") === "9876,2222,3333,4444"
+          ? "PASS: email code filled; all other codes unchanged."
+          : `FAIL: ${JSON.stringify(result)}; values ${values.join(",")}`;
+      };
+    </script>
+  </body>
+</html>

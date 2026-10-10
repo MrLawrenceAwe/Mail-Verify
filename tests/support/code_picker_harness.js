@@ -88,23 +88,6 @@ export function createCodePickerHarness({
   };
   const detectOrFill = (request) => {
     const result = detectOrFillCodeFields(request);
-    for (const root of result.stepContext?.roots || []) {
-      // Model text nodes so production traversal never needs a mock-only fallback.
-      if (
-        Object.hasOwn(root, "textContent") &&
-        !Object.hasOwn(root, "nodeType")
-      ) {
-        root.nodeType = 1;
-        root.tagName = "FORM";
-        Object.defineProperty(root, "firstChild", {
-          get: () => ({
-            nodeType: 3,
-            data: root.textContent,
-            parentNode: root,
-          }),
-        });
-      }
-    }
     return request.action === "detect"
       ? { stepContext: { roots: [], parent: undefined }, ...result }
       : result;

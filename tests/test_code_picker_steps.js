@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { detectOrFillCodeFields } from "../extension/shared/code-fields.js";
 import { createCodePickerHarness } from "./support/code_picker_harness.js";
+import { createTextElement } from "./support/dom_nodes.js";
 
 test("initial code suggestions accept recent mail received before field discovery", async () => {
   const now = 1_000_000;
@@ -87,10 +88,9 @@ test("focus moves within split digits preserve suggestions, but another group st
     ["tel", false],
     ["number", false],
   ]) {
-    const form = {
-      textContent: "Enter your verification code",
+    const form = createTextElement("FORM", "Enter your verification code", {
       parentElement: null,
-    };
+    });
     const makeGroup = () => {
       const container = { parentElement: form };
       return Array.from({ length: 6 }, (_, index) => ({
@@ -528,10 +528,11 @@ test("countdown completion retains codes without starting a new attempt", async 
   ]) {
     let observer,
       now = 10_000;
-    const form = {
-      textContent: `We sent a code to alice@example.test. ${countdown}`,
-      contains: () => true,
-    };
+    const form = createTextElement(
+      "FORM",
+      `We sent a code to alice@example.test. ${countdown}`,
+      { contains: () => true },
+    );
     const anchor = { form };
     const code = {
       uid: 1,
@@ -564,7 +565,7 @@ test("countdown completion retains codes without starting a new attempt", async 
 
     await waitForAsyncCallbacks();
     now = 40_000;
-    form.textContent = "We sent a code to alice@example.test. Resend code";
+    form.firstChild.data = "We sent a code to alice@example.test. Resend code";
     observer([{ type: "characterData", target: {} }]);
     await timers.runWithDelay(150);
     await waitForAsyncCallbacks();
@@ -593,11 +594,11 @@ test("changed verification instructions reset codes on the same field and URL", 
     now = 10_000,
     mounts = 0;
   const parent = {};
-  const form = {
-    textContent: "We sent a code to alice@example.test. Resend in 30 seconds",
-    contains: () => true,
-    parentElement: parent,
-  };
+  const form = createTextElement(
+    "FORM",
+    "We sent a code to alice@example.test. Resend in 30 seconds",
+    { contains: () => true, parentElement: parent },
+  );
   const anchor = { form };
   const oldCode = {
     uid: 1,
@@ -629,7 +630,7 @@ test("changed verification instructions reset codes on the same field and URL", 
   });
 
   const changeInstructions = (text) => {
-    form.textContent = text;
+    form.firstChild.data = text;
     observer([{ type: "characterData", target: {} }]);
     timers.takeNewest()();
   };
@@ -659,9 +660,10 @@ test("changed verification instructions reset codes on the same field and URL", 
   await waitForAsyncCallbacks();
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
   now = 30_000;
-  form.previousElementSibling = {
-    textContent: "Verification code for charlie@example.test",
-  };
+  form.previousElementSibling = createTextElement(
+    "P",
+    "Verification code for charlie@example.test",
+  );
   observer([
     { type: "childList", target: parent, addedNodes: [], removedNodes: [] },
   ]);
@@ -776,10 +778,9 @@ test("a new verification field on the same URL starts a fresh code window", asyn
 test("incidental form messages retain codes through discovery, retry and selection", async () => {
   let observer,
     fills = 0;
-  const form = {
-    textContent: "Enter your verification code",
+  const form = createTextElement("FORM", "Enter your verification code", {
     contains: () => true,
-  };
+  });
   const anchor = {};
   const code = {
     uid: 1,
@@ -815,7 +816,7 @@ test("incidental form messages retain codes through discovery, retry and selecti
     "Please enter all six digits",
     "Code field focused",
   ]) {
-    form.textContent = `Enter your verification code ${status}`;
+    form.firstChild.data = `Enter your verification code ${status}`;
     observer([{ type: "characterData", target: {} }]);
     await timers.runWithDelay(150);
     await waitForAsyncCallbacks();
@@ -831,10 +832,9 @@ test("incidental form messages retain codes through discovery, retry and selecti
 test("an oversized step keeps the last known recipient and remains selectable", async () => {
   let observer,
     fills = 0;
-  const form = {
-    textContent: "We sent a code to alice@example.test",
+  const form = createTextElement("FORM", "We sent a code to alice@example.test", {
     contains: () => true,
-  };
+  });
   const anchor = {};
   const code = {
     uid: 1,
@@ -869,7 +869,7 @@ test("an oversized step keeps the last known recipient and remains selectable", 
     "x".repeat(5_000_000),
     "We sent a code to alice@example.test",
   ]) {
-    form.textContent = text;
+    form.firstChild.data = text;
     observer([{ type: "characterData", target: {} }]);
     await timers.runWithDelay(150);
     await waitForAsyncCallbacks();
@@ -880,7 +880,7 @@ test("an oversized step keeps the last known recipient and remains selectable", 
 });
 
 test("resends in an independent form leave the active code usable", async () => {
-  const form = { textContent: "We sent a code to test@yahoo.com." };
+  const form = createTextElement("FORM", "We sent a code to test@yahoo.com.");
   const anchor = { form };
   const code = {
     uid: 1,
@@ -917,7 +917,7 @@ test("resends in an independent form leave the active code usable", async () => 
 
 test("an identical detached field replacement retains old mail and fills the live input", async () => {
   for (const discoveryFirst of [false, true]) {
-    const form = { textContent: "We sent a code to test@yahoo.com." };
+    const form = createTextElement("FORM", "We sent a code to test@yahoo.com.");
     const original = {
       isConnected: true,
       isEqualNode: (other) => other === replacement,
@@ -968,7 +968,7 @@ test("an identical detached field replacement retains old mail and fills the liv
 
 test("a changed recipient or changed field is not treated as an identical replacement", async () => {
   for (const change of ["recipient", "attributes", "container", "connected"]) {
-    const form = { textContent: "We sent a code to test@yahoo.com." };
+    const form = createTextElement("FORM", "We sent a code to test@yahoo.com.");
     let root = form;
     const original = {
       isConnected: true,
@@ -996,8 +996,9 @@ test("a changed recipient or changed field is not treated as an identical replac
     original.isConnected = change === "connected";
     anchor = {};
     if (change === "recipient")
-      form.textContent = "We sent a code to another@yahoo.com.";
-    if (change === "container") root = { textContent: form.textContent };
+      form.firstChild.data = "We sent a code to another@yahoo.com.";
+    if (change === "container")
+      root = createTextElement("FORM", form.firstChild.data);
     harness.events.get("focusin")();
     await harness.timers.runWithDelay(150);
     await waitForAsyncCallbacks();

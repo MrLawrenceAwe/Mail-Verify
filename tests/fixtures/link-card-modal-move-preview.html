@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mail Verify link card modal move preview</title>
+    <style>
+      body { font: 18px system-ui; margin: 40px; }
+      button { margin: 8px; padding: 8px; }
+      dialog { padding: 24px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <form>
+        <h1>Account confirmation</h1>
+        <p>Check your email for a confirmation link. We sent a link to preview@yahoo.com.</p>
+        <button type="button" id="move">Move waiting form into modal</button>
+        <button type="button" id="return">Return waiting form to page</button>
+      </form>
+    </main>
+    <dialog></dialog>
+    <script type="module">
+      import { startEmailLinkCard } from "../../extension/inline/email-link-card-controller.js";
+      import { createMockInlineRuntime } from "../support/mock_inline_port.js";
+
+      const main = document.querySelector("main");
+      const form = main.querySelector("form");
+      const dialog = document.querySelector("dialog");
+      const receivedAt = Date.now();
+      window.chrome = {
+        runtime: createMockInlineRuntime(() => ({
+          ok: true,
+          confirmationLinks: [{
+            uid: 1,
+            accountEmail: "preview@yahoo.com",
+            sender: "auth@example.test",
+            subject: "Confirm your account",
+            url: "https://example.test/verify",
+            receivedAt,
+          }],
+          scanPending: false,
+        })),
+      };
+      document.querySelector("#move").onclick = () => {
+        dialog.append(form);
+        dialog.showModal();
+      };
+      document.querySelector("#return").onclick = () => {
+        main.append(form);
+        dialog.close();
+      };
+      startEmailLinkCard();
+    </script>
+  </body>
+</html>

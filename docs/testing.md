@@ -18,12 +18,15 @@ Test suites stay at `tests/`; shared harnesses, mocks, and message builders live
 
 | Suite | Behaviour groups | Shared harness |
 | --- | --- | --- |
-| `test_code_picker_*.js` | Steps, polling, positioning, selection | `support/code_picker_harness.js` |
+| `test_code_picker_*.js` controller suites | Steps, polling, positioning, selection | `support/code_picker_harness.js` |
+| `test_code_picker_position_calculation.js` | Pure positioning calculations and obstacle avoidance | — |
 | `test_email_link_card_*.js` controller suites | Steps, polling, mutations, selection | `support/email_link_card_harness.js` |
 | `test_popup_*.js` | Polling, accounts, result selection with the real view | `support/popup_harness.js` |
 | `test_code_fields.js` | Detection and filling, including numeric split-digit length checks | `support/verification_field_harness.js` |
 
 The field harness evaluates the serialized entry point in an isolated VM to verify it has no module-scope dependencies.
+
+Code-picker step and selection tests use `tests/support/dom_nodes.js` to build explicit element/text-node pairs. Tests update `firstChild.data` to change instructions; the picker harness does not convert plain objects into DOM nodes.
 
 `tests/support/timer_queue.js` stores callbacks for explicit execution by insertion order or requested delay; it does not advance a clock. `tests/support/email_messages.py` shares `make_raw_email()` across code extraction, link extraction, and inbox-scanning tests. Its subject, subtype, and sender options describe each synthetic message; multipart and attachment cases build their own MIME structure.
 
@@ -41,9 +44,11 @@ To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 1
 
 `tests/fixtures/verification-step-preview.html` checks resend scope and verification-field replacement. Use `?mode=codes`, `?mode=confirmationLinks`, or `?mode=passwordResetLinks`. **Resend SMS code** must retain the existing email result; **Resend verification email** must clear it. In code mode, **Replace identical input** must retain the unused code, and selecting it must report a successful fill in the current input. Add `&sameForm=1` to place the SMS resend in the same form as the email step; it must still retain the email result. After resending, wait at least one second before **Deliver replacement email**.
 
-## Manual validation
+`tests/fixtures/independent-code-fields-preview.html` checks four independent numeric fields: **Fill selected email code** must report PASS and preserve the other three populated codes.
 
-`tests/fixtures/review-regressions-preview.html` checks independent numeric fields: **Fill selected email code** must report PASS and preserve the other three populated codes. With `?mode=links`, **Move waiting form into modal** must keep the existing confirmation suggestion accessible inside the dialog; **Return waiting form to page** must restore it outside the dialog with the same result. These checks use synthetic mail only.
+`tests/fixtures/link-card-modal-move-preview.html` checks moving the same waiting form between the page and a modal. **Move waiting form into modal** must keep the existing confirmation suggestion accessible inside the dialog; **Return waiting form to page** must restore it outside the dialog with the same result. These checks use synthetic mail only.
+
+## Manual validation
 
 After installing the companion, reloading the extension, and refreshing the test page:
 
