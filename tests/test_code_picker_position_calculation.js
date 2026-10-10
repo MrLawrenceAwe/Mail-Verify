@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculatePickerPosition } from "../extension/inline/code-picker-view.js";
+import { calculatePickerPosition } from "../extension/inline/code-picker-position.js";
 
 test("suggestions sit below the field and stay within the viewport", () => {
   assert.deepEqual(

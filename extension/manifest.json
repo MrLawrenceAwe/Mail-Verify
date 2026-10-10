@@ -35,6 +35,7 @@
         "inline/active-modal.js",
         "inline/code-picker-controller.js",
         "inline/code-picker-policy.js",
+        "inline/code-picker-position.js",
         "inline/code-picker-view.js",
         "inline/code-step-context.js",
         "inline/email-link-card-controller.js",

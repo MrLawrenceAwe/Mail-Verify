@@ -9,7 +9,8 @@ export function stepStartCutoff(now) {
   return now - STEP_ALLOWANCE_MS;
 }
 
-export function resendCutoff(now) {
+// Exclude the current IMAP arrival second when a resend or changed link step starts.
+export function nextSecondCutoff(now) {
   return Math.floor(now / 1000) * 1000 + 1000;
 }
 

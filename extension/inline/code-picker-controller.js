@@ -11,14 +11,12 @@ import {
 } from "./request-controls.js";
 import { readCodeStepContext } from "./code-step-context.js";
 import { detectOrFillCodeFields as defaultDetectOrFillCodeFields } from "../shared/code-fields.js";
-import {
-  calculatePickerPosition,
-  createCodePickerView,
-} from "./code-picker-view.js";
+import { calculatePickerPosition } from "./code-picker-position.js";
+import { createCodePickerView } from "./code-picker-view.js";
 import {
   stepStartCutoff,
   isFreshMessage,
-  resendCutoff,
+  nextSecondCutoff,
   CODE_PICKER_SCAN_INTERVAL_MS,
   MAX_MESSAGE_AGE_MS,
 } from "../shared/mail-timing.js";
@@ -325,7 +323,7 @@ export function startCodePicker({
       // IMAP dates have one-second precision. Codes from the resend's current
       // second cannot be distinguished from an unseen code sent just before it.
       // Start with the next second so a pending check cannot revive the old code.
-      minReceivedAtMs = resendCutoff(clock.now());
+      minReceivedAtMs = nextSecondCutoff(clock.now());
       excludeSeenMessages();
       dismissed = false;
       filledStep = false;

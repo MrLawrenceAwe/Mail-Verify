@@ -13,7 +13,8 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `content-entry.js` | Starts the code picker and email-link card with one page coordinator. |
 | `inline/page-coordinator.js` | Shares code-field candidates, DOM observation, and page-change notifications. |
 | `inline/active-modal.js`, `inline/suggestion-mount.js` | Select the active native modal and mount suggestions above its backdrop. |
-| `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control, position, and render code suggestions beside a detected field. |
+| `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control and render code suggestions beside a detected field. |
+| `inline/code-picker-position.js` | Calculate viewport positioning and avoid overlapping page controls. |
 | `inline/code-picker-policy.js`, `inline/email-link-card-policy.js` | Filter suggestions and classify request controls and mutations. |
 | `inline/email-link-step.js` | Detect confirmation/reset waiting prompts and return a step identity and mail type. |
 | `inline/email-link-card-controller.js`, `inline/email-link-card-view.js` | Control and render the link card. |
@@ -75,7 +76,7 @@ Each inbox retains the union of its five newest results and the newest result fr
 
 ## Detection and freshness rules
 
-The code picker's initial freshness cutoff accepts mail from the last ten minutes, matching the popup even when mail arrives before field discovery. Subsequent code attempts and on-page link results must have arrived since the verification step began, allowing five seconds for mail delivered just before it appeared. The code picker keeps the newest code per sender and account. Resend countdown ticks and completion, including parenthesised countdowns, retain the same verification step. Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. The popup can show recent emails excluded by that rule.
+The code picker's initial freshness cutoff accepts mail from the last ten minutes, matching the popup even when mail arrives before field discovery. Subsequent code attempts and initial link-step detection allow mail delivered up to five seconds before the step appeared. Changes to an existing link step’s panel, recipient, or purpose use the next whole second as the cutoff, excluding mail delivered just before or during the change. The code picker keeps the newest code per sender and account. Resend countdown ticks and completion, including parenthesised countdowns, retain the same verification step. Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. The popup can show recent emails excluded by that rule.
 
 - Codes are numeric, 4–8 digits, directly labelled by common English instructions such as “Your code is”, “Security code:”, or “Sign in to Indeed with code:”. Emails with multiple candidate codes are omitted.
 - Code fields must be ordinary inputs or common split-digit forms on HTTPS pages with verification-related labels or attributes. A generic “code” label needs nearby email/sign-in instructions. Coupon and promo fields are excluded; unlabelled fields, cross-origin embedded forms, and unusual widgets may not work.
@@ -84,7 +85,7 @@ The code picker's initial freshness cutoff accepts mail from the last ten minute
 - Link-step identity tracks the panel, email purpose, and recipients in delivery instructions. Incidental status text and countdowns retain results and the polling deadline; panel replacement, recipient changes, purpose changes, navigation, and explicit resends start new attempts.
 - Confirmation links require instructions such as “Verify email”, “Confirm account”, or “Activate account”; password-reset subjects are excluded. Reset links require instructions such as “Reset your password”, “Change your password”, or “Password reset”; help/support links and negated reset instructions are excluded.
 - Both link types require a visible HTML link or instructions immediately before a plain-text URL. Qualifying HTML takes precedence over plain text. Only supported HTTPS URLs are accepted; attachments, hidden links, and emails with multiple distinct qualifying links are omitted.
-- Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Tracking links show their initial destination; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
+- Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Link details show the initial destination host; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
 
 ## Page detection and performance
 

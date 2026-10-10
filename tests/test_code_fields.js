@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElementNode, createTextNode } from "./support/dom_nodes.js";
 import {
   FakeInput,
   createVerificationFieldHarness,
@@ -445,8 +446,8 @@ test("stops if a rerender inserts another digit in the verification group", () =
 test("Indeed's Enter code requires email verification context", () => {
   const input = new FakeInput({
     labels: [{ textContent: "Enter code *" }],
-    form: contextElement("FORM", [
-      contextText(
+    form: createContextElement("FORM", [
+      createTextNode(
         "Check your email for a code. We sent a code to you. Enter code *",
       ),
     ]),
@@ -460,11 +461,11 @@ test("Indeed's Enter code requires email verification context", () => {
 });
 
 test("generic code field uses verification context outside its form", () => {
-  const instructions = contextElement("P", [
-    contextText("We sent a code to your email."),
+  const instructions = createContextElement("P", [
+    createTextNode("We sent a code to your email."),
   ]);
   const main = { textContent: "We sent a code to your email. Enter code" };
-  const form = contextElement("FORM", [contextText("Enter code")], {
+  const form = createContextElement("FORM", [createTextNode("Enter code")], {
     parentElement: main,
     previousElementSibling: instructions,
   });
@@ -492,10 +493,10 @@ test("unrelated verification text elsewhere in main does not identify a generic 
     textContent:
       "Verification code for account settings. Redeem your gift code.",
   };
-  const couponInstructions = contextElement("P", [
-    contextText("Redeem your gift code."),
+  const couponInstructions = createContextElement("P", [
+    createTextNode("Redeem your gift code."),
   ]);
-  const form = contextElement("FORM", [contextText("Code")], {
+  const form = createContextElement("FORM", [createTextNode("Code")], {
     parentElement: main,
     previousElementSibling: couponInstructions,
   });
@@ -734,26 +735,12 @@ test("detects and fills fields named by multiple aria-labelledby references", ()
   assert.equal(input.value, "");
 });
 
-function contextElement(tagName, children = [], props = {}) {
-  const node = { nodeType: 1, tagName, ...props };
-  node.firstChild = children[0] || null;
-  children.forEach((child, index) => {
-    child.parentNode = node;
-    child.nextSibling = children[index + 1] || null;
-  });
+function createContextElement(tagName, children = [], properties = {}) {
+  const node = createElementNode(tagName, children, properties);
   Object.defineProperty(node, "textContent", {
     get: () => children.map((child) => child.textContent).join(""),
   });
   return node;
-}
-function contextText(data) {
-  return {
-    nodeType: 3,
-    data,
-    get textContent() {
-      return this.data;
-    },
-  };
 }
 
 function createFieldHandler(inputs, activeElement = null) {
@@ -857,13 +844,13 @@ test("hidden instructions and non-rendered content cannot qualify a generic code
     ["P", { fakeComputedStyle: { visibility: "hidden" } }],
     ["P", { fakeComputedStyle: { opacity: "0" } }],
   ]) {
-    const form = contextElement("FORM", [
-      contextElement(
+    const form = createContextElement("FORM", [
+      createContextElement(
         tagName,
-        [contextText("We sent a verification code to your email.")],
+        [createTextNode("We sent a verification code to your email.")],
         props,
       ),
-      contextText("Code"),
+      createTextNode("Code"),
     ]);
     const input = new FakeInput({ name: "code", form });
     const detect = createFieldHandler([input], input);
@@ -877,14 +864,14 @@ test("generic context retains visible instructions and rejects incomplete traver
   const instruction = "We sent a verification code to your email.";
   for (const children of [
     [
-      contextText(instruction),
-      ...Array.from({ length: 500 }, () => contextText("x")),
+      createTextNode(instruction),
+      ...Array.from({ length: 500 }, () => createTextNode("x")),
     ],
-    [contextText(instruction), contextText("x".repeat(10_000))],
+    [createTextNode(instruction), createTextNode("x".repeat(10_000))],
   ]) {
     const input = new FakeInput({
       name: "code",
-      form: contextElement("FORM", children),
+      form: createContextElement("FORM", children),
     });
     const detect = createFieldHandler([input]);
     assert.equal(detect({ action: "detect" }).ok, false);
@@ -893,12 +880,12 @@ test("generic context retains visible instructions and rejects incomplete traver
     input.autocomplete = "one-time-code";
     assert.equal(detect({ action: "detect" }).ok, true);
   }
-  const form = contextElement("FORM", [
-    contextElement("P", [contextText("Verification code")], { hidden: true }),
-    contextElement("P", [
-      contextText("We sent a "),
-      contextElement("SPAN", [contextText("code")]),
-      contextText(" to your email."),
+  const form = createContextElement("FORM", [
+    createContextElement("P", [createTextNode("Verification code")], { hidden: true }),
+    createContextElement("P", [
+      createTextNode("We sent a "),
+      createContextElement("SPAN", [createTextNode("code")]),
+      createTextNode(" to your email."),
     ]),
   ]);
   const input = new FakeInput({ name: "code", form });

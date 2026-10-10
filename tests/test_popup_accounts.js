@@ -101,7 +101,7 @@ test("connects an account without retaining the form password", async () => {
   assert.equal(controls.connectedAccountsPanel.hidden, false);
 });
 
-test("shows multiple accounts and labels codes with their inbox", async () => {
+test("shows the connected account and inbox label while account setup opens", async () => {
   const { controls } = await createPopupHarness({
     codes: [{ ...verificationCodeMessage, accountEmail: "test@yahoo.com" }],
   });

@@ -16,7 +16,7 @@ import {
 } from "./request-controls.js";
 import {
   stepStartCutoff,
-  resendCutoff,
+  nextSecondCutoff,
   DEFAULT_SCAN_INTERVAL_MS,
 } from "../shared/mail-timing.js";
 import { requestInlineCheck } from "./inline-client.js";
@@ -161,7 +161,7 @@ export function startEmailLinkCard({
       // links delivered just before this step appeared.
       minReceivedAtMs = Math.max(
         minReceivedAtMs ?? -Infinity,
-        resendCutoff(clock.now()),
+        nextSecondCutoff(clock.now()),
       );
       polling.endPollingWindow();
     }
@@ -247,7 +247,7 @@ export function startEmailLinkCard({
         !belongsToVerificationStep(control, activeStep.panel)
       )
         return;
-      minReceivedAtMs = resendCutoff(clock.now());
+      minReceivedAtMs = nextSecondCutoff(clock.now());
       dismissed = false;
       unmountCard();
       polling.renewDeadline();
