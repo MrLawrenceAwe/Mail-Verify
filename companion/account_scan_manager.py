@@ -16,13 +16,14 @@ def scan_with_deadline(session):
     session.deadline = time.monotonic() + ACCOUNT_CHECK_TIMEOUT_SECONDS
     try:
         result = session.scan_inbox()
-        if time.monotonic() >= session.deadline:
-            raise UserError("Yahoo took too long to respond. Try checking again.")
-        return result
     except Exception:
         if time.monotonic() >= session.deadline:
             raise UserError("Yahoo took too long to respond. Try checking again.") from None
         raise
+    else:
+        if time.monotonic() >= session.deadline:
+            raise UserError("Yahoo took too long to respond. Try checking again.")
+        return result
     finally:
         session.deadline = None
         if session.connection is not None:

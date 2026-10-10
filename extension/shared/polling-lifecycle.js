@@ -1,4 +1,5 @@
 import { POLL_WINDOW_MS } from "./mail-timing.js";
+import { createScanSchedule } from "./scan-schedule.js";
 
 export function createPollingLifecycle({ clock, setTimeout, clearTimeout }) {
   let timer,
@@ -71,20 +72,23 @@ function createCheckGate() {
   };
 }
 
-export function createInlinePollingLifecycle(options) {
+export function createInlinePollingLifecycle({ intervalMs, ...options }) {
   const polling = createPollingLifecycle(options);
   const checks = createCheckGate();
+  const scanSchedule = createScanSchedule({ clock: options.clock, intervalMs });
   return Object.assign(polling, {
     checks,
+    scanSchedule,
     invalidateChecks() {
+      scanSchedule.clearPending();
       polling.invalidateResponses();
       checks.invalidate();
       polling.cancelScheduledCheck();
     },
-    queueRetryIfBusy() {
-      if (!checks.requestRetry()) return false;
-      polling.invalidateResponses();
-      return true;
+    restart(check) {
+      polling.renewDeadline();
+      if (checks.requestRetry()) polling.invalidateResponses();
+      else check();
     },
   });
 }

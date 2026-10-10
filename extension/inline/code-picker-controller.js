@@ -1,5 +1,4 @@
 import { formatAccountCheckWarnings } from "../shared/mail-presentation.js";
-import { createScanSchedule } from "../shared/scan-schedule.js";
 import {
   selectSuggestedCodes,
   messageKey,
@@ -47,13 +46,10 @@ export function startCodePicker({
     clock,
     setTimeout,
     clearTimeout,
-  });
-  const { checks } = polling;
-  let view;
-  const scanSchedule = createScanSchedule({
-    clock,
     intervalMs: CODE_PICKER_SCAN_INTERVAL_MS,
   });
+  const { checks, scanSchedule } = polling;
+  let view;
   let dismissed = false,
     filledStep = false,
     lastURL = location.href;
@@ -68,7 +64,6 @@ export function startCodePicker({
   const readStepContext = (context) =>
     readCodeStepContext(context, environment.getComputedStyle);
   function unmountPicker({ preserveStep = false } = {}) {
-    scanSchedule.clearPending();
     polling.invalidateChecks();
     view?.host.remove();
     view = undefined;
@@ -83,11 +78,6 @@ export function startCodePicker({
   }
   function excludeSeenMessages() {
     for (const key of seenMessageKeys) excludedMessageKeys.add(key);
-  }
-  function restartPolling() {
-    polling.renewDeadline();
-    if (polling.queueRetryIfBusy()) return;
-    checkForCodes();
   }
   function positionPicker(field = detectCodeField()) {
     if (!view || !field.ok) return;
@@ -127,7 +117,7 @@ export function startCodePicker({
     stepContext = context;
     const mountedView = createCodePickerView(document, {
       onClose: dismissPicker,
-      onRetry: restartPolling,
+      onRetry: () => polling.restart(checkForCodes),
       onFill: (item, button) => {
         if (view !== mountedView) return;
         // Page changes may still be waiting for the throttled discovery scan.
@@ -157,7 +147,7 @@ export function startCodePicker({
     });
     view = mountedView;
     mountSuggestion(document, view.host);
-    restartPolling();
+    polling.restart(checkForCodes);
     positionPicker(field);
   }
   async function checkForCodes() {
@@ -343,7 +333,7 @@ export function startCodePicker({
       view?.clearCodes();
       if (view) {
         view.setStatus("Waiting for your new code…");
-        restartPolling();
+        polling.restart(checkForCodes);
       } else {
         syncPicker();
       }

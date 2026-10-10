@@ -242,9 +242,10 @@ export function detectOrFillCodeFields({
       error: "The verification-code field changed. Select it and try again.",
     };
   // A digit need not carry its own label, but its group must have a code hint.
+  const digitInputs = candidates.digitInputs.filter(isUsableInput);
   const focusedGroup =
     candidates.digitInputs.includes(focused) && isUsableInput(focused)
-      ? findDigitGroup(focused, candidates.digitInputs.filter(isUsableInput))
+      ? findDigitGroup(focused, digitInputs)
       : null;
   const focusedCodeInput = focusedGroup
     ? focusedGroup.find((input) => visibleCodeInputs.includes(input))
@@ -266,10 +267,7 @@ export function detectOrFillCodeFields({
         ? visibleCodeInputs[0]
         : null);
     if (anchor && isPotentialDigitInput(anchor)) {
-      const group = findDigitGroup(
-        anchor,
-        candidates.digitInputs.filter(isUsableInput),
-      );
+      const group = findDigitGroup(anchor, digitInputs);
       // All digits share one suggestion identity, even as focus moves between
       // them. Keep the anchor labelled so filling can validate it again.
       if (group)
@@ -293,9 +291,10 @@ export function detectOrFillCodeFields({
       candidateCache: candidates,
     };
   }
-  const getVisibleInputs = () =>
-    [...scope.querySelectorAll("input")].filter(isUsableInput);
-  const getDigitInputs = () => getVisibleInputs().filter(isPotentialDigitInput);
+  const getDigitInputs = () =>
+    [...scope.querySelectorAll("input")].filter(
+      (input) => isPotentialDigitInput(input) && isUsableInput(input),
+    );
   const findUniqueDigitGroup = (digitInputs, length) => {
     const groups = [];
     for (const anchor of digitInputs.filter(hasCodeHint)) {
@@ -312,7 +311,6 @@ export function detectOrFillCodeFields({
     }
     return groups.length === 1 ? groups[0] : null;
   };
-  const digitInputs = getDigitInputs();
   let fields;
   if (targetInput && isPotentialDigitInput(targetInput)) {
     fields = findDigitGroup(targetInput, digitInputs, code.length);
@@ -347,9 +345,9 @@ export function detectOrFillCodeFields({
   if (fields) {
     let group = fields;
     for (let index = 0; index < code.length; index++) {
-      // Input handlers may replace the fields after each digit. Resolve the
-      // verification group again before writing the next one.
-      const currentDigitInputs = getDigitInputs();
+      // Reuse discovery until the first write; input handlers may replace the
+      // fields after each digit, so later writes rediscover the group.
+      const currentDigitInputs = index === 0 ? digitInputs : getDigitInputs();
       group = currentDigitInputs.includes(group[index])
         ? findDigitGroup(group[index], currentDigitInputs, code.length)
         : findUniqueDigitGroup(currentDigitInputs, code.length);

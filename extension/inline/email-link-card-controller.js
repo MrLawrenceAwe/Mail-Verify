@@ -1,4 +1,3 @@
-import { createScanSchedule } from "../shared/scan-schedule.js";
 import {
   selectEmailLinks,
   isEmailLinkRequestControl,
@@ -44,13 +43,10 @@ export function startEmailLinkCard({
     clock,
     setTimeout,
     clearTimeout,
-  });
-  const { checks } = polling;
-  let view, discoveryTimer;
-  const scanSchedule = createScanSchedule({
-    clock,
     intervalMs: DEFAULT_SCAN_INTERVAL_MS,
   });
+  const { checks, scanSchedule } = polling;
+  let view, discoveryTimer;
   let lastURL = location.href,
     dismissed = false,
     minReceivedAtMs;
@@ -65,7 +61,6 @@ export function startEmailLinkCard({
     );
   }
   function unmountCard() {
-    scanSchedule.clearPending();
     polling.invalidateChecks();
     view?.host.remove();
     view = undefined;
@@ -73,11 +68,6 @@ export function startEmailLinkCard({
   function dismissCard() {
     dismissed = true;
     unmountCard();
-  }
-  function restartPolling() {
-    polling.renewDeadline();
-    if (polling.queueRetryIfBusy()) return;
-    checkForLinks();
   }
   async function checkForLinks() {
     polling.cancelScheduledCheck();
@@ -186,7 +176,7 @@ export function startEmailLinkCard({
     const { mailType } = activeStep;
     view = createView(document, {
       onClose: dismissCard,
-      onRetry: restartPolling,
+      onRetry: () => polling.restart(checkForLinks),
       mailType,
       async copyResetLink(item) {
         await copyPasswordResetLink(

@@ -43,6 +43,7 @@ Automatic checking lasts up to two minutes. Code suggestions normally check two 
 - Scheduling requires an explicit delay. Cancelling a timer retains the polling deadline.
 - Ending the polling window clears its timer and deadline; invalidating inline checks also invalidates active response bookkeeping. Neither cancels companion workers.
 - A retry during an active check invalidates its response and queues another check. Check completion distinguishes stale responses, normal completion, and queued retries.
+- The inline lifecycle owns its scan schedule: `restart(check)` renews the deadline and runs or queues the check; `invalidateChecks()` also clears pending-scan bookkeeping. Each controller retains its own step and result rules.
 - The [popup controller](../extension/popup/popup-controller.js) closes its native session when resetting a check, separately from the polling deadline.
 
 ## Companion modules

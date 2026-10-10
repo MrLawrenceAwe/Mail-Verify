@@ -319,6 +319,7 @@ test("fills named numeric digit boxes in a shared form", () => {
 });
 
 test("follows split fields replaced after each digit", () => {
+  let queries = 0;
   let rerenderParent = {};
   let current = Array.from(
     { length: 6 },
@@ -333,6 +334,7 @@ test("follows split fields replaced after each digit", () => {
   original[0].dispatchEvent = function (event) {
     this.events.push(event.type);
     if (event.type === "input") {
+      assert.equal(queries, 1, "reuse initial discovery before the first write");
       rerenderParent = {};
       current = current.map(
         (old, i) =>
@@ -346,7 +348,13 @@ test("follows split fields replaced after each digit", () => {
     }
   };
   const rerenderCtx = {
-    document: { querySelectorAll: () => current, activeElement: original[0] },
+    document: {
+      querySelectorAll: () => {
+        queries++;
+        return current;
+      },
+      activeElement: original[0],
+    },
   };
   const rerenderHarness = createVerificationFieldHarness(rerenderCtx);
   assert.equal(

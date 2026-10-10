@@ -5,7 +5,7 @@ import sys
 import time
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 import account_scan_manager
@@ -120,6 +120,25 @@ class AccountScanManagerTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(account_scan_manager.UserError, "too long"):
                 account_scan_manager.scan_with_deadline(account_scan_manager.InboxSession({}))
+
+    def test_scan_failures_preserve_errors_until_deadline_and_clear_deadlines(self):
+        for elapsed in (1, account_scan_manager.ACCOUNT_CHECK_TIMEOUT_SECONDS):
+            with self.subTest(elapsed=elapsed):
+                session = account_scan_manager.InboxSession({})
+                connection = session.connection = Mock(deadline=elapsed)
+                error = OSError("Connection failed")
+                with patch.object(session, "scan_inbox", side_effect=error), patch.object(
+                    account_scan_manager.time, "monotonic", side_effect=(0, elapsed)
+                ):
+                    expected = OSError if elapsed == 1 else account_scan_manager.UserError
+                    with self.assertRaises(expected) as raised:
+                        account_scan_manager.scan_with_deadline(session)
+                if elapsed == 1:
+                    self.assertIs(raised.exception, error)
+                else:
+                    self.assertIn("too long", str(raised.exception))
+                self.assertIsNone(session.deadline)
+                self.assertIsNone(connection.deadline)
 
     def test_slow_account_does_not_delay_healthy_results_or_overlap_scans(self):
         release = threading.Event()
