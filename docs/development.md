@@ -16,7 +16,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control and render code suggestions beside a detected field. |
 | `inline/code-picker-position.js` | Calculate viewport positioning and avoid overlapping page controls. |
 | `inline/code-picker-policy.js`, `inline/email-link-card-policy.js` | Filter suggestions and classify request controls and mutations. |
-| `inline/email-link-step.js` | Detect confirmation/reset waiting prompts and return a step identity and mail type. |
+| `inline/email-link-step.js` | Define the panel selector shared with mutation filtering, detect confirmation/reset waiting prompts, and return a step identity and mail type. |
 | `inline/email-link-card-controller.js`, `inline/email-link-card-view.js` | Control and render the link card. |
 | `inline/mutation-inspection.js` | Share bounded mutation traversal and attribute-target deduplication; picker and link policies supply relevance rules. |
 | `popup-entry.js`, `popup/popup-controller.js`, `popup/popup-view.js` | Start the toolbar popup, manage accounts and polling, and render controls and results. |
@@ -85,7 +85,7 @@ The code picker's initial freshness cutoff accepts mail from the last ten minute
 - Link-step identity tracks the panel, email purpose, and recipients in delivery instructions. Incidental status text and countdowns retain results and the polling deadline; panel replacement, recipient changes, purpose changes, navigation, and explicit resends start new attempts.
 - Confirmation links require instructions such as “Verify email”, “Confirm account”, or “Activate account”; password-reset subjects are excluded. Reset links require instructions such as “Reset your password”, “Change your password”, or “Password reset”; help/support links and negated reset instructions are excluded.
 - Both link types require a visible HTML link or instructions immediately before a plain-text URL. Qualifying HTML takes precedence over plain text. Only supported HTTPS URLs are accepted; attachments, hidden links, and emails with multiple distinct qualifying links are omitted.
-- Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Link details show the initial destination host; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
+- Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Link details show the link domain; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
 
 ## Page detection and performance
 

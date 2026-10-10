@@ -58,7 +58,7 @@ test("both link-card mail types show email details and their own action and guid
         `Inbox: ${item.accountEmail}`,
         `From: ${item.sender}`,
         item.subject,
-        "Initial destination host: example.com",
+        "Link domain: example.com",
       ],
     );
     if (mailType === "confirmationLinks") {
@@ -71,7 +71,7 @@ test("both link-card mail types show email details and their own action and guid
       assert.equal(action.href, undefined);
       assert.match(
         root.innerHTML,
-        /sender and initial destination host before copying/,
+        /sender and link domain before copying/,
       );
       assert.doesNotMatch(root.innerHTML, /Opening a link/);
     }
@@ -120,7 +120,7 @@ test("link cards identify inbox and missing sender without empty subject rows", 
       [
         `Inbox: ${item.accountEmail}`,
         "From: Unknown sender",
-        "Initial destination host: example.com",
+        "Link domain: example.com",
       ],
     );
   }

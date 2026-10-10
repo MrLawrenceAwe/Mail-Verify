@@ -24,7 +24,7 @@ Test suites stay at `tests/`; shared harnesses, mocks, and message builders live
 | `test_popup_*.js` | Polling, accounts, result selection with the real view | `support/popup_harness.js` |
 | `test_code_fields.js` | Detection and filling, including numeric split-digit length checks | `support/verification_field_harness.js` |
 
-The field harness evaluates the serialized entry point in an isolated VM to verify it has no module-scope dependencies.
+The field harness evaluates the serialized entry point in an isolated VM to verify it has no module-scope dependencies. Code-picker split-digit step tests reuse it with their own document overrides.
 
 Code-picker step and selection tests, field tests, and step-context tests use `tests/support/dom_nodes.js` to build explicit element/text-node trees with shared parent and sibling wiring. Field tests define aggregate `textContent` reads locally; step-context tests reject them. Tests update `firstChild.data` to change instructions; the picker harness does not convert plain objects into DOM nodes.
 
@@ -38,13 +38,13 @@ To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 1
 
 `tests/fixtures/modal-suggestions-preview.html` supplies synthetic mail for modal and link-step checks. Use `?mode=modal-code` to fill a code in a native modal, `?mode=modal-reset` to copy a reset link in a modal, or `?mode=status` for a normal waiting panel. Add `&transform=1` to test a scaled, clipped dialog. **Update connection status** must retain the offered link; **Change recipient** and **Resend email** must clear it. Add `&stacked=1` to open a second modal, or `&stacked=reverse` to put the active modal first in DOM order. Suggestions must belong to the active dialog and remain usable. These fixtures do not access Yahoo. When testing edits, serve with caching disabled or use a fresh local port so Chrome reloads imported modules.
 
-`tests/fixtures/numeric-code-preview.html` checks two independent full-length numeric verification fields in one form. Selecting the email-code suggestion must fill the email field and retain the phone field’s existing value.
+`tests/fixtures/inline-numeric-fields-preview.html` checks two independent full-length numeric verification fields in one form. Selecting the email-code suggestion must fill the email field and retain the phone field’s existing value.
 
 `tests/fixtures/mixed-numeric-code-preview.html` combines six numeric email-code boxes with a full-length numeric phone-code field. The initial suggestion must fill only the phone field. **Test split email fields** focuses an unlabelled email digit; the next suggestion must fill those six boxes and preserve the phone field.
 
 `tests/fixtures/verification-step-preview.html` checks resend scope and verification-field replacement. Use `?mode=codes`, `?mode=confirmationLinks`, or `?mode=passwordResetLinks`. **Resend SMS code** must retain the existing email result; **Resend verification email** must clear it. In code mode, **Replace identical input** must retain the unused code, and selecting it must report a successful fill in the current input. Add `&sameForm=1` to place the SMS resend in the same form as the email step; it must still retain the email result. After resending, wait at least one second before **Deliver replacement email**.
 
-`tests/fixtures/independent-code-fields-preview.html` checks four independent numeric fields: **Fill selected email code** must report PASS and preserve the other three populated codes.
+`tests/fixtures/direct-code-fill-preview.html` checks direct filling across four independent numeric fields: **Fill selected email code** must report PASS and preserve the other three populated codes.
 
 `tests/fixtures/link-card-modal-move-preview.html` checks moving the same waiting form between the page and a modal. **Move waiting form into modal** must keep the existing confirmation suggestion accessible inside the dialog; **Return waiting form to page** must restore it outside the dialog with the same result. These checks use synthetic mail only.
 

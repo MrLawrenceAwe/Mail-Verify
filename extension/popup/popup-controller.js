@@ -70,7 +70,7 @@ export function createPopupController({
     if (usingResult || removingAccount || savingAccount) return;
     usingResult = true;
     resetMailCheckSession();
-    view.setAccountAndCheckControlsDisabled(true);
+    view.setCheckAndRemoveButtonsDisabled(true);
     view.setResultButtonsDisabled(true);
     try {
       await action();
@@ -81,7 +81,7 @@ export function createPopupController({
     } finally {
       usingResult = false;
       if (reusable) view.setResultButtonsDisabled(false);
-      view.setAccountAndCheckControlsDisabled(savingAccount);
+      view.setCheckAndRemoveButtonsDisabled(savingAccount);
       if (polling.deadline) scheduleCheck();
       else closeSession();
     }
@@ -193,7 +193,7 @@ export function createPopupController({
     } finally {
       if (polling.isCurrent(requestGeneration)) {
         checking = false;
-        view.setAccountAndCheckControlsDisabled(
+        view.setCheckAndRemoveButtonsDisabled(
           usingResult || removingAccount || savingAccount,
         );
         scheduleCheck(
@@ -224,7 +224,7 @@ export function createPopupController({
     if (savingAccount || removingAccount) return;
     savingAccount = true;
     view.setAccountSaveDisabled(true);
-    view.setAccountAndCheckControlsDisabled(true);
+    view.setCheckAndRemoveButtonsDisabled(true);
     view.setStatus("Checking your Yahoo connection…");
     const { email, password } = view.readCredentialsAndClearPassword();
     try {
@@ -240,7 +240,7 @@ export function createPopupController({
     } finally {
       savingAccount = false;
       view.setAccountSaveDisabled(false);
-      view.setAccountAndCheckControlsDisabled(usingResult || removingAccount);
+      view.setCheckAndRemoveButtonsDisabled(usingResult || removingAccount);
     }
   }
   async function removeAccount(email) {
@@ -248,7 +248,7 @@ export function createPopupController({
     polling.endPollingWindow();
     removingAccount = true;
     resetMailCheckSession();
-    view.setAccountAndCheckControlsDisabled(true);
+    view.setCheckAndRemoveButtonsDisabled(true);
     try {
       const result = await sendOneOffRequest({
         action: "removeAccount",
@@ -261,7 +261,7 @@ export function createPopupController({
       polling.renewDeadline();
     } finally {
       removingAccount = false;
-      view.setAccountAndCheckControlsDisabled(false);
+      view.setCheckAndRemoveButtonsDisabled(false);
       if (polling.deadline && !checking) scheduleCheck();
     }
   }

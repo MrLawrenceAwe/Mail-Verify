@@ -13,7 +13,7 @@ export const MAIL_PRESENTATION = {
       "No recent confirmation link yet. Request one and keep this popup open.",
     waitingStatus: "Waiting for your confirmation email…",
     guidance:
-      "Check the sender and initial destination host. Links may redirect. Opening a link in a new tab may confirm your account.",
+      "Check the sender and link domain. Links may redirect. Opening a link in a new tab may confirm your account.",
   },
   passwordResetLinks: {
     resultLabel: "password reset links",
@@ -25,7 +25,7 @@ export const MAIL_PRESENTATION = {
       "No recent password reset link yet. Request one and keep this popup open.",
     waitingStatus: "Waiting for your password reset email…",
     guidance:
-      "Check the sender and initial destination host before copying. Links may redirect.",
+      "Check the sender and link domain before copying. Links may redirect.",
   },
 };
 

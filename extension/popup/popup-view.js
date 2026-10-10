@@ -59,7 +59,7 @@ export function createPopupView(
     getElement("email").value = "";
   }
 
-  function setAccountAndCheckControlsDisabled(disabled) {
+  function setCheckAndRemoveButtonsDisabled(disabled) {
     for (const [id] of checkButtonMailTypes) getElement(id).disabled = disabled;
     for (const button of getElement("accounts").querySelectorAll("button"))
       button.disabled = disabled;
@@ -169,7 +169,7 @@ export function createPopupView(
     setAccountSaveDisabled,
     readCredentialsAndClearPassword,
     clearAccountEmail,
-    setAccountAndCheckControlsDisabled,
+    setCheckAndRemoveButtonsDisabled,
     setResultButtonsDisabled,
     markCodeFilled,
     markLinkOpened,

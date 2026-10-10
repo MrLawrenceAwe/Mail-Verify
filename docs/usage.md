@@ -8,7 +8,7 @@
 | Account confirmation | Bottom-right card on a recognised “Check your email” screen | **Open confirmation link** in a new tab; this may immediately confirm the account | **Find confirmation links** |
 | Password reset | Bottom-right card on a recognised reset-email waiting screen | **Copy password reset link**, then paste it where you want to use it | **Find password reset links** |
 
-Request the email on the website, then choose its matching result. Review the account, sender, subject, and initial destination host before using it. Code suggestions show the sender and inbox; hover to see the subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.
+Request the email on the website, then choose its matching result. Review the account, sender, subject, and link domain before using it. Code suggestions show the sender and inbox; hover to see the subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.
 
 Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion. Resending or navigating restores suggestions. Link cards also return when the waiting panel, recipient, or email purpose changes; code suggestions otherwise stay dismissed on that page. The toolbar popup handles account setup and manual checks. A status message confirms a successful reset-link copy; use **Copy again** to repeat it. If a website blocks clipboard access, use the popup.
 
@@ -25,6 +25,6 @@ The initial inline code suggestion panel accepts emails from the last ten minute
 - Supports clearly labelled numeric codes of 4–8 digits and common verification inputs on HTTPS pages.
 - Recognises common English confirmation and password-reset email prompts and instructions.
 - Omits ambiguous results, hidden content, attachments, and unsupported links. Other languages and unusual forms may not work.
-- Does not authenticate senders or match results to the current website. Check the sender and initial destination host before using a result; tracking links may redirect.
+- Does not authenticate senders or match results to the current website. Check the sender and link domain before using a result; tracking links may redirect.
 
 See [detection and freshness rules](development.md#detection-and-freshness-rules) for exact matching and timestamp behaviour.

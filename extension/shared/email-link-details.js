@@ -5,7 +5,7 @@ export function appendEmailLinkDetails(document, card, item, className = "") {
     `Inbox: ${item.accountEmail}`,
     `From: ${formatSenderLabel(item.sender)}`,
     item.subject?.trim(),
-    `Initial destination host: ${new URL(item.url).hostname}`,
+    `Link domain: ${new URL(item.url).hostname}`,
   ];
   for (const text of details.filter(Boolean)) {
     const line = document.createElement("p");

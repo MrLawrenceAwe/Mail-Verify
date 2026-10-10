@@ -1,4 +1,5 @@
 import { createMutationInspection } from "./mutation-inspection.js";
+import { EMAIL_LINK_PANEL_SELECTOR } from "./email-link-step.js";
 import {
   getRequestControlLabel,
   isPhoneOnlyRequestLabel,
@@ -36,8 +37,7 @@ export function mutationAffectsEmailLinkCard(
   document,
   hasActiveStep,
 ) {
-  const panels = "main, [role=main], form, [role=dialog], dialog";
-  const relevantElements = `${panels}, input`;
+  const relevantElements = `${EMAIL_LINK_PANEL_SELECTOR}, input`;
   const { textRequiresRediscovery, subtreeRequiresRediscovery, claimRecord } =
     createMutationInspection((value) =>
       /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(
@@ -52,7 +52,10 @@ export function mutationAffectsEmailLinkCard(
     const element = target.nodeType === 1 ? target : target.parentElement;
     const mutationInCandidatePanel =
       hasActiveStep &&
-      Boolean(element?.closest?.(panels) || !document.querySelector?.(panels));
+      Boolean(
+        element?.closest?.(EMAIL_LINK_PANEL_SELECTOR) ||
+          !document.querySelector?.(EMAIL_LINK_PANEL_SELECTOR),
+      );
     if (record.type === "characterData")
       return (
         mutationInCandidatePanel ||

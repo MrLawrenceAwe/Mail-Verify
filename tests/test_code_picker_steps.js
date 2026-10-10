@@ -1,8 +1,7 @@
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import vm from "node:vm";
-import { detectOrFillCodeFields } from "../extension/shared/code-fields.js";
+import { createVerificationFieldHarness } from "./support/verification_field_harness.js";
 import { createCodePickerHarness } from "./support/code_picker_harness.js";
 import { createTextElement } from "./support/dom_nodes.js";
 
@@ -118,7 +117,7 @@ test("focus moves within split digits preserve suggestions, but another group st
     let queries = 0,
       mounts = 0,
       requests = 0;
-    const context = vm.createContext({
+    const context = createVerificationFieldHarness({
       document: {
         activeElement: first[0],
         querySelectorAll: () => {
@@ -126,13 +125,7 @@ test("focus moves within split digits preserve suggestions, but another group st
           return [...first, ...second];
         },
       },
-      innerHeight: 800,
-      innerWidth: 1200,
     });
-    const detect = vm.runInContext(
-      `(${detectOrFillCodeFields.toString()})`,
-      context,
-    );
     const code = {
       uid: 1,
       accountEmail: "test@yahoo.com",
@@ -141,7 +134,7 @@ test("focus moves within split digits preserve suggestions, but another group st
       receivedAt: 9000,
     };
     const { events, timers, results } = createCodePickerHarness({
-      detectOrFillCodeFields: detect,
+      detectOrFillCodeFields: context.handle,
       now: () => 10000,
       onMount: () => {
         mounts++;

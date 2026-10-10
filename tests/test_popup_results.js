@@ -129,7 +129,7 @@ test("finds links only on request and opens only the selected link", async () =>
       `Inbox: ${emailLinkMessage.accountEmail}`,
       `From: ${emailLinkMessage.sender}`,
       emailLinkMessage.subject,
-      "Initial destination host: example.com",
+      "Link domain: example.com",
     ],
   );
   const button = controls.results.querySelectorAll("button")[0];
@@ -298,7 +298,7 @@ test("popup guidance follows the selected action and clears when returning to co
   await waitForAsyncCallbacks();
   assert.match(
     controls.linkGuidance.textContent,
-    /sender and initial destination host before copying/,
+    /sender and link domain before copying/,
   );
   assert.doesNotMatch(controls.linkGuidance.textContent, /open|confirm/i);
   controls.checkCodes.trigger();
@@ -346,7 +346,7 @@ test("popup link results identify inbox and missing sender without empty subject
       [
         `Inbox: ${emailLinkMessage.accountEmail}`,
         "From: Unknown sender",
-        "Initial destination host: example.com",
+        "Link domain: example.com",
       ],
     );
   }
