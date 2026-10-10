@@ -43,6 +43,8 @@ To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 1
 
 ## Manual validation
 
+`tests/fixtures/review-regressions-preview.html` checks independent numeric fields: **Fill selected email code** must report PASS and preserve the other three populated codes. With `?mode=links`, **Move waiting form into modal** must keep the existing confirmation suggestion accessible inside the dialog; **Return waiting form to page** must restore it outside the dialog with the same result. These checks use synthetic mail only.
+
 After installing the companion, reloading the extension, and refreshing the test page:
 
 1. Connect a Yahoo account and confirm that it appears in the popup.

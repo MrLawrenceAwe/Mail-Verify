@@ -33,6 +33,7 @@ export function createEmailLinkCardHarness(
     detected: true,
     screenKey: "first signup",
     panel,
+    modal,
     code: false,
     requests: 0,
     collectionModes: [],
@@ -47,8 +48,8 @@ export function createEmailLinkCardHarness(
   state.mailType = mailType;
   const document = {
     hidden: false,
-    documentElement: { append() {} },
-    querySelector: (selector) => (selector === "dialog:modal" ? modal : {}),
+    documentElement: { append(host) { host.parentNode = this; } },
+    querySelector: (selector) => (selector === "dialog:modal" ? state.modal : {}),
     addEventListener(name, fn) {
       events[name] = fn;
     },
@@ -98,15 +99,18 @@ export function createEmailLinkCardHarness(
     },
     detectCode: () => state.code,
     createView(_document, callbacks) {
+      const attributes = new Map();
       const view = {
         callbacks,
         removed: false,
         links: [],
         host: {
           style: {},
-          hasAttribute: () => false,
-          setAttribute() {},
-          showPopover() {},
+          hasAttribute: (name) => attributes.has(name),
+          setAttribute: (name, value) => attributes.set(name, value),
+          removeAttribute: (name) => attributes.delete(name),
+          showPopover() { this.inTopLayer = true; },
+          hidePopover() { this.inTopLayer = false; },
           remove() {
             view.removed = true;
           },

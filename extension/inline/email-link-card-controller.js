@@ -22,7 +22,7 @@ import {
 import { requestInlineCheck } from "./inline-client.js";
 import { getPageCoordinator } from "./page-coordinator.js";
 import { createInlinePollingLifecycle } from "../shared/polling-lifecycle.js";
-import { mountSuggestion } from "./suggestion-mount.js";
+import { mountSuggestion, suggestionMountRoot } from "./suggestion-mount.js";
 
 export function startEmailLinkCard({
   environment = globalThis,
@@ -171,7 +171,11 @@ export function startEmailLinkCard({
       minReceivedAtMs ??= stepStartCutoff(clock.now());
       polling.renewDeadline();
     }
-    if (view) return;
+    if (view) {
+      if (view.host.parentNode !== suggestionMountRoot(document))
+        mountSuggestion(document, view.host);
+      return;
+    }
     currentLinks = [];
     const { mailType } = activeStep;
     view = createView(document, {

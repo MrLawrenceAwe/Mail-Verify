@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mail Verify review regressions</title>
+<style>
+  body { font:18px system-ui; margin:40px; }
+  input { display:block; margin:8px 0; padding:8px; font:inherit; }
+  button { margin:8px; padding:8px; }
+  dialog { padding:24px; }
+</style>
+<main></main>
+<p id="feedback" role="status"></p>
+<script type="module">
+  import { detectOrFillCodeFields } from '../../extension/shared/code-fields.js';
+  import { startEmailLinkCard } from '../../extension/inline/email-link-card-controller.js';
+  import { createMockInlineRuntime } from '../support/mock_inline_port.js';
+  const main = document.querySelector('main');
+  const feedback = document.querySelector('#feedback');
+  if (new URL(location.href).searchParams.get('mode') === 'links') {
+    main.innerHTML = '<form><h1>Account confirmation</h1><p>Check your email for a confirmation link. We sent a link to preview@yahoo.com.</p><button type="button" id="move">Move waiting form into modal</button><button type="button" id="return">Return waiting form to page</button></form>';
+    const form = main.querySelector('form');
+    const dialog = document.createElement('dialog');
+    document.body.append(dialog);
+    const receivedAt = Date.now();
+    window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true,
+      confirmationLinks:[{ uid:1, accountEmail:'preview@yahoo.com',
+        sender:'auth@example.test', subject:'Confirm your account',
+        url:'https://example.test/verify', receivedAt }], scanPending:false })) };
+    document.querySelector('#move').onclick = () => { dialog.append(form); dialog.showModal(); };
+    document.querySelector('#return').onclick = () => { main.append(form); dialog.close(); };
+    startEmailLinkCard();
+  } else {
+    main.innerHTML = '<form><h1>Independent numeric codes</h1>' +
+      ['Email', 'Phone', 'Backup', 'Account'].map((label, index) =>
+        `<label>${label} verification code<input type="number" autocomplete="one-time-code" value="${String(index + 1).repeat(4)}"></label>`).join('') +
+      '<button type="button" id="fill">Fill selected email code</button></form>';
+    const inputs = [...main.querySelectorAll('input')];
+    document.querySelector('#fill').onclick = () => {
+      inputs[0].focus();
+      const result = detectOrFillCodeFields({action:'fill', code:'9876'});
+      const values = inputs.map(input => input.value);
+      feedback.textContent = result.ok && values.join(',') === '9876,2222,3333,4444'
+        ? 'PASS: email code filled; all other codes unchanged.'
+        : `FAIL: ${JSON.stringify(result)}; values ${values.join(',')}`;
+    };
+  }
+</script>

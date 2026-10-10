@@ -7,6 +7,33 @@ import {
   stepMutation,
 } from "./support/email_link_card_harness.js";
 
+test("the same waiting step moves its existing card into and out of a modal", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const harness = createEmailLinkCardHarness(null, mailType);
+    await waitForAsyncCallbacks();
+    const view = harness.state.views[0];
+    const modal = { append(host) { host.parentNode = this; } };
+    harness.state.now = 20000;
+    harness.state.modal = modal;
+    harness.state.mutate(stepMutation());
+    await harness.run(250);
+    assert.equal(view.host.parentNode, modal);
+    assert.equal(view.host.inTopLayer, true);
+    assert.equal(harness.state.views.length, 1);
+    assert.deepEqual(view.links, [emailLinkMessage]);
+    harness.state.modal = null;
+    harness.state.mutate(stepMutation());
+    await harness.run(250);
+    assert.equal(view.host.parentNode, harness.document.documentElement);
+    assert.equal(view.host.inTopLayer, false);
+    assert.equal(harness.state.requests, 1);
+    harness.state.now = 130000;
+    await harness.run(8000);
+    assert.equal(harness.state.requests, 1, "moving the card retains its deadline");
+    assert.equal(view.callbacks.acceptLinkSelection(emailLinkMessage), true);
+  }
+});
+
 test("short-unit countdown ticks retain links and the polling deadline", async () => {
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     for (const unit of ["s", "m"]) {

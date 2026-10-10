@@ -713,6 +713,42 @@ function createFieldHandler(inputs, activeElement = null) {
   }).handle;
 }
 
+test("independently labelled numeric codes are not combined into digit groups", () => {
+  for (const count of [4, 6, 8]) {
+    for (const populated of [false, true]) {
+      const form = {};
+      const inputs = Array.from({ length: count }, (_, index) => new FakeInput({
+        type: "number", form, parentElement: { parentElement: form },
+        autocomplete: "one-time-code",
+        labels: [{ textContent: `${String.fromCharCode(65 + index)} verification code` }],
+        value: populated ? "1111" : "",
+      }));
+      const code = "98765432".slice(0, count);
+      const handle = createFieldHandler(inputs, inputs[1]);
+      assert.equal(handle({ action: "detect" }).anchor, inputs[1]);
+      assert.equal(handle({ action: "fill", code }).ok, true);
+      assert.equal(inputs[1].value, code);
+      for (const input of inputs.filter((input) => input !== inputs[1])) {
+        assert.equal(input.value, populated ? "1111" : "");
+        assert.deepEqual(input.events, []);
+      }
+      assert.equal(handle({ action: "fill", code, expectedAnchor: inputs[0] }).ok, true);
+      assert.equal(inputs[0].value, code);
+    }
+  }
+});
+
+test("numeric digit indices retain a shared OTP identity", () => {
+  const parentElement = {};
+  const inputs = Array.from({ length: 6 }, (_, index) => new FakeInput({
+    type: "number", parentElement, name: `verification_code_${index + 1}`,
+    autocomplete: "one-time-code",
+    labels: [{ textContent: `Digit ${index + 1}` }],
+  }));
+  assert.equal(run(inputs, inputs[2]).ok, true);
+  assert.equal(inputs.map((input) => input.value).join(""), "123456");
+});
+
 test("focusing an unlabelled digit selects its own OTP group for detection and fill", () => {
   const form = {};
   const groups = Array.from({ length: 2 }, () => {

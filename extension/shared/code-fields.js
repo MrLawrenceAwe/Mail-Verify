@@ -169,11 +169,27 @@ export function detectOrFillCodeFields({
         ),
     );
   const findDigitGroup = (anchor, digitInputs, length) => {
+    const numericFieldIdentity = (input) => {
+      if (input.type !== "number" || input.maxLength === 1) return null;
+      const hints = getInputHints(input);
+      // Accessible names outrank implementation names. Ignore digit indices
+      // and generic box labels, but keep separate email/phone code identities.
+      return [hints[4], hints[5], ...hints.slice(6), hints[3], hints[1], hints[2]]
+        .map((hint) =>
+          (hint || "").trim().toLowerCase()
+            .replace(/[\s_-]*\d+$/, "")
+            .replace(/[\s_-]+/g, " "),
+        )
+        .find((hint) =>
+          hint && !/^(?:digit|character|box|cell|otp|pin|code)$/.test(hint),
+        );
+    };
     const matchesGroup = (group) =>
       group.length >= 4 &&
       group.length <= 8 &&
       group.some(hasCodeHint) &&
-      group.every(isCodeDigit);
+      group.every(isCodeDigit) &&
+      new Set(group.map(numericFieldIdentity).filter(Boolean)).size <= 1;
     const groupsByParent = new Map();
     const formGroup = digitInputs.filter((input) => input.form === anchor.form);
     const smallestGroup = (input) => {
