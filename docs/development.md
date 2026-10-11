@@ -8,28 +8,14 @@ Run `npm test` for the automated suites. See [testing and previews](testing.md) 
 
 Chrome entry points and `popup.html` stay at the extension root. `popup/` contains toolbar controllers, rendering, and styles; `inline/` contains on-page controllers, views, and coordination; `shared/` contains transport, polling, freshness and URL rules, field handling, and presentation helpers used across surfaces.
 
-| Module | Responsibility |
+| Area | Owner |
 | --- | --- |
-| `content-entry.js` | Starts the code picker and email-link card with one page coordinator. |
-| `inline/page-coordinator.js` | Shares code-field candidates, DOM observation, and page-change notifications. |
-| `inline/active-modal.js`, `inline/suggestion-mount.js` | Select the active native modal and mount suggestions above its backdrop. |
-| `inline/code-picker-controller.js`, `inline/code-picker-view.js` | Control and render code suggestions beside a detected field. |
-| `inline/code-picker-position.js` | Calculate viewport positioning and avoid overlapping page controls. |
-| `inline/code-picker-policy.js`, `inline/email-link-card-policy.js` | Filter suggestions and classify request controls and mutations. |
-| `inline/email-link-step.js` | Define the panel selector shared with mutation filtering, detect confirmation/reset waiting prompts, and return a step identity and mail type. |
-| `inline/email-link-card-controller.js`, `inline/email-link-card-view.js` | Control and render the link card. |
-| `inline/mutation-inspection.js` | Share bounded mutation traversal and attribute-target deduplication; picker and link policies supply relevance rules. |
-| `popup-entry.js`, `popup/popup-controller.js`, `popup/popup-view.js` | Start the toolbar popup, manage accounts and polling, and render controls and results. |
-| `shared/email-link-details.js`, `shared/mail-presentation.js`, `shared/reset-link-copy.js` | Share link-detail rows, mail-type-specific labels and guidance, and reset-link clipboard handling. |
-| `inline/inline-client.js`, `background.js` | Hold a page request port open, validate active-tab access, and share in-flight native requests per mail type. |
-| `shared/companion-client.js` | Handle native requests and reusable sessions; distinguish unavailable connections with `CompanionUnavailableError` from operational response errors and timeouts. |
-| `shared/polling-lifecycle.js` | Manage polling deadlines, stale responses, scheduled checks, and queued retries. |
-| `shared/scan-schedule.js` | Decide when to collect pending workers or start a full scan and choose the next poll delay. |
-| `shared/mail-timing.js`, `shared/email-link-url.js` | Share freshness and link-URL rules. |
-| `inline/request-controls.js` | Share on-page request-control labels and selectors. |
-| `shared/code-fields.js` | Detect and fill verification inputs through `detectOrFillCodeFields()` and return verification-context roots for step tracking; helpers stay inside the injected function because Chrome serializes it. |
-| `inline/code-step-context.js` | Read bounded verification-context text and return `recipientKey`: `null` for an incomplete read, or a serialised recipient list (including `"[]"` when no recipient is recognised). |
-| `inline/recipient-identity.js` | Match ordinary and masked email addresses and serialise recipient identities; code and link detectors supply their own instruction classifiers. |
+| Startup and transport | Root entry points, `background.js`, `shared/companion-client.js`, `inline/inline-client.js` |
+| Toolbar | `popup/` controllers, views and styles |
+| On-page suggestions | `inline/` picker/link controllers, views, policies and positioning |
+| Page coordination | `page-coordinator.js`, modal mounting, mutation inspection and recipient/step detection |
+| Shared rules | `shared/` polling, scan scheduling, timing, link URLs and presentation |
+| Field detection and filling | `shared/code-fields.js`; helpers stay in its serialised entry point for Chrome injection |
 
 ### Request contract
 
@@ -49,16 +35,11 @@ Automatic checking lasts up to two minutes. Code suggestions normally check two 
 
 ## Companion modules
 
-| Module | Responsibility |
-| --- | --- |
-| `host.py` | Dispatch requests, frame native messages, and serialize credential updates. |
-| `account_scan_manager.py` | Manage account scan workers, pending scans, connections, cached results, and warnings. `discard_account_state(email)` discards runtime state without deleting saved credentials. |
-| `inbox_session.py` | Reuse IMAP connections and manage bounded incremental inbox scans. |
-| `code_extraction.py` | Extract one unambiguous verification code. |
-| `link_extraction.py` | Extract confirmation and password-reset links. |
-| `email_content.py` | Traverse MIME parts and parse visible HTML for both extractors. |
-| `keychain.py`, `errors.py` | Access the saved credential record through `access_saved_credentials()` and define user-facing errors. |
-| `install.py` | Discover, install, and remove companion runtime modules. |
+`host.py` frames and dispatches native requests. `account_scan_manager.py` owns
+workers and result caches; `inbox_session.py` owns IMAP connections and discovery.
+Code and link extractors share MIME/visible-HTML traversal in `email_content.py`.
+`keychain.py` handles credentials, `errors.py` defines user-facing errors, and
+`install.py` installs or removes runtime modules.
 
 Up to four account scans run concurrently in a thread pool. Each request waits at most 250 ms for scans, returns completed results and pending status, and retains pending work for later collection polls without overlapping scans for the same session. Collection polls do not rescan accounts that already finished. Cached results expire after ten minutes. Removing an account or changing credentials or mail type discards its results immediately and closes its connection after any active worker finishes.
 
