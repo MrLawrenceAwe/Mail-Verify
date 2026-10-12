@@ -19,7 +19,7 @@ Requires macOS, desktop Chrome, Python 3.9+ and a Yahoo-generated app password.
 1. Run **Install Companion.command** from the project folder.
 2. Load the `extension` folder through Chrome's **Load unpacked** control.
 3. Pin Mail Verify, open its popup and add your Yahoo account.
-4. Request a verification email on a website, then select the matching suggestion.
+4. Refresh any website tabs that were already open, request a verification email, then select the matching suggestion.
 
 See [setup, updates and removal](docs/setup.md) and [the usage guide](docs/usage.md). Check the sender and destination before using a suggestion; this tool does not authenticate senders or match results to the current website.
 

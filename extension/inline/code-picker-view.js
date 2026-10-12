@@ -45,11 +45,11 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
         text-align: left;
         border-radius: 5px;
         padding: 6px 8px;
-        background: #6096f4;
+        background: #2763dc;
         color: white;
       }
       .code:hover {
-        background: #477fdf;
+        background: #2253bc;
       }
       .code + .code {
         margin-top: 4px;

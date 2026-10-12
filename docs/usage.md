@@ -18,13 +18,16 @@ Automatic checking lasts up to two minutes while the tab is active. Keep the pop
 
 Checks show inbox emails from the last ten minutes. Spam and other folders are excluded. Results from slower accounts may appear later.
 
+Initial checks inspect the newest 30 messages in each inbox; later checks discover up to 30 newly arrived messages at a time. Messages larger than 1,000,000 bytes (1 MB), including attachments, are skipped. A recent email can therefore be missed in a busy inbox or if it is too large. If an expected result is absent, check Yahoo directly.
+
 The initial inline code suggestion panel accepts emails from the last ten minutes, including mail delivered before the page loaded. Later code steps and initial on-page link suggestions allow emails received up to five seconds before the step appeared. Changing an existing link panel, recipient, or email purpose excludes mail dated before the next whole second. Resending clears older suggestions; an email arriving immediately after the click may also be excluded. Use the popup to choose other recent emails manually.
 
 ## Supported content and limits
 
 - Supports clearly labelled numeric codes of 4–8 digits and common verification inputs on HTTPS pages.
 - Recognises common English confirmation and password-reset email prompts and instructions.
-- Omits ambiguous results, hidden content, attachments, and unsupported links. Other languages and unusual forms may not work.
+- Omits ambiguous results, attachment content, and unsupported links. Other languages and unusual forms may not work.
+- HTML filtering skips scripts, styles, templates, and content marked with `hidden`, `aria-hidden="true"`, or inline `display: none` / `visibility: hidden`. It does not evaluate stylesheets; content hidden through CSS classes or other styling may still produce results.
 - Does not authenticate senders or match results to the current website. Check the sender and link domain before using a result; tracking links may redirect.
 
 See [detection and freshness rules](development.md#detection-and-freshness-rules) for exact matching and timestamp behaviour.

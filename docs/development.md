@@ -70,6 +70,8 @@ Background sessions close after 15 seconds without a new check; the popup reuses
 
 [InboxSession](../companion/inbox_session.py) discovers and queues at most 30 recent messages, then downloads eligible bodies newest first in batches of five. It processes every returned body before returning a batch's results; empty batches continue within the scan budget. Deferred bodies remain queued behind newly arrived mail.
 
+Initial discovery inspects the newest 30 inbox messages; incremental discovery retains up to 30 newly arrived message UIDs at a time. Messages whose reported `RFC822.SIZE` exceeds 1,000,000 bytes are excluded, including messages whose attachments push the total above that limit. These limits can omit otherwise recent verification mail.
+
 Missing metadata and bodies are retried. Initial discovery remembers processed bodies, including messages without results, so retries advance rather than repeatedly downloading the newest batch. Discovery progress and body completion are tracked separately; retry state clears when discovery completes or the connection closes.
 
 Each inbox retains the union of its five newest results and the newest result from each of five distinct senders, giving at most nine results. Cached results and queued bodies expire after ten minutes. Each check reloads credentials; removed or changed accounts cannot retain an active connection.
@@ -84,7 +86,8 @@ The code picker's initial freshness cutoff accepts mail from the last ten minute
 - Link cards recognise common English waiting prompts in short visible panels. Newsletter screens are excluded.
 - Link-step identity tracks the panel, email purpose, and recipients in delivery instructions. Incidental status text and countdowns retain results and the polling deadline; panel replacement, recipient changes, purpose changes, navigation, and explicit resends start new attempts.
 - Confirmation links require instructions such as “Verify email”, “Confirm account”, or “Activate account”; password-reset subjects are excluded. Reset links require instructions such as “Reset your password”, “Change your password”, or “Password reset”; help/support links and negated reset instructions are excluded.
-- Both link types require a visible HTML link or instructions immediately before a plain-text URL. Qualifying HTML takes precedence over plain text. Only supported HTTPS URLs are accepted; attachments, hidden links, and emails with multiple distinct qualifying links are omitted.
+- Both link types require a labelled HTML link that passes the HTML visibility filter or instructions immediately before a plain-text URL. Qualifying HTML takes precedence over plain text. Only supported HTTPS URLs are accepted; attachment content and emails with multiple distinct qualifying links are omitted.
+- The shared HTML visibility filter skips scripts, styles, templates, and elements marked with `hidden`, `aria-hidden="true"`, or inline `display: none` / `visibility: hidden`, together with their descendants. It does not evaluate stylesheets or other hiding techniques, so CSS-class-hidden codes and links can still qualify. Plain-text alternatives are evaluated independently.
 - Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Link details show the link domain; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
 
 ## Page detection and performance

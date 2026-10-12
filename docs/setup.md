@@ -7,8 +7,9 @@
 3. Pin **Mail Verify** from Chrome’s Extensions menu and open it.
 4. Enter your Yahoo email and a **Yahoo-generated app password**, then click **Save account**. Create the app password in [Yahoo Account Security](https://login.yahoo.com/account/security); enter it in the extension. Your normal Yahoo password cannot be used. Use **Add or update Yahoo account** for additional inboxes or to update an existing account’s app password.
 5. If macOS requests Keychain access, approve access for the companion’s Python process.
+6. Refresh any website tabs that were already open when you loaded the extension so on-page suggestions can start.
 
-For an existing installation, rerun **Install Companion.command** after companion changes and click **Reload** on Chrome’s Extensions page after extension changes. Saved accounts are retained.
+For an existing installation, rerun **Install Companion.command** after companion changes and click **Reload** on Chrome’s Extensions page after extension changes. After reloading the extension, refresh affected website tabs to load the updated on-page suggestions. Saved accounts are retained.
 
 If a mail check reports **Unsupported request**, the installed companion is out of date. Close the popup, rerun **Install Companion.command**, then reopen the popup and check again. Reloading the extension alone does not update the companion.
 
