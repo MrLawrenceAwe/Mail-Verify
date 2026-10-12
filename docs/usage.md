@@ -8,7 +8,7 @@
 | Account confirmation | Bottom-right card on a recognised “Check your email” screen | **Open confirmation link** in a new tab; this may immediately confirm the account | **Find confirmation links** |
 | Password reset | Bottom-right card on a recognised reset-email waiting screen | **Copy password reset link**, then paste it where you want to use it | **Find password reset links** |
 
-Request the email on the website, then choose its matching result. Review the account, sender, subject, and link domain before using it. Code suggestions show the sender and inbox; hover to see the subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.
+Request the email on the website, then choose its matching result. Review the account, sender, subject, arrival time, and link domain before using it. Results show the arrival time in your local timezone, including seconds to distinguish repeated requests. Code suggestions show the sender and inbox; hover to see the subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.
 
 Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion. Resending or navigating restores suggestions. Link cards also return when the waiting panel, recipient, or email purpose changes; code suggestions otherwise stay dismissed on that page. The toolbar popup handles account setup and manual checks. A status message confirms a successful reset-link copy; use **Copy again** to repeat it. If a website blocks clipboard access, use the popup.
 

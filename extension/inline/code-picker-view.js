@@ -1,4 +1,7 @@
-import { formatSenderLabel } from "../shared/mail-presentation.js";
+import {
+  formatSenderLabel,
+  formatReceivedAt,
+} from "../shared/mail-presentation.js";
 
 export function createCodePickerView(document, { onClose, onRetry, onFill }) {
   const host = document.createElement("div");
@@ -134,6 +137,7 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
     results.replaceChildren();
     for (const item of codes) {
       const sender = formatSenderLabel(item.sender);
+      const received = formatReceivedAt(item.receivedAt);
       const button = document.createElement("button");
       button.className = "code";
       button.innerHTML = /* HTML */ `
@@ -150,11 +154,11 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
       `;
       button.querySelector("strong").textContent = `Fill code ${item.code}`;
       button.querySelector("small").textContent =
-        `${sender} · ${item.accountEmail}`;
-      button.title = `${item.accountEmail}\n${sender}\n${item.subject}\nFill on ${hostname}`;
+        `${sender} · ${item.accountEmail} · ${received}`;
+      button.title = `${item.accountEmail}\n${sender}\n${item.subject}\n${received}\nFill on ${hostname}`;
       button.setAttribute(
         "aria-label",
-        `Fill code ${item.code} from ${sender} in ${item.accountEmail}. ${item.subject}. On ${hostname}`,
+        `Fill code ${item.code} from ${sender} in ${item.accountEmail}. ${item.subject}. ${received}. On ${hostname}`,
       );
       button.addEventListener("mousedown", (event) => event.preventDefault());
       button.onclick = () => onFill(item, button);

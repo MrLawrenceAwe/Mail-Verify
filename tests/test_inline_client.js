@@ -43,5 +43,5 @@ test("inline check reports a disconnected service worker", async () => {
   const chromeRuntime = runtime();
   const pending = requestInlineCheck(chromeRuntime, "confirmationLinks");
   chromeRuntime.drop();
-  await assert.rejects(pending, /disconnected/);
+  await assert.rejects(pending, /disconnected.*Reload the extension.*refresh this page/);
 });

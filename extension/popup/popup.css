@@ -150,7 +150,7 @@ button:disabled {
 }
 .hint {
   font-size: 12px;
-  color: #80708e;
+  color: #70617e;
   margin: 6px 0 13px;
 }
 .card {
@@ -180,7 +180,7 @@ button:disabled {
 }
 .subject {
   font-size: 11px;
-  color: #81758e;
+  color: #70617e;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -191,7 +191,7 @@ button:disabled {
 footer {
   font-size: 10px;
   text-align: center;
-  color: #8e809c;
+  color: #70617e;
   padding: 12px 10px 17px;
   border-top: 1px solid #eae4f3;
 }

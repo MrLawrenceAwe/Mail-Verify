@@ -158,7 +158,7 @@ export function startCodePicker({
       return;
     const checkToken = checks.start();
     const requestGeneration = polling.generation;
-    let hasCheckIssues = false;
+    let checkIssueMessage = "";
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
       const { collectOnly } = scanSchedule.beginCheck();
@@ -175,7 +175,9 @@ export function startCodePicker({
       if (!response?.ok)
         throw new Error(response?.error || "Could not check your inboxes.");
       scanSchedule.recordResponse(response.scanPending);
-      hasCheckIssues = !!response.warnings?.length;
+      checkIssueMessage = response.warnings?.length
+        ? formatAccountCheckWarnings(response.warnings)
+        : "";
       for (const item of response.codes) seenMessageKeys.add(messageKey(item));
       const codes = selectSuggestedCodes(
         response.codes,
@@ -184,14 +186,14 @@ export function startCodePicker({
         excludedMessageKeys,
       );
       view.renderCodes(codes, location.hostname);
-      const status = response.warnings?.length
-        ? formatAccountCheckWarnings(response.warnings)
+      const status = checkIssueMessage
+        ? checkIssueMessage
         : codes.length
           ? location.hostname
           : "Waiting for an email code…";
       view.setStatus(status);
     } catch (error) {
-      hasCheckIssues = true;
+      checkIssueMessage = error.message;
       if (polling.isCurrent(requestGeneration) && view) {
         scanSchedule.clearPending();
         view.clearCodes();
@@ -204,15 +206,17 @@ export function startCodePicker({
         if (view && !document.hidden) checkForCodes();
         return;
       }
-      if (view) positionPicker();
       if (view && !polling.hasExpired()) {
         polling.schedule(
           checkForCodes,
           polling.isCurrent(requestGeneration) ? scanSchedule.pollDelayMs : 0,
         );
-      } else if (view && !view.hasCodes() && !hasCheckIssues) {
-        view.setStatus("No code found. Click ↻ to check again.");
+      } else if (view) {
+        view.setStatus(
+          `${checkIssueMessage ? `${checkIssueMessage} ` : ""}Checking finished. Click ↻ to check again.`,
+        );
       }
+      if (view) positionPicker();
     }
   }
   function resetAttempt({ newPage = false, advanceCutoff = false } = {}) {

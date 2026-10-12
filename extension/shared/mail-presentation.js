@@ -36,3 +36,11 @@ export function formatAccountCheckWarnings(warnings) {
 export function formatSenderLabel(sender) {
   return sender?.trim() || "Unknown sender";
 }
+
+export function formatReceivedAt(receivedAt) {
+  return `Received: ${new Date(receivedAt).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })}`;
+}

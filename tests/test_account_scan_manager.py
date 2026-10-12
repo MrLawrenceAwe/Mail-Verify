@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import time
 import threading
+import imaplib
 import unittest
 from unittest.mock import Mock, patch
 
@@ -12,6 +13,39 @@ import account_scan_manager
 
 
 class AccountScanManagerTests(unittest.TestCase):
+    def test_inbox_failures_give_recovery_guidance_for_the_affected_account(self):
+        cases = (
+            (imaplib.IMAP4.error(b"[AUTHENTICATIONFAILED] LOGIN failed"), "Add or update Yahoo account"),
+            (imaplib.IMAP4.abort("socket error: EOF"), "Check your internet connection"),
+            (OSError("[Errno 8] nodename nor servname provided"), "Check your internet connection"),
+            (account_scan_manager.UserError("Yahoo could not read recent messages."), "Yahoo could not read recent messages."),
+        )
+        for error, guidance in cases:
+            for partial in (False, True):
+                with self.subTest(error=error, partial=partial):
+                    manager = account_scan_manager.AccountScanManager()
+                    accounts = [{"email": "failed@yahoo.com", "password": "unused"}]
+                    if partial:
+                        accounts.append({"email": "healthy@yahoo.com", "password": "unused"})
+                    def scan(session):
+                        if session.credentials["email"] == "failed@yahoo.com":
+                            raise error
+                        return []
+                    try:
+                        with patch.object(account_scan_manager, "scan_with_deadline", side_effect=scan):
+                            if partial:
+                                message = manager.poll_accounts(accounts)["warnings"][0]
+                            else:
+                                with self.assertRaises(account_scan_manager.UserError) as caught:
+                                    manager.poll_accounts(accounts)
+                                message = str(caught.exception)
+                        self.assertIn("failed@yahoo.com", message)
+                        self.assertIn(guidance, message)
+                        if not isinstance(error, account_scan_manager.UserError):
+                            self.assertNotIn(str(error), message)
+                    finally:
+                        manager.close()
+
     def test_pending_scan_is_reported_until_completed_results_are_collected(self):
         release = threading.Event()
         scan_manager = account_scan_manager.AccountScanManager()

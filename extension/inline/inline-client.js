@@ -13,7 +13,7 @@ export function requestInlineCheck(runtime, mailType, collectOnly = false) {
       settled = true;
       reject(
         new Error(
-          "Mail Verify disconnected. Reload the extension and try again.",
+          "Mail Verify disconnected. Reload the extension, then refresh this page and try again.",
         ),
       );
     });

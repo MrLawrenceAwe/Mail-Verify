@@ -1,6 +1,7 @@
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { formatReceivedAt } from "../extension/shared/mail-presentation.js";
 import {
   createPopupHarness,
   verificationCodeMessage,
@@ -22,6 +23,10 @@ test("popup codes normalize sender labels and identify the target page", async (
       expected,
     );
     assert.equal(controls.targetPage.textContent, "example.com");
+    assert.equal(
+      controls.results.children[0].children[4].textContent,
+      formatReceivedAt(verificationCodeMessage.receivedAt),
+    );
   }
 });
 
@@ -123,13 +128,14 @@ test("finds links only on request and opens only the selected link", async () =>
   assert.deepEqual(state.opened, []);
   assert.deepEqual(
     controls.results.children[0].children
-      .slice(0, 4)
+      .slice(0, -1)
       .map((line) => line.textContent),
     [
       `Inbox: ${emailLinkMessage.accountEmail}`,
       `From: ${emailLinkMessage.sender}`,
       emailLinkMessage.subject,
       "Link domain: example.com",
+      formatReceivedAt(emailLinkMessage.receivedAt),
     ],
   );
   const button = controls.results.querySelectorAll("button")[0];
@@ -347,6 +353,7 @@ test("popup link results identify inbox and missing sender without empty subject
         `Inbox: ${emailLinkMessage.accountEmail}`,
         "From: Unknown sender",
         "Link domain: example.com",
+        formatReceivedAt(emailLinkMessage.receivedAt),
       ],
     );
   }

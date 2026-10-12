@@ -1,4 +1,4 @@
-import { formatSenderLabel } from "./mail-presentation.js";
+import { formatSenderLabel, formatReceivedAt } from "./mail-presentation.js";
 
 export function appendEmailLinkDetails(document, card, item, className = "") {
   const details = [
@@ -6,6 +6,7 @@ export function appendEmailLinkDetails(document, card, item, className = "") {
     `From: ${formatSenderLabel(item.sender)}`,
     item.subject?.trim(),
     `Link domain: ${new URL(item.url).hostname}`,
+    formatReceivedAt(item.receivedAt),
   ];
   for (const text of details.filter(Boolean)) {
     const line = document.createElement("p");

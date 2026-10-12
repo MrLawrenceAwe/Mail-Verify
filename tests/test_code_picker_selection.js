@@ -1,4 +1,5 @@
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
+import { formatReceivedAt } from "../extension/shared/mail-presentation.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCodePickerHarness } from "./support/code_picker_harness.js";
@@ -275,9 +276,9 @@ test("visible code suggestions distinguish senders and inboxes without hovering"
   assert.deepEqual(
     results.children.map((button) => button.small.textContent),
     [
-      "login@example.test · first@yahoo.com",
-      "security@other.test · first@yahoo.com",
-      "Unknown sender · second@yahoo.com",
+      `login@example.test · first@yahoo.com · ${formatReceivedAt(9000)}`,
+      `security@other.test · first@yahoo.com · ${formatReceivedAt(9000)}`,
+      `Unknown sender · second@yahoo.com · ${formatReceivedAt(9000)}`,
     ],
   );
   const unknownSenderButton = results.children[2];

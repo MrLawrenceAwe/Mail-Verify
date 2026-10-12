@@ -3,6 +3,56 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCodePickerHarness } from "./support/code_picker_harness.js";
 
+test("checking completion is announced with results, no results, warnings, or errors", async () => {
+  for (const outcome of ["results", "empty", "warning", "error"]) {
+    let now = 10_000;
+    let checks = 0;
+    const anchor = {};
+    const code = {
+      uid: 1,
+      accountEmail: "test@yahoo.com",
+      code: "123456",
+      sender: "auth@example.test",
+      receivedAt: 9_000,
+    };
+    const { timers, results, elements } = createCodePickerHarness({
+      detectOrFillCodeFields: () => ({
+        ok: true,
+        anchor,
+        rect: { top: 100, bottom: 130, left: 20, right: 200 },
+      }),
+      now: () => now,
+      check: async () => {
+        if (++checks === 1) return { ok: true, codes: [] };
+        // The last request finishes at the two-minute deadline.
+        now = 130_000;
+        if (outcome === "error")
+          return { ok: false, error: "Connect Yahoo Mail first." };
+        return {
+          ok: true,
+          codes: outcome === "empty" ? [] : [code],
+          warnings:
+            outcome === "warning" ? ["other@yahoo.com: Connection failed."] : [],
+        };
+      },
+    });
+    await waitForAsyncCallbacks();
+    now = 129_999;
+    await timers.runWithDelay(2000);
+    await waitForAsyncCallbacks();
+    assert.match(elements["#status"].textContent, /Checking finished.*↻/);
+    assert.equal(timers.length, 0);
+    assert.equal(
+      results.childElementCount,
+      ["results", "warning"].includes(outcome) ? 1 : 0,
+    );
+    if (outcome === "error")
+      assert.match(elements["#status"].textContent, /Connect Yahoo Mail first/);
+    if (outcome === "warning")
+      assert.match(elements["#status"].textContent, /other@yahoo.com: Connection failed/);
+  }
+});
+
 test("code picker collects pending scans quickly then resumes normal checks", async () => {
   const modes = [];
   const anchor = {};

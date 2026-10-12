@@ -145,7 +145,7 @@ class InboxSession:
                 f"{first}:{self.message_count}", "(UID INTERNALDATE RFC822.SIZE)"
             )
             if status != "OK":
-                raise UserError("Yahoo could not inspect recent messages.")
+                raise UserError("Yahoo could not inspect recent messages. Try checking again.")
             uids = {
                 uid
                 for entry in metadata
@@ -168,7 +168,7 @@ class InboxSession:
             "search", None, "UID", f"{self.discovery_cursor_uid + 1}:*"
         )
         if status != "OK":
-            raise UserError("Yahoo could not search your inbox.")
+            raise UserError("Yahoo could not search your inbox. Try checking again.")
         # UID ranges ending in * can return the previous last UID.
         all_uids = [uid for value in data[0].split() if (uid := int(value)) > self.discovery_cursor_uid]
         self.pending_metadata_uids.update(all_uids[-MAX_CANDIDATE_MESSAGES:])
@@ -186,7 +186,7 @@ class InboxSession:
             "fetch", b",".join(str(uid).encode() for uid in uids), "(UID INTERNALDATE RFC822.SIZE)"
         )
         if status != "OK":
-            raise UserError("Yahoo could not inspect recent messages.")
+            raise UserError("Yahoo could not inspect recent messages. Try checking again.")
         returned_uids = {
             uid
             for entry in metadata
@@ -222,7 +222,7 @@ class InboxSession:
                 "fetch", b",".join(str(uid).encode() for uid in batch), "(UID BODY.PEEK[])"
             )
             if status != "OK":
-                raise UserError("Yahoo could not read recent messages.")
+                raise UserError("Yahoo could not read recent messages. Try checking again.")
             messages = {}
             for entry in body:
                 if not isinstance(entry, tuple):
@@ -280,7 +280,7 @@ class InboxSession:
                 # between SELECT and the previous sequence-number FETCH.
                 status, count = self.connection.select("INBOX", readonly=True)
                 if status != "OK":
-                    raise UserError("Yahoo could not open your inbox.")
+                    raise UserError("Yahoo could not open your inbox. Try checking again.")
                 self.message_count = int(count[0])
             metadata = self._fetch_candidate_metadata()
             # Mail can arrive while IMAP is searching or fetching metadata.

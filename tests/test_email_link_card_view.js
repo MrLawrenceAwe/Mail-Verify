@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createEmailLinkCardView } from "../extension/inline/email-link-card-view.js";
+import { formatReceivedAt } from "../extension/shared/mail-presentation.js";
 
 function setup(mailType, callbacks = {}) {
   const element = (tag) => ({
@@ -43,6 +44,7 @@ function setup(mailType, callbacks = {}) {
     sender: "sender@example.com",
     subject: "Your email",
     url: "https://example.com/action",
+    receivedAt: 1000,
   };
   view.renderLinks([item]);
   const card = controls["#results"].children[0];
@@ -53,12 +55,13 @@ test("both link-card mail types show email details and their own action and guid
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     const { card, action, root, item } = setup(mailType);
     assert.deepEqual(
-      card.children.slice(0, 4).map((line) => line.textContent),
+      card.children.slice(0, -1).map((line) => line.textContent),
       [
         `Inbox: ${item.accountEmail}`,
         `From: ${item.sender}`,
         item.subject,
         "Link domain: example.com",
+        formatReceivedAt(item.receivedAt),
       ],
     );
     if (mailType === "confirmationLinks") {
@@ -121,6 +124,7 @@ test("link cards identify inbox and missing sender without empty subject rows", 
         `Inbox: ${item.accountEmail}`,
         "From: Unknown sender",
         "Link domain: example.com",
+        formatReceivedAt(item.receivedAt),
       ],
     );
   }

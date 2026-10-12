@@ -4,7 +4,7 @@ import imaplib
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 
-from errors import UserError
+from errors import UserError, inbox_error_message
 from inbox_session import InboxSession, MAX_MESSAGE_AGE_SECONDS
 
 ACCOUNT_CHECK_TIMEOUT_SECONDS = 25
@@ -97,7 +97,7 @@ class AccountScanManager:
                 self.cached_results_by_account[key] = [dict(item, accountEmail=email) for item in future.result()]
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
                 self.discard_account_state(key)
-                warnings.append(f"{email}: {exc or 'Yahoo rejected the connection.'}")
+                warnings.append(f"{email}: {inbox_error_message(exc)}")
         if warnings and not self.cached_results_by_account and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
         items = [item for results in self.cached_results_by_account.values() for item in results]

@@ -1,6 +1,7 @@
 import {
   MAIL_PRESENTATION,
   formatSenderLabel,
+  formatReceivedAt,
 } from "../shared/mail-presentation.js";
 import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
@@ -120,6 +121,7 @@ export function createPopupView(
         ["p", "account-email", item.accountEmail],
         ["p", "result-detail", formatSenderLabel(item.sender)],
         ["p", "subject", item.subject],
+        ["p", "result-detail", formatReceivedAt(item.receivedAt)],
       ]) {
         const element = document.createElement(tag);
         element.className = className;
