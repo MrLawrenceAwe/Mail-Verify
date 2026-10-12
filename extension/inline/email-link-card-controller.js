@@ -186,7 +186,7 @@ export function startEmailLinkCard({
         await copyPasswordResetLink(
           environment.navigator?.clipboard,
           item.url,
-          "Clipboard unavailable. Use Find password reset links in the toolbar popup.",
+          "Use Find password reset links in the toolbar popup.",
         );
       },
       acceptLinkSelection(item) {

@@ -147,6 +147,18 @@ test("uses the same response errors for one-off and session requests", async () 
   const request = client.sendSessionRequest("codes");
   reply({ ok: false, error: "Denied" });
   await assert.rejects(request, /Denied/);
+
+  for (const request of [
+    () => client.sendSessionRequest("confirmationLinks"),
+    () => client.sendOneOffRequest({ action: "saveAccount" }),
+  ]) {
+    const unsupported = request();
+    reply({ ok: false, error: "Unsupported request." });
+    await assert.rejects(
+      unsupported,
+      /Unsupported request.*close the popup.*Install Companion\.command.*chrome:\/\/extensions.*refresh affected website tabs.*reopen the popup/,
+    );
+  }
 });
 
 test("silent hosts time out, disconnect, and allow a fresh request", async () => {

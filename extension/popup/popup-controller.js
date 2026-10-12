@@ -121,7 +121,7 @@ export function createPopupController({
           await copyPasswordResetLink(
             clipboard,
             item.url,
-            "Clipboard unavailable. Close and reopen this popup, then try again.",
+            "Close and reopen this popup, then try again.",
           );
           view.markLinkCopied(button);
           view.setStatus(

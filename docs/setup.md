@@ -19,7 +19,9 @@ If suggestions do not appear after refreshing a website, open Mail Verify’s **
 
 Click **Remove** beside an account in the popup to delete its credential. Removing the last account deletes the Keychain item.
 
-To uninstall the companion, run `python3 companion/install.py --uninstall` from the project folder, then remove the extension through Chrome’s Extensions page. If credentials remain, delete `local.yahoo_code_fill` in Keychain Access. You can also revoke the app password in Yahoo Account Security.
+Uninstalling the companion retains saved credentials in Keychain. To delete them, remove all accounts through the popup before uninstalling. If you have already uninstalled the companion, delete `local.yahoo_code_fill` in Keychain Access instead.
+
+To uninstall the companion, run `python3 companion/install.py --uninstall` from the project folder, then remove the extension through Chrome’s Extensions page. You can also revoke the app password in Yahoo Account Security.
 
 The companion is installed at `~/Library/Application Support/Yahoo Code Fill/`; Chrome registration is at `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/local.yahoo_code_fill.json`.
 
