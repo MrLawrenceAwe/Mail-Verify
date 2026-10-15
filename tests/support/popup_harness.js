@@ -51,7 +51,6 @@ export async function createPopupHarness({
   account = "test@yahoo.com",
   remainingAccountEmails = [],
   tabUrl = "https://example.com/login",
-  clipboardAvailable = true,
   statusError,
 } = {}) {
   const controls = Object.fromEntries(
@@ -83,8 +82,6 @@ export async function createPopupHarness({
     fetchCodes: async () => codes,
     fetchConfirmationLinks: async () => [],
     fetchPasswordResetLinks: async () => [],
-    copied: [],
-    failCopy: false,
     opened: [],
     failFill: false,
     failRemove: false,
@@ -136,15 +133,6 @@ export async function createPopupHarness({
     },
   };
   const popup = createPopupController({
-    clipboard: clipboardAvailable
-      ? {
-          async writeText(value) {
-            if (state.failCopy) throw Error("Clipboard denied");
-            if (state.copyWait) await state.copyWait;
-            state.copied.push(value);
-          },
-        }
-      : null,
     document: {
       getElementById: (id) => controls[id],
       createElement: (tag) => new FakeElement(tag),
@@ -154,6 +142,8 @@ export async function createPopupHarness({
       tabs: {
         query: async () => [tab],
         create: async (options) => {
+          if (state.failOpen) throw Error("Tab unavailable");
+          if (state.openWait) await state.openWait;
           state.opened.push(options);
         },
         get: async () => {

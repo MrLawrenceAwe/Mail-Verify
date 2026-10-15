@@ -57,13 +57,6 @@ export function createEmailLinkCardHarness(
   const location = { href: "https://example.com/verify" };
   startEmailLinkCard({
     environment: {
-      navigator: {
-        clipboard: {
-          async writeText(value) {
-            state.copied = value;
-          },
-        },
-      },
       document,
       location,
       window: {

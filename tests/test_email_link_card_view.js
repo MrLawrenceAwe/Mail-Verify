@@ -64,53 +64,29 @@ test("both link-card mail types show email details and their own action and guid
         formatReceivedAt(item.receivedAt),
       ],
     );
-    if (mailType === "confirmationLinks") {
-      assert.equal(action.tag, "a");
-      assert.equal(action.href, item.url);
-      assert.equal(action.target, "_blank");
-      assert.match(root.innerHTML, /Opening a link in a new tab/);
-    } else {
-      assert.equal(action.tag, "button");
-      assert.equal(action.href, undefined);
-      assert.match(
-        root.innerHTML,
-        /sender and link domain before copying/,
-      );
-      assert.doesNotMatch(root.innerHTML, /Opening a link/);
-    }
+    assert.equal(action.tag, "a");
+    assert.equal(action.href, item.url);
+    assert.equal(action.target, "_blank");
+    assert.equal(action.rel, "noopener noreferrer");
+    assert.match(root.innerHTML, /new tab/);
   }
 });
 
-test("reset-card action copies only an approved selection and reports success", async () => {
-  let approved = false;
-  const copied = [];
-  const { action, item, controls } = setup("passwordResetLinks", {
-    acceptLinkSelection: () => approved,
-    copyResetLink: async (item) => copied.push(item.url),
-  });
-  await action.listeners.click();
-  assert.deepEqual(copied, []);
-  approved = true;
-  await action.listeners.click();
-  assert.deepEqual(copied, [item.url]);
-  assert.equal(action.textContent, "Copy again");
-  assert.equal(action.disabled, false);
-  assert.match(controls["#status"].textContent, /copied to clipboard/);
-  await action.listeners.click();
-  assert.deepEqual(copied, [item.url, item.url]);
-  assert.equal(action.textContent, "Copy again");
-});
-
-test("failed reset-card copies show the error and allow another attempt", async () => {
-  const { action, controls } = setup("passwordResetLinks", {
-    copyResetLink: async () => {
-      throw new Error("Clipboard denied. Use the toolbar popup.");
-    },
-  });
-  await action.listeners.click();
-  assert.equal(action.disabled, false);
-  assert.equal(action.textContent, "Copy password reset link");
-  assert.match(controls["#status"].textContent, /Clipboard denied/);
+test("both link types block rejected selections for primary and middle clicks", () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    let approved = false;
+    const { action } = setup(mailType, { acceptLinkSelection: () => approved });
+    for (const eventName of ["click", "auxclick"]) {
+      let prevented = false;
+      action.listeners[eventName]({ preventDefault() { prevented = true; } });
+      assert.equal(prevented, true);
+      approved = true;
+      prevented = false;
+      action.listeners[eventName]({ preventDefault() { prevented = true; } });
+      assert.equal(prevented, false);
+      approved = false;
+    }
+  }
 });
 
 test("link cards identify inbox and missing sender without empty subject rows", () => {

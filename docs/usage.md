@@ -6,11 +6,11 @@
 | --- | --- | --- | --- |
 | Verification code | Beside a supported code field | **Fill code**, without clicking Submit | **Find verification codes** |
 | Account confirmation | Bottom-right card on a recognised “Check your email” screen | **Open confirmation link** in a new tab; this may immediately confirm the account | **Find confirmation links** |
-| Password reset | Bottom-right card on a recognised reset-email waiting screen | **Copy password reset link**, then paste it where you want to use it | **Find password reset links** |
+| Password reset | Bottom-right card on a recognised reset-email waiting screen | **Open reset link ↗** to open it in a new tab | **Find password reset links** |
 
 Request the email on the website, then choose its matching result. Review the account, sender, subject, arrival time, and link domain before using it. Results show the arrival time in your local timezone, including seconds to distinguish repeated requests. Code suggestions show the sender and inbox; hover to see the subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.
 
-Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion. Resending or navigating restores suggestions. Link cards also return when the waiting panel, recipient, or email purpose changes; code suggestions otherwise stay dismissed on that page. The toolbar popup handles account setup and manual checks. A status message confirms a successful reset-link copy; use **Copy again** to repeat it. If a website blocks clipboard access, use the popup.
+Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion. Resending or navigating restores suggestions. Link cards also return when the waiting panel, recipient, or email purpose changes; code suggestions otherwise stay dismissed on that page. The toolbar popup handles account setup and manual checks. Reset links open in a new tab; complete the new password on the website.
 
 ## Checking and freshness
 
@@ -20,7 +20,7 @@ Checks show inbox emails from the last ten minutes. Spam and other folders are e
 
 Initial checks inspect the newest 30 messages in each inbox; later checks discover up to 30 newly arrived messages at a time. Messages larger than 1,000,000 bytes (1 MB), including attachments, are skipped. A recent email can therefore be missed in a busy inbox or if it is too large. If an expected result is absent, check Yahoo directly.
 
-The initial inline code suggestion panel accepts emails from the last ten minutes, including mail delivered before the page loaded. Later code steps and initial on-page link suggestions allow emails received up to five seconds before the step appeared. Changing an existing link panel, recipient, or email purpose excludes mail dated before the next whole second. Resending clears older suggestions; an email arriving immediately after the click may also be excluded. Use the popup to choose other recent emails manually.
+Initial on-page code and link suggestions accept emails from the last ten minutes, including mail delivered before the page loaded. Later code steps allow emails received up to five seconds before the step appeared. Changing an existing link panel, recipient, or email purpose excludes mail dated before the next whole second. Resending clears older suggestions; an email arriving immediately after the click may also be excluded. Use the popup to choose other recent emails manually.
 
 ## Supported content and limits
 

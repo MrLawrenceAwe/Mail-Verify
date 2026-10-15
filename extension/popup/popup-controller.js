@@ -10,7 +10,6 @@ import {
   DEFAULT_SCAN_INTERVAL_MS,
 } from "../shared/mail-timing.js";
 import { createPopupView } from "./popup-view.js";
-import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import { createPollingLifecycle } from "../shared/polling-lifecycle.js";
 import { CompanionUnavailableError } from "../shared/companion-client.js";
 
@@ -23,7 +22,6 @@ export function createPopupController({
   clock = Date,
   setTimeout = globalThis.setTimeout,
   clearTimeout = globalThis.clearTimeout,
-  clipboard = globalThis.navigator?.clipboard,
 }) {
   const { sendOneOffRequest, sendSessionRequest, closeSession } = client;
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout });
@@ -66,7 +64,7 @@ export function createPopupController({
     checking = false;
     closeSession();
   }
-  async function useSelectedResult(action, { reusable = false } = {}) {
+  async function useSelectedResult(action) {
     if (usingResult || removingAccount || savingAccount) return;
     usingResult = true;
     resetMailCheckSession();
@@ -80,7 +78,6 @@ export function createPopupController({
       view.setResultButtonsDisabled(false);
     } finally {
       usingResult = false;
-      if (reusable) view.setResultButtonsDisabled(false);
       view.setCheckAndRemoveButtonsDisabled(savingAccount);
       if (polling.deadline) scheduleCheck();
       else closeSession();
@@ -117,23 +114,10 @@ export function createPopupController({
           throw new Error("This link is too old. Request a new email.");
         if (!isSupportedEmailLinkUrl(item.url))
           throw new Error("This link is not supported.");
-        if (mailType === "passwordResetLinks") {
-          await copyPasswordResetLink(
-            clipboard,
-            item.url,
-            "Close and reopen this popup, then try again.",
-          );
-          view.markLinkCopied(button);
-          view.setStatus(
-            MAIL_PRESENTATION.passwordResetLinks.copySuccessStatus,
-          );
-          return;
-        }
         await chrome.tabs.create({ url: item.url });
         view.markLinkOpened(button);
-        view.setStatus("Confirmation link opened in a new tab.");
+        view.setStatus(MAIL_PRESENTATION[mailType].openedStatus);
       },
-      { reusable: mailType === "passwordResetLinks" },
     );
   }
   function scheduleCheck(delay = DEFAULT_SCAN_INTERVAL_MS) {

@@ -8,6 +8,7 @@ export const MAIL_PRESENTATION = {
   confirmationLinks: {
     resultLabel: "confirmation links",
     actionLabel: "Open confirmation link ↗",
+    openedStatus: "Confirmation link opened in a new tab.",
     foundStatus: "Choose a confirmation link to open.",
     popupEmptyStatus:
       "No recent confirmation link yet. Request one and keep this popup open.",
@@ -17,15 +18,14 @@ export const MAIL_PRESENTATION = {
   },
   passwordResetLinks: {
     resultLabel: "password reset links",
-    actionLabel: "Copy password reset link",
-    copyAgainLabel: "Copy again",
-    copySuccessStatus: "Password reset link copied to clipboard.",
-    foundStatus: "Choose a password reset email to copy its link.",
+    actionLabel: "Open reset link ↗",
+    openedStatus: "Password reset link opened in a new tab.",
+    foundStatus: "Choose a password reset link to open.",
     popupEmptyStatus:
       "No recent password reset link yet. Request one and keep this popup open.",
     waitingStatus: "Waiting for your password reset email…",
     guidance:
-      "Check the sender and link domain before copying. Links may redirect.",
+      "Check the sender and link domain. Links may redirect. The reset link opens in a new tab.",
   },
 };
 

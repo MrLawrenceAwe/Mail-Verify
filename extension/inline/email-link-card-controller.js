@@ -4,7 +4,6 @@ import {
   mutationAffectsEmailLinkCard,
 } from "./email-link-card-policy.js";
 import { detectEmailLinkStep } from "./email-link-step.js";
-import { copyPasswordResetLink } from "../shared/reset-link-copy.js";
 import {
   MAIL_PRESENTATION,
   formatAccountCheckWarnings,
@@ -15,7 +14,7 @@ import {
   belongsToVerificationStep,
 } from "./request-controls.js";
 import {
-  stepStartCutoff,
+  MAX_MESSAGE_AGE_MS,
   nextSecondCutoff,
   DEFAULT_SCAN_INTERVAL_MS,
 } from "../shared/mail-timing.js";
@@ -168,7 +167,7 @@ export function startEmailLinkCard({
     if (dismissed) return;
     if (!activeStep) {
       activeStep = nextStep;
-      minReceivedAtMs ??= stepStartCutoff(clock.now());
+      minReceivedAtMs ??= clock.now() - MAX_MESSAGE_AGE_MS;
       polling.renewDeadline();
     }
     if (view) {
@@ -182,13 +181,6 @@ export function startEmailLinkCard({
       onClose: dismissCard,
       onRetry: () => polling.restart(checkForLinks),
       mailType,
-      async copyResetLink(item) {
-        await copyPasswordResetLink(
-          environment.navigator?.clipboard,
-          item.url,
-          "Use Find password reset links in the toolbar popup.",
-        );
-      },
       acceptLinkSelection(item) {
         if (
           document.hidden ||
@@ -208,7 +200,7 @@ export function startEmailLinkCard({
           );
           return false;
         }
-        if (mailType !== "passwordResetLinks") dismissCard();
+        dismissCard();
         return true;
       },
     });

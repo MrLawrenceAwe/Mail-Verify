@@ -2,19 +2,12 @@ import { MAIL_PRESENTATION } from "../shared/mail-presentation.js";
 import { appendEmailLinkDetails } from "../shared/email-link-details.js";
 
 // acceptLinkSelection returns true to accept a selection; false prevents its action.
-// Acceptance may dismiss the card and cancel checks before a confirmation link opens.
+// Acceptance may dismiss the card and cancel checks before an email link opens.
 export function createEmailLinkCardView(
   document,
-  { onClose, onRetry, acceptLinkSelection, copyResetLink, mailType },
+  { onClose, onRetry, acceptLinkSelection, mailType },
 ) {
-  const isPasswordReset = mailType === "passwordResetLinks";
-  const {
-    resultLabel,
-    actionLabel,
-    guidance,
-    copyAgainLabel,
-    copySuccessStatus,
-  } = MAIL_PRESENTATION[mailType];
+  const { resultLabel, actionLabel, guidance } = MAIL_PRESENTATION[mailType];
   const title = `Mail Verify ${resultLabel}`;
   const host = document.createElement("div");
   host.dataset.mailVerify = "email-links";
@@ -121,32 +114,13 @@ export function createEmailLinkCardView(
       for (const item of items) {
         const card = document.createElement("article");
         appendEmailLinkDetails(document, card, item);
-        const actionElement = document.createElement(
-          isPasswordReset ? "button" : "a",
-        );
+        const actionElement = document.createElement("a");
         actionElement.textContent = actionLabel;
-        if (isPasswordReset) {
-          actionElement.addEventListener("click", async () => {
-            if (actionElement.disabled || !acceptLinkSelection(item)) return;
-            actionElement.disabled = true;
-            try {
-              await copyResetLink(item);
-              actionElement.textContent = copyAgainLabel;
-              root.querySelector("#status").textContent = copySuccessStatus;
-            } catch (error) {
-              root.querySelector("#status").textContent = error.message;
-            } finally {
-              actionElement.disabled = false;
-            }
-          });
-        } else {
-          actionElement.href = item.url;
-          actionElement.target = "_blank";
-          actionElement.rel = "noopener noreferrer";
-          actionElement.addEventListener("click", (event) => {
-            if (!acceptLinkSelection(item)) event.preventDefault();
-          });
-          actionElement.addEventListener("auxclick", (event) => {
+        actionElement.href = item.url;
+        actionElement.target = "_blank";
+        actionElement.rel = "noopener noreferrer";
+        for (const eventName of ["click", "auxclick"]) {
+          actionElement.addEventListener(eventName, (event) => {
             if (!acceptLinkSelection(item)) event.preventDefault();
           });
         }

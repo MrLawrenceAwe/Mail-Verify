@@ -36,7 +36,7 @@ Code-picker step and selection tests, field tests, and step-context tests use `t
 
 To preview synthetic code suggestions, run `python3 -m http.server 8764 --bind 127.0.0.1` from the project root and open `http://127.0.0.1:8764/docs/preview.html?interactive`. The fixture does not access Yahoo. **Resend email** and **Send again** must immediately clear the old suggestion. Wait at least one second after resending, then click **Deliver replacement code** and verify that the replacement suggestion fills `654321`.
 
-`tests/fixtures/modal-suggestions-preview.html` supplies synthetic mail for modal and link-step checks. Use `?mode=modal-code` to fill a code in a native modal, `?mode=modal-reset` to copy a reset link in a modal, or `?mode=status` for a normal waiting panel. Add `&transform=1` to test a scaled, clipped dialog. **Update connection status** must retain the offered link; **Change recipient** and **Resend email** must clear it. Add `&stacked=1` to open a second modal, or `&stacked=reverse` to put the active modal first in DOM order. Suggestions must belong to the active dialog and remain usable. These fixtures do not access Yahoo. When testing edits, serve with caching disabled or use a fresh local port so Chrome reloads imported modules.
+`tests/fixtures/modal-suggestions-preview.html` supplies synthetic mail for modal and link-step checks. Use `?mode=modal-code` to fill a code in a native modal, `?mode=modal-reset` to open a reset link from a modal, or `?mode=status` for a normal waiting panel. Add `&transform=1` to test a scaled, clipped dialog. **Update connection status** must retain the offered link; **Change recipient** and **Resend email** must clear it. Add `&stacked=1` to open a second modal, or `&stacked=reverse` to put the active modal first in DOM order. Suggestions must belong to the active dialog and remain usable. These fixtures do not access Yahoo. When testing edits, serve with caching disabled or use a fresh local port so Chrome reloads imported modules.
 
 `tests/fixtures/inline-numeric-fields-preview.html` checks two independent full-length numeric verification fields in one form. Selecting the email-code suggestion must fill the email field and retain the phone field’s existing value.
 
@@ -55,7 +55,7 @@ After installing the companion, reloading the extension, and refreshing the test
 1. Connect a Yahoo account and confirm that it appears in the popup.
 2. Request a fresh code on an HTTPS page. Select its on-page suggestion and verify the field value; repeat using the popup.
 3. Request a confirmation email. Select its link and verify that the intended destination opens in a new tab.
-4. Request a reset email. Copy its link, verify the clipboard value, and use **Copy again** to repeat the copy.
+4. Request a reset email. Select **Open reset link ↗** and verify it opens the reset page in a new tab. Repeat from the toolbar popup.
 5. Resend an email and confirm that older on-page results disappear. Hide the tab and confirm checking stops; return and check again.
 6. Remove the account and confirm that its results disappear.
 

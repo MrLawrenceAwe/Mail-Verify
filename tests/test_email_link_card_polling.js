@@ -168,3 +168,19 @@ test("partial account failures retain healthy links and clear after recovery", a
     assert.equal(view.callbacks.acceptLinkSelection(emailLinkMessage), true);
   }
 });
+
+test("initial link detection includes recent mail delivered before the card appeared", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    const harness = createEmailLinkCardHarness(null, mailType);
+    const recent = { ...emailLinkMessage, receivedAt: -20_000 };
+    harness.state.respond = async () => ({ ok: true, [mailType]: [recent,
+      { ...recent, uid: 2, receivedAt: -600_000 },
+      { ...recent, uid: 3, receivedAt: 11_000 }], scanPending: false });
+    // The first asynchronous check completes after the card has been created.
+    // Retry with the same initial cutoff, as when the first scan is pending.
+    await waitForAsyncCallbacks();
+    harness.state.views[0].callbacks.onRetry();
+    await waitForAsyncCallbacks();
+    assert.deepEqual(harness.state.views[0].links, [recent]);
+  }
+});

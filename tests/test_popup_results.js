@@ -198,84 +198,50 @@ test("switching mail types ignores a pending code response", async () => {
   );
 });
 
-test("password reset links are copied only on click without opening a tab", async () => {
+test("reset links open only on click and stop polling after selection", async () => {
   const { controls, state, timers } = await createPopupHarness();
   state.fetchPasswordResetLinks = async () => [emailLinkMessage];
   controls.checkPasswordResetLinks.trigger();
   await waitForAsyncCallbacks();
-  assert.deepEqual(state.copied, []);
-  const button = controls.results.querySelectorAll("button")[0];
-  assert.equal(button.textContent, "Copy password reset link");
-  await button.trigger();
-  assert.deepEqual(state.copied, [emailLinkMessage.url]);
   assert.deepEqual(state.opened, []);
-  assert.equal(button.textContent, "Copy again");
-  assert.match(controls.status.textContent, /copied to clipboard/);
+  const button = controls.results.querySelectorAll("button")[0];
+  assert.equal(button.textContent, "Open reset link ↗");
+  await button.trigger();
+  assert.deepEqual(state.opened, [{ url: emailLinkMessage.url }]);
+  assert.equal(button.textContent, "Opened");
+  assert.equal(button.disabled, true);
+  assert.match(controls.status.textContent, /opened in a new tab/);
   assert.equal(timers.length, 0);
 });
 
-test("reset copy rejects expired links and reports clipboard failures", async () => {
-  for (const scenario of ["expired", "unsafe", "denied"]) {
+test("reset opening rejects expired or unsafe links and recovers from tab errors", async () => {
+  for (const scenario of ["expired", "unsafe", "failed"]) {
     const { controls, state } = await createPopupHarness();
-    state.fetchPasswordResetLinks = async () => [
-      {
-        ...emailLinkMessage,
-        receivedAt:
-          scenario === "expired" ? -700000 : emailLinkMessage.receivedAt,
-        url:
-          scenario === "unsafe"
-            ? "http://example.com/reset"
-            : emailLinkMessage.url,
-      },
-    ];
-    state.failCopy = scenario === "denied";
+    state.fetchPasswordResetLinks = async () => [{
+      ...emailLinkMessage,
+      receivedAt: scenario === "expired" ? -700000 : emailLinkMessage.receivedAt,
+      url: scenario === "unsafe" ? "http://example.com/reset" : emailLinkMessage.url,
+    }];
+    state.failOpen = scenario === "failed";
     controls.checkPasswordResetLinks.trigger();
     await waitForAsyncCallbacks();
     const button = controls.results.querySelectorAll("button")[0];
     await button.trigger();
-    assert.deepEqual(state.copied, []);
     assert.deepEqual(state.opened, []);
     assert.equal(button.disabled, false);
-    assert.match(
-      controls.status.textContent,
-      /too old|not supported|Clipboard denied/,
-    );
+    assert.match(controls.status.textContent, /too old|not supported|Tab unavailable/);
+    if (state.failOpen) {
+      state.failOpen = false;
+      await button.trigger();
+      assert.deepEqual(state.opened, [{url: emailLinkMessage.url}]);
+    }
   }
 });
 
-test("reset links can be recopied and another account selected after an unchanged check", async () => {
+test("reset opening prevents duplicate selections while tab creation is pending", async () => {
   const { controls, state } = await createPopupHarness();
-  const second = {
-    ...emailLinkMessage,
-    accountEmail: "second@yahoo.com",
-    url: "https://example.com/reset?token=second",
-  };
-  state.fetchPasswordResetLinks = async () => [emailLinkMessage, second];
-  controls.checkPasswordResetLinks.trigger();
-  await waitForAsyncCallbacks();
-  const buttons = controls.results.querySelectorAll("button");
-  await buttons[0].trigger();
-  assert.ok(buttons.every((button) => !button.disabled));
-  await buttons[0].trigger();
-  controls.checkPasswordResetLinks.trigger();
-  await waitForAsyncCallbacks();
-  assert.deepEqual(controls.results.querySelectorAll("button"), buttons);
-  assert.ok(buttons.every((button) => !button.disabled));
-  await buttons[1].trigger();
-  assert.deepEqual(state.copied, [
-    emailLinkMessage.url,
-    emailLinkMessage.url,
-    second.url,
-  ]);
-  assert.deepEqual(state.opened, []);
-});
-
-test("reset copy locks results only while the clipboard write is pending", async () => {
-  const { controls, state } = await createPopupHarness();
-  let finishCopy;
-  state.copyWait = new Promise((resolve) => {
-    finishCopy = resolve;
-  });
+  let finishOpen;
+  state.openWait = new Promise((resolve) => { finishOpen = resolve; });
   state.fetchPasswordResetLinks = async () => [emailLinkMessage];
   controls.checkPasswordResetLinks.trigger();
   await waitForAsyncCallbacks();
@@ -284,9 +250,10 @@ test("reset copy locks results only while the clipboard write is pending", async
   await waitForAsyncCallbacks();
   assert.equal(button.disabled, true);
   assert.equal(controls.checkPasswordResetLinks.disabled, true);
-  finishCopy();
+  await button.trigger();
+  finishOpen();
   await pending;
-  assert.equal(button.disabled, false);
+  assert.deepEqual(state.opened, [{url: emailLinkMessage.url}]);
   assert.equal(controls.checkPasswordResetLinks.disabled, false);
 });
 
@@ -304,35 +271,12 @@ test("popup guidance follows the selected action and clears when returning to co
   await waitForAsyncCallbacks();
   assert.match(
     controls.linkGuidance.textContent,
-    /sender and link domain before copying/,
+    /reset link opens in a new tab/,
   );
-  assert.doesNotMatch(controls.linkGuidance.textContent, /open|confirm/i);
   controls.checkCodes.trigger();
   await waitForAsyncCallbacks();
   assert.equal(controls.linkGuidance.hidden, true);
   assert.equal(controls.linkGuidance.textContent, "");
-});
-
-test("unavailable popup clipboard gives recovery guidance and keeps links selectable", async () => {
-  const { controls, state } = await createPopupHarness({
-    clipboardAvailable: false,
-  });
-  state.fetchPasswordResetLinks = async () => [emailLinkMessage];
-  controls.checkPasswordResetLinks.trigger();
-  await waitForAsyncCallbacks();
-  const button = controls.results.querySelectorAll("button")[0];
-  await button.trigger();
-  assert.deepEqual(state.copied, []);
-  assert.deepEqual(state.opened, []);
-  assert.equal(button.disabled, false);
-  assert.match(
-    controls.status.textContent,
-    /Clipboard unavailable.*Close and reopen this popup/,
-  );
-  assert.doesNotMatch(
-    controls.status.textContent,
-    /Try copying again from the popup/,
-  );
 });
 
 test("popup link results identify inbox and missing sender without empty subject rows", async () => {

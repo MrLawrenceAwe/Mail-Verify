@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/MrLawrenceAwe/Mail-Verify/actions/workflows/ci.yml/badge.svg)](https://github.com/MrLawrenceAwe/Mail-Verify/actions/workflows/ci.yml)
 
-Find email verification codes, account confirmation links, and password reset links in Yahoo inboxes from desktop Chrome on macOS. Click a result to fill a code, open a confirmation link, or copy a reset link. No webmail tab is needed. Yahoo is currently the only supported provider.
+Find email verification codes, account confirmation links, and password reset links in Yahoo inboxes from desktop Chrome on macOS. Click a result to fill a code, open a confirmation link, or open a reset link. No webmail tab is needed. Yahoo is currently the only supported provider.
 
 ![Mail Verify suggesting a code beside an email verification field](docs/images/code-suggestion.png)
 
@@ -27,7 +27,7 @@ See [setup, updates and removal](docs/setup.md) and [the usage guide](docs/usage
 
 Your Mac connects directly to `imap.mail.yahoo.com:993` over TLS. Credentials are stored in macOS Keychain under `local.yahoo_code_fill`, never in extension storage, configuration files, logs, or command-line arguments. Checks use a read-only inbox and `BODY.PEEK`, so they do not mark messages read.
 
-The extension uses `nativeMessaging`, `activeTab`, `scripting`, and `clipboardWrite`, and runs a content script on HTTPS pages. On-page controls use an isolated content-script context and closed shadow roots. Results are held temporarily in memory. When you select a code to fill, the website can read that code. There are no analytics or AI integrations.
+The extension uses `nativeMessaging`, `activeTab`, and `scripting`, and runs a content script on HTTPS pages. On-page controls use an isolated content-script context and closed shadow roots. Results are held temporarily in memory. When you select a code to fill, the website can read that code. There are no analytics or AI integrations.
 
 Chrome starts the companion on demand. No background login item, public server, or network listener is installed. Native messaging is restricted to this extension’s identity.
 

@@ -179,8 +179,6 @@ test("partial account failures keep popup results selectable and clear after rec
     assert.doesNotMatch(controls.status.textContent, /could not be checked/);
     await button.trigger();
     if (control === "checkCodes") assert.ok(state.scriptArgs);
-    else if (control === "checkConfirmationLinks")
-      assert.equal(state.opened.length, 1);
-    else assert.deepEqual(state.copied, ["https://example.com/verify"]);
+    else assert.deepEqual(state.opened, [{ url: "https://example.com/verify" }]);
   }
 });

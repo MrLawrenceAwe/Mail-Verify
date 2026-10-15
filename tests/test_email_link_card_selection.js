@@ -19,7 +19,7 @@ test("renders matching mail, validates open and remains dismissed", async () => 
   assert.equal(harness.state.views.length, 1);
 });
 
-test("reset card requests reset mail, copies on selection, and clears results on resend", async () => {
+test("reset card validates opening, dismisses on selection, and clears results on resend", async () => {
   const panel = {
     innerText: "Reset your password. Check your email",
     getClientRects: () => [{}],
@@ -30,11 +30,8 @@ test("reset card requests reset mail, copies on selection, and clears results on
   const view = harness.state.views[0];
   assert.equal(view.callbacks.mailType, "passwordResetLinks");
   assert.deepEqual(view.links, [emailLinkMessage]);
-  assert.equal(harness.state.copied, undefined);
   assert.equal(view.callbacks.acceptLinkSelection(emailLinkMessage), true);
-  await view.callbacks.copyResetLink(emailLinkMessage);
-  assert.equal(harness.state.copied, emailLinkMessage.url);
-  assert.equal(view.removed, false);
+  assert.equal(view.removed, true);
   harness.events.click({
     target: { closest: () => ({ textContent: "Send password reset link" }) },
   });

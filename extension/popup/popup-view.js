@@ -79,10 +79,6 @@ export function createPopupView(
     button.textContent = "Opened";
   }
 
-  function markLinkCopied(button) {
-    button.textContent = MAIL_PRESENTATION.passwordResetLinks.copyAgainLabel;
-  }
-
   function renderAccounts(accounts) {
     getElement("accountSetup").hidden = accounts.length > 0;
     getElement("companionSetup").hidden = true;
@@ -175,7 +171,6 @@ export function createPopupView(
     setResultButtonsDisabled,
     markCodeFilled,
     markLinkOpened,
-    markLinkCopied,
     renderAccounts,
     clearResults,
     renderCodes,
