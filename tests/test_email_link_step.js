@@ -14,6 +14,35 @@ test("classifies confirmation prompts without treating resets, newsletters or lo
     assert.notEqual(detectedMailType(text), "confirmationLinks", text);
 });
 
+test("detects KeenFace's delivered verification-link instruction and tracks its recipient", () => {
+  const panel = {
+    innerText: "Sign in\nOpen Studio, your API keys and your balance.\nVerify your email\nUse the verification link sent to your email address\npreview@yahoo.com\nDidn't receive a link? Resend (17)\nHave an access code? Sign in with code",
+    getClientRects: () => [{}], checkVisibility: () => true,
+  };
+  const document = { querySelectorAll: () => [panel] };
+  const first = detectEmailLinkStep(document);
+  assert.equal(first?.mailType, "confirmationLinks");
+  assert.ok(first.key.endsWith(':["preview@yahoo.com"]'));
+  panel.innerText = panel.innerText.replace("Resend (17)", "Resend (16)");
+  assert.deepEqual(detectEmailLinkStep(document), first);
+  panel.innerText = panel.innerText.replace("preview@yahoo.com", "another@yahoo.com");
+  assert.notEqual(detectEmailLinkStep(document).key, first.key);
+});
+
+test("a verification link must already be sent to email to qualify as a waiting instruction", () => {
+  for (const text of [
+    "Use the verification link sent to your email address",
+    "Use the confirmation link we sent to your inbox",
+    "Follow the activation link that was sent to your email",
+  ]) assert.equal(detectedMailType(text), "confirmationLinks", text);
+  for (const text of [
+    "Verify your email. Request a verification link",
+    "Send a verification link to your email address",
+    "A verification link sent by SMS",
+    "Verification link sent to your email for our newsletter",
+  ]) assert.equal(detectedMailType(text), undefined, text);
+});
+
 test("large panels are rejected before layout and rendered-text extraction", () => {
   const panel = {
     nodeType: 1,

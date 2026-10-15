@@ -9,6 +9,8 @@ from email_content import VisibleEmailHTMLParser, iter_text_parts, extract_messa
 EXCLUDED_ACTIONS_REGEX = r"unsubscribe|delete|cancel|payment|purchase"
 
 CONFIRMATION_LABEL_PATTERN = re.compile(r"\b(?:verify|confirm|activate)\s+(?:(?:your|my|the|this|new)\s+)?(?:e-?mail(?:\s+address)?|account|registration)\b", re.I)
+SIGNUP_LABEL_PATTERN = re.compile(r"^sign(?:\s+|-)up(?:\s+(?:to|for|with)\s+\S.*?)?[\s:!.]*$", re.I)
+SIGNUP_UNRELATED_PATTERN = re.compile(r"\b(?:newsletter|mailing\s+list|subscribe|subscription|help|support|documentation)\b", re.I)
 CONFIRMATION_EXCLUDED_LABEL_PATTERN = re.compile(rf"\b(?:{EXCLUDED_ACTIONS_REGEX}|password|reset)\b", re.I)
 CONFIRMATION_EXCLUDED_SUBJECT_PATTERN = re.compile(
     rf"\b(?:{EXCLUDED_ACTIONS_REGEX})\b|"
@@ -69,7 +71,13 @@ RESET_EXCLUDED_PATTERN = re.compile(rf"\b(?:{EXCLUDED_ACTIONS_REGEX})\b", re.I)
 
 
 def extract_confirmation_link_details(raw_message):
-    return extract_labelled_link(raw_message, CONFIRMATION_LABEL_PATTERN.search, CONFIRMATION_EXCLUDED_LABEL_PATTERN, CONFIRMATION_EXCLUDED_SUBJECT_PATTERN)
+    return extract_labelled_link(raw_message, is_confirmation_label, CONFIRMATION_EXCLUDED_LABEL_PATTERN, CONFIRMATION_EXCLUDED_SUBJECT_PATTERN)
+
+
+def is_confirmation_label(label):
+    return bool(CONFIRMATION_LABEL_PATTERN.search(label) or (
+        SIGNUP_LABEL_PATTERN.fullmatch(label.strip()) and not SIGNUP_UNRELATED_PATTERN.search(label)
+    ))
 
 
 def extract_password_reset_link_details(raw_message):

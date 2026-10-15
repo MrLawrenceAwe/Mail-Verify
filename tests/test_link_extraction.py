@@ -9,6 +9,38 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 from link_extraction import extract_confirmation_link_details, extract_password_reset_link_details, is_supported_email_link_url
 
 class ConfirmationLinkExtractionTests(unittest.TestCase):
+    def test_signup_actions_in_html_and_plain_text(self):
+        for label in ("Sign up to KeenTools Cloud", "Sign up", "Sign-up", "Sign up for Example", "Sign up with Example"):
+            for subtype, body in (("html", f'<a href="https://example.com/verify?token=synthetic">{label}</a>'),
+                                  ("plain", f'{label}:\nhttps://example.com/verify?token=synthetic')):
+                with self.subTest(label=label, subtype=subtype):
+                    result = extract_confirmation_link_details(make_raw_email(body, subject="Your sign up link", subtype=subtype))
+                    self.assertEqual(result["url"], "https://example.com/verify?token=synthetic")
+
+    def test_keentools_signup_button_and_duplicate_fallback(self):
+        body = ('<h1>Sign up to KeenTools Cloud</h1>'
+                '<p>Click the button below to sign up to KeenTools Cloud. This link will expire in 10 minutes.</p>'
+                '<a href="https://example.com/verify?token=synthetic">Sign up to KeenTools Cloud</a>'
+                '<p>If you are having trouble, <a href="https://example.com/verify?token=synthetic">click here</a>.</p>')
+        self.assertEqual(extract_confirmation_link_details(make_raw_email(body, subject="Your sign up link", subtype="html"))["url"], "https://example.com/verify?token=synthetic")
+
+    def test_signup_links_retain_visibility_url_purpose_and_ambiguity_rules(self):
+        for body in (
+            '<a href="http://example.com/verify">Sign up</a>',
+            '<a hidden href="https://example.com/verify">Sign up</a>',
+            '<a href="https://example.com/a">Sign up</a><a href="https://example.com/b">Sign up</a>',
+            '<a href="https://example.com/news">Sign up for our newsletter</a>',
+            '<a href="https://example.com/news">Sign up to our mailing list</a>',
+            '<a href="https://example.com/help">Sign up help</a>',
+            '<a href="https://example.com/help">How to sign up</a>',
+            '<a href="https://example.com/cancel">Sign up to cancel payment</a>',
+        ):
+            with self.subTest(body=body):
+                self.assertIsNone(extract_confirmation_link_details(make_raw_email(body, subject="Your sign up link", subtype="html")))
+        body = '<a href="https://example.com/verify">Sign up</a>'
+        self.assertIsNone(extract_confirmation_link_details(make_raw_email(body, subject="Reset your password", subtype="html")))
+        self.assertIsNone(extract_password_reset_link_details(make_raw_email(body, subject="Your sign up link", subtype="html")))
+
     def test_email_link_url_policy_matches_extension_cases(self):
         cases = json.loads((Path(__file__).parent / "fixtures/email-link-urls.json").read_text())
         for case in cases:

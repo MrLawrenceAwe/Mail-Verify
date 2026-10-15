@@ -19,7 +19,7 @@ function recipientIdentity(text) {
       /\b(?:check\s+(?:your\s+)?(?:e-?mail|inbox)|sent|emailed|(?:confirmation|verification|activation|reset)\s+(?:e-?mail|link))\b/i.test(
         instruction,
       ) &&
-      /\b(?:to|for|at|emailed|e-?mail|inbox)\s*[:=-]?\s*$/i.test(instruction)
+      /\b(?:to|for|at|emailed|e-?mail(?:\s+address)?|inbox)\s*[:=-]?\s*$/i.test(instruction)
     );
   });
 }
@@ -59,6 +59,9 @@ function matchesConfirmationWaitingPrompt(text) {
   return (
     /\bcheck\s+(?:your\s+)?(?:e-?mail|inbox)\b/i.test(value) ||
     /\b(?:we(?:'ve| have)?\s+)?sent\b.{0,65}\b(?:confirmation|verification|activation)\s+(?:e-?mail|link)\b/i.test(
+      value,
+    ) ||
+    /\b(?:confirmation|verification|activation)\s+link\s+(?:(?:that\s+was|we(?:'ve| have)?)\s+)?sent\s+to\s+(?:your\s+)?(?:e-?mail(?:\s+address)?|inbox)\b/i.test(
       value,
     ) ||
     /\b(?:click|follow|open)\b.{0,45}\blink\b.{0,70}\b(?:confirm|verify|activate)\b.{0,30}\b(?:e-?mail|account)\b/i.test(
