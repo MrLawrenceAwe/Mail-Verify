@@ -1,11 +1,14 @@
+import {
+  makeVerificationCodeMessage,
+  makeEmailLinkMessage,
+} from "./support/mail_results.js";
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  createPopupHarness,
-  verificationCodeMessage,
-  emailLinkMessage,
-} from "./support/popup_harness.js";
+import { createPopupHarness } from "./support/popup_harness.js";
+
+const verificationCodeMessage = makeVerificationCodeMessage();
+const emailLinkMessage = makeEmailLinkMessage();
 
 test("polls whether codes are present or absent", async () => {
   for (const codes of [[verificationCodeMessage], []]) {
@@ -161,7 +164,9 @@ test("partial account failures keep popup results selectable and clear after rec
   ]) {
     const { controls, state } = await createPopupHarness();
     state[fetchResults] = async () => [
-      { ...verificationCodeMessage, url: "https://example.com/verify" },
+      control === "checkCodes"
+        ? makeVerificationCodeMessage()
+        : makeEmailLinkMessage({ url: "https://example.com/verify" }),
     ];
     state.warnings = ["other@yahoo.com: Yahoo took too long to respond."];
     controls[control].trigger();

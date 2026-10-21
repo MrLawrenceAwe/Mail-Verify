@@ -1,11 +1,11 @@
+import { makeVerificationCodeMessage } from "./support/mail_results.js";
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  createPopupHarness,
-  verificationCodeMessage,
-} from "./support/popup_harness.js";
+import { createPopupHarness } from "./support/popup_harness.js";
 import { CompanionUnavailableError } from "../extension/shared/companion-client.js";
+
+const verificationCodeMessage = makeVerificationCodeMessage();
 
 test("shows installation guidance only for unavailable companions", async () => {
   for (const statusError of [

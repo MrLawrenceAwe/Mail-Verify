@@ -73,7 +73,6 @@ export function createEmailLinkCardView(
         padding-top: 8px;
         margin-top: 10px;
       }
-      article button,
       a {
         display: block;
         width: 100%;

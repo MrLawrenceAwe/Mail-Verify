@@ -100,9 +100,6 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
       #close:hover {
         background: #0001;
       }
-      [hidden] {
-        display: none !important;
-      }
     </style>
     <section aria-label="Mail Verify code suggestions">
       <div id="results"></div>

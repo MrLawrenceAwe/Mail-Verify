@@ -1,3 +1,4 @@
+import { makeVerificationCodeMessage } from "./mail_results.js";
 import { waitForAsyncCallbacks } from "./async_callbacks.js";
 import { createTimerQueue } from "./timer_queue.js";
 import assert from "node:assert/strict";
@@ -38,16 +39,8 @@ class FakeElement {
   }
 }
 
-export const verificationCodeMessage = {
-  code: "123456",
-  accountEmail: "test@yahoo.com",
-  sender: "sender@example.com",
-  subject: "Sign in",
-  receivedAt: 1000,
-};
-
 export async function createPopupHarness({
-  codes = [verificationCodeMessage],
+  codes = [makeVerificationCodeMessage()],
   account = "test@yahoo.com",
   remainingAccountEmails = [],
   tabUrl = "https://example.com/login",
@@ -167,8 +160,3 @@ export async function createPopupHarness({
   await waitForAsyncCallbacks();
   return { controls, timers, state };
 }
-
-export const emailLinkMessage = {
-  ...verificationCodeMessage,
-  url: "https://example.com/confirm?token=secret",
-};

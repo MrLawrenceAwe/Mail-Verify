@@ -1,5 +1,5 @@
 import { startCodePicker } from "../../extension/inline/code-picker-controller.js";
-import { createMockInlineRuntime } from "./mock_inline_port.js";
+import { createMockInlineRuntime } from "./mock_inline_runtime.js";
 import { createTimerQueue } from "./timer_queue.js";
 
 export function createCodePickerHarness({

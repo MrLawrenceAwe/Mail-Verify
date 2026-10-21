@@ -1,11 +1,13 @@
+import { makeEmailLinkMessage } from "./support/mail_results.js";
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createEmailLinkCardHarness,
-  emailLinkMessage,
   stepMutation,
 } from "./support/email_link_card_harness.js";
+
+const emailLinkMessage = makeEmailLinkMessage({ receivedAt: 10_000 });
 
 test("renders matching mail, validates open and remains dismissed", async () => {
   const harness = createEmailLinkCardHarness();

@@ -1,17 +1,12 @@
+import { makeEmailLinkMessage } from "./mail_results.js";
 import { waitForAsyncCallbacks } from "./async_callbacks.js";
 import assert from "node:assert/strict";
 import { detectEmailLinkStep } from "../../extension/inline/email-link-step.js";
 import { startEmailLinkCard } from "../../extension/inline/email-link-card-controller.js";
-import { createMockInlineRuntime } from "./mock_inline_port.js";
+import { createMockInlineRuntime } from "./mock_inline_runtime.js";
 import { createTimerQueue } from "./timer_queue.js";
 
-export const emailLinkMessage = {
-  url: "https://example.com/confirm?token=abc",
-  receivedAt: 10000,
-  accountEmail: "me@yahoo.com",
-  sender: "hello@example.com",
-  uid: 1,
-};
+const emailLinkMessage = makeEmailLinkMessage({ receivedAt: 10_000 });
 
 export const stepMutation = () => [
   {

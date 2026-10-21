@@ -1,12 +1,15 @@
+import {
+  makeVerificationCodeMessage,
+  makeEmailLinkMessage,
+} from "./support/mail_results.js";
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { formatReceivedAt } from "../extension/shared/mail-presentation.js";
-import {
-  createPopupHarness,
-  verificationCodeMessage,
-  emailLinkMessage,
-} from "./support/popup_harness.js";
+import { createPopupHarness } from "./support/popup_harness.js";
+
+const verificationCodeMessage = makeVerificationCodeMessage();
+const emailLinkMessage = makeEmailLinkMessage();
 
 test("popup codes normalize sender labels and identify the target page", async () => {
   for (const [sender, expected] of [
