@@ -86,7 +86,7 @@ export function createPopupController({
   async function fillSelectedCode(item, button) {
     await useSelectedResult(async () => {
       if (!isFreshMessage(item.receivedAt, clock.now()))
-        throw new Error("This code is too old. Request a new code.");
+        throw new Error("This code is no longer current. Request a new code.");
       const current = await chrome.tabs.get(targetTab.id);
       const [active] = await chrome.tabs.query({
         active: true,
@@ -111,7 +111,7 @@ export function createPopupController({
     await useSelectedResult(
       async () => {
         if (!isFreshMessage(item.receivedAt, clock.now()))
-          throw new Error("This link is too old. Request a new email.");
+          throw new Error("This link is no longer current. Request a new email.");
         if (!isSupportedEmailLinkUrl(item.url))
           throw new Error("This link is not supported.");
         await chrome.tabs.create({ url: item.url });

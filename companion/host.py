@@ -84,7 +84,7 @@ def handle_request(request, scan_manager):
             scan_manager.close()
             raise UserError("Connect Yahoo Mail first.")
         return scan_manager.poll_accounts(account_credentials, action, request.get("collectOnly") is True)
-    raise UserError("Unsupported request.")
+    raise UserError("Unsupported request.", code="unsupportedRequest")
 
 
 def read_message(stream):
@@ -113,6 +113,8 @@ def main():
                 response = {"ok": True, **handle_request(request, scan_manager)}
             except UserError as exc:
                 response = {"ok": False, "error": str(exc)}
+                if exc.code is not None:
+                    response["errorCode"] = exc.code
             except imaplib.IMAP4.error:
                 response = {
                     "ok": False,

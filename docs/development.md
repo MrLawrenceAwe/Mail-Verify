@@ -21,6 +21,8 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 
 The inline request field is `mailType`; native requests use `action`. Mail types and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Responses include `scanPending`; requests with `collectOnly: true` collect existing workers and cached results without starting scans. Update the companion and extension together when changing this contract.
 
+Failed native responses include `ok: false` and a display message in `error`. Unsupported requests also include `errorCode: "unsupportedRequest"`; the client uses this identifier to show companion update guidance independently of the message wording.
+
 ### Polling lifecycle
 
 Automatic checking lasts up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. Pending scans are collected every second, while full checks continue at the normal interval so healthy accounts can discover new mail.

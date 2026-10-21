@@ -47,8 +47,9 @@ class HostTests(unittest.TestCase):
 
     def test_non_string_actions_are_rejected_as_unsupported(self):
         for action in (None, [], {}):
-            with self.subTest(action=action), self.assertRaisesRegex(host.UserError, "Unsupported request"):
+            with self.subTest(action=action), self.assertRaisesRegex(host.UserError, "Unsupported request") as caught:
                 host.handle_request({"action": action}, account_scan_manager.AccountScanManager())
+            self.assertEqual(caught.exception.code, "unsupportedRequest")
 
     def test_frame(self):
         p = json.dumps({"action": "status"}).encode()

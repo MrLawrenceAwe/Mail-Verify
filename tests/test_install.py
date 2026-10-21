@@ -78,7 +78,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertEqual(length, len(result.stdout[4:]))
                 self.assertEqual(
                     json.loads(result.stdout[4:]),
-                    {"ok": False, "error": "Unsupported request."},
+                    {"ok": False, "error": "Unsupported request.", "errorCode": "unsupportedRequest"},
                 )
                 unrelated = destination / "personal-note.txt"
                 unrelated.write_text("Keep this file.")

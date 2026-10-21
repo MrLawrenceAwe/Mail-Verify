@@ -84,8 +84,8 @@ test("reuses the host and ignores replies from closed ports", async () => {
     },
   });
   const status = client.sendSessionRequest("status");
-  ports[0].message({ ok: true, email: "test@yahoo.com" });
-  assert.equal((await status).email, "test@yahoo.com");
+  ports[0].message({ ok: true, accountEmails: ["test@yahoo.com"] });
+  assert.deepEqual((await status).accountEmails, ["test@yahoo.com"]);
   const first = client.sendSessionRequest("codes");
   ports[0].message({ ok: true, codes: [code] });
   assert.equal((await first).codes[0].code, code.code);
@@ -148,12 +148,20 @@ test("uses the same response errors for one-off and session requests", async () 
   reply({ ok: false, error: "Denied" });
   await assert.rejects(request, /Denied/);
 
+  const unclassified = client.sendSessionRequest("codes");
+  reply({ ok: false, error: "Unsupported request." });
+  await assert.rejects(unclassified, { message: "Unsupported request." });
+
   for (const request of [
     () => client.sendSessionRequest("confirmationLinks"),
     () => client.sendOneOffRequest({ action: "saveAccount" }),
   ]) {
     const unsupported = request();
-    reply({ ok: false, error: "Unsupported request." });
+    reply({
+      ok: false,
+      errorCode: "unsupportedRequest",
+      error: "This action is unavailable.",
+    });
     await assert.rejects(
       unsupported,
       /Unsupported request.*close the popup.*Install Companion\.command.*chrome:\/\/extensions.*refresh affected website tabs.*reopen the popup/,

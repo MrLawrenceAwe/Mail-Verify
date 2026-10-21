@@ -11,7 +11,7 @@
 
 For an existing installation, close the popup and rerun **Install Companion.command** after companion changes. After either companion or extension changes, click **Reload** on Chrome’s Extensions page, then refresh affected website tabs and reopen the popup. Reloading closes the extension’s native sessions so the next check starts the updated companion; rerunning the installer alone does not restart an already-running companion. Saved accounts are retained.
 
-If a mail check reports **Unsupported request**, the installed companion is out of date. Close the popup, rerun **Install Companion.command**, reload the extension, then refresh affected website tabs and reopen the popup to check again. Reloading the extension alone does not update the companion.
+If a mail check reports **Unsupported request**, the installed companion may be out of date. Close the popup, rerun **Install Companion.command**, reload the extension, then refresh affected website tabs and reopen the popup to check again. Reloading the extension alone does not update the companion.
 
 If suggestions do not appear after refreshing a website, open Mail Verify’s **Details** on `chrome://extensions` and check that **Site access** allows it on that site. Yahoo may restrict app-password generation; an account without an app password cannot use this connection method.
 

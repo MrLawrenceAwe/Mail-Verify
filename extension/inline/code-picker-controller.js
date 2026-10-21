@@ -122,7 +122,7 @@ export function startCodePicker({
         syncPicker();
         if (view !== mountedView) return;
         if (!isFreshMessage(item.receivedAt, clock.now(), minReceivedAtMs)) {
-          view.setStatus("This code is too old to suggest. Request a new one.");
+          view.setStatus("This code is no longer current. Request a new one.");
           view.disableCodeButton(button);
           positionPicker();
           return;

@@ -10,7 +10,7 @@ export class CompanionUnavailableError extends Error {
 }
 
 function requireSuccessfulResponse(response) {
-  if (!response?.ok && response?.error === "Unsupported request.")
+  if (!response?.ok && response?.errorCode === "unsupportedRequest")
     throw new Error(
       "Unsupported request. Update the Mac companion: close the popup, run Install Companion.command from the project folder, reload Mail Verify on chrome://extensions, then refresh affected website tabs and reopen the popup.",
     );

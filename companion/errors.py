@@ -4,6 +4,10 @@ import imaplib
 class UserError(Exception):
     """An error whose message can be displayed to the user."""
 
+    def __init__(self, message, *, code=None):
+        super().__init__(message)
+        self.code = code
+
 
 def inbox_error_message(error):
     if isinstance(error, UserError):

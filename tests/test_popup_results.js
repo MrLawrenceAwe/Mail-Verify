@@ -152,7 +152,7 @@ test("rejects codes with future or invalid arrival times before filling", async 
     });
     await controls.results.querySelectorAll("button")[0].trigger();
     assert.equal(state.scriptArgs, null);
-    assert.match(controls.status.textContent, /too old/);
+    assert.match(controls.status.textContent, /no longer current/);
   }
 });
 
@@ -167,7 +167,7 @@ test("rejects expired and unsafe links at click time", async () => {
     await waitForAsyncCallbacks();
     await controls.results.querySelectorAll("button")[0].trigger();
     assert.deepEqual(state.opened, []);
-    assert.match(controls.status.textContent, /too old|not supported/);
+    assert.match(controls.status.textContent, /no longer current|not supported/);
   }
 });
 
@@ -229,7 +229,7 @@ test("reset opening rejects expired or unsafe links and recovers from tab errors
     await button.trigger();
     assert.deepEqual(state.opened, []);
     assert.equal(button.disabled, false);
-    assert.match(controls.status.textContent, /too old|not supported|Tab unavailable/);
+    assert.match(controls.status.textContent, /no longer current|not supported|Tab unavailable/);
     if (state.failOpen) {
       state.failOpen = false;
       await button.trigger();
