@@ -31,9 +31,11 @@ export function createTimerQueue() {
     values() {
       return pending.values();
     },
-    async runWithDelay(delay) {
-      const match = [...pending].find(([, entry]) => entry.delay === delay);
-      assert.ok(match, `timer ${delay} exists`);
+    async runNextWithDelay(registeredDelayMs) {
+      const match = [...pending].find(
+        ([, entry]) => entry.delay === registeredDelayMs,
+      );
+      assert.ok(match, `timer with registered delay ${registeredDelayMs} exists`);
       await take(match[0])();
     },
   };

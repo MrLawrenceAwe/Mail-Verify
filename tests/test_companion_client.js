@@ -194,7 +194,7 @@ test("silent hosts time out, disconnect, and allow a fresh request", async () =>
   );
   const stalled = client.sendSessionRequest("status");
   const rejected = assert.rejects(stalled, /too long/);
-  await timers.runWithDelay(35_000);
+  await timers.runNextWithDelay(35_000);
   await rejected;
   assert.equal(ports[0].closed, true);
   const retry = client.sendSessionRequest("codes");
@@ -210,7 +210,7 @@ test("silent hosts time out, disconnect, and allow a fresh request", async () =>
   });
   assert.equal(ports[2].request.email, "test@yahoo.com");
   const saveRejected = assert.rejects(save, /too long/);
-  await timers.runWithDelay(60_000);
+  await timers.runNextWithDelay(60_000);
   await saveRejected;
   assert.equal(ports[2].closed, true);
   assert.equal(timers.length, 0);

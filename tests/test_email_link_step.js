@@ -168,14 +168,20 @@ test("line-separated navigation still cannot select reset mail type", () => {
 
 test("step detection reads each visible panel once and returns its purpose separately", () => {
   let reads = 0;
+  let text = "Reset your password. Check your email.";
   const panel = {
-    get innerText() { reads++; return "Reset your password. Check your email."; },
+    get innerText() { reads++; return text; },
     getClientRects: () => [{}], checkVisibility: () => true,
   };
   const step = detectEmailLinkStep({ querySelectorAll: () => [panel] });
   assert.equal(reads, 1);
   assert.equal(step.mailType, "passwordResetLinks");
-  assert.doesNotMatch(step.key, /^passwordResetLinks:/);
+  assert.doesNotMatch(step.key, /passwordResetLinks|confirmationLinks/);
+  text = "Confirm your account. Check your email.";
+  const confirmationStep = detectEmailLinkStep({ querySelectorAll: () => [panel] });
+  assert.equal(reads, 2);
+  assert.equal(confirmationStep.key, step.key);
+  assert.equal(confirmationStep.mailType, "confirmationLinks");
 });
 
 test("unrelated password navigation cannot override explicit confirmation instructions", () => {

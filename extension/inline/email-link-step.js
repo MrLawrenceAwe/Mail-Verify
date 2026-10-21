@@ -25,8 +25,9 @@ function recipientIdentity(text) {
 }
 
 function isWithinPanelBudget(panel) {
-  // Bound traversal before any layout or full rendered-text reads. Hidden
-  // templates and non-rendered content do not consume the text budget.
+  // Bound traversal before layout or rendered-text reads. Skip descendants of
+  // hidden elements, scripts, styles, and templates; CSS and aria-hidden
+  // do not affect this raw-text budget.
   let count = 0,
     textUnits = 0;
   for (let node = panel; node; ) {
@@ -136,11 +137,11 @@ export function detectEmailLinkStep(document) {
     if (!emailLinkPanelIds.has(panel))
       emailLinkPanelIds.set(panel, nextEmailLinkPanelId++);
     // Status text and countdowns do not identify a new email request.
-    // Panel replacement, recipient changes, and purpose changes still do.
+    // The key tracks panel and recipient; controllers compare mailType separately.
     // Prefer the waiting form inside a larger task panel, so its resend
     // controls cannot be confused with another form in the same main region.
     detectedStep = {
-      key: `${emailLinkPanelIds.get(panel)}:${mailType}:${recipientIdentity(text)}`,
+      key: `${emailLinkPanelIds.get(panel)}:${recipientIdentity(text)}`,
       mailType,
       panel,
     };

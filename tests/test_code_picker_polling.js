@@ -38,7 +38,7 @@ test("checking completion is announced with results, no results, warnings, or er
     });
     await waitForAsyncCallbacks();
     now = 129_999;
-    await timers.runWithDelay(2000);
+    await timers.runNextWithDelay(2000);
     await waitForAsyncCallbacks();
     assert.match(elements["#status"].textContent, /Checking finished.*↻/);
     assert.equal(timers.length, 0);
@@ -78,11 +78,11 @@ test("code picker collects pending scans quickly then resumes normal checks", as
     },
   });
   await waitForAsyncCallbacks();
-  await timers.runWithDelay(1000);
+  await timers.runNextWithDelay(1000);
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 1);
   assert.deepEqual(modes, [false, true]);
-  await timers.runWithDelay(2000);
+  await timers.runNextWithDelay(2000);
   await waitForAsyncCallbacks();
   assert.equal(modes.at(-1), false);
 });
@@ -106,10 +106,10 @@ test("a slow account does not suppress normal code scans for healthy accounts", 
 
   await waitForAsyncCallbacks();
   now += 1000;
-  await timers.runWithDelay(1000);
+  await timers.runNextWithDelay(1000);
   await waitForAsyncCallbacks();
   now += 1000;
-  await timers.runWithDelay(1000);
+  await timers.runNextWithDelay(1000);
   await waitForAsyncCallbacks();
   assert.deepEqual(modes, [false, true, false]);
 });

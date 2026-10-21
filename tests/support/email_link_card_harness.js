@@ -123,7 +123,7 @@ export function createEmailLinkCardHarness(
     },
   });
   async function run(delay) {
-    await timers.runWithDelay(delay);
+    await timers.runNextWithDelay(delay);
     await waitForAsyncCallbacks();
   }
   return { state, document, location, events, windowEvents, run, timers };

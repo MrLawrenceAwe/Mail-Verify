@@ -151,7 +151,7 @@ test("focus moves within split digits preserve suggestions, but another group st
     for (const digit of [...first.slice(1), null, first[0]]) {
       context.document.activeElement = digit;
       events.get("focusin")();
-      await timers.runWithDelay(150);
+      await timers.runNextWithDelay(150);
       await waitForAsyncCallbacks();
       assert.equal(
         results.children[0],
@@ -166,7 +166,7 @@ test("focus moves within split digits preserve suggestions, but another group st
     assert.equal(queries, beforeScroll, "scroll must reuse cached candidates");
     context.document.activeElement = second[0];
     events.get("focusin")();
-    await timers.runWithDelay(150);
+    await timers.runNextWithDelay(150);
     await waitForAsyncCallbacks();
     assert.equal(
       mounts,
@@ -180,7 +180,7 @@ test("focus moves within split digits preserve suggestions, but another group st
     );
     context.document.activeElement = null;
     events.get("focusin")();
-    await timers.runWithDelay(150);
+    await timers.runNextWithDelay(150);
     await waitForAsyncCallbacks();
     assert.equal(mounts, 2, "losing focus must retain the selected group");
     assert.equal(requests, 2);
@@ -560,7 +560,7 @@ test("countdown completion retains codes without starting a new attempt", async 
     now = 40_000;
     form.firstChild.data = "We sent a code to alice@example.test. Resend code";
     observer([{ type: "characterData", target: {} }]);
-    await timers.runWithDelay(150);
+    await timers.runNextWithDelay(150);
     await waitForAsyncCallbacks();
     assert.equal(
       results.children[0]?.strong.textContent,
@@ -811,7 +811,7 @@ test("incidental form messages retain codes through discovery, retry and selecti
   ]) {
     form.firstChild.data = `Enter your verification code ${status}`;
     observer([{ type: "characterData", target: {} }]);
-    await timers.runWithDelay(150);
+    await timers.runNextWithDelay(150);
     await waitForAsyncCallbacks();
     assert.equal(results.children[0], button);
   }
@@ -864,7 +864,7 @@ test("an oversized step keeps the last known recipient and remains selectable", 
   ]) {
     form.firstChild.data = text;
     observer([{ type: "characterData", target: {} }]);
-    await timers.runWithDelay(150);
+    await timers.runNextWithDelay(150);
     await waitForAsyncCallbacks();
     assert.equal(results.children[0], button);
   }
@@ -949,8 +949,8 @@ test("an identical detached field replacement retains old mail and fills the liv
     now = 20000; // The existing mail is outside a newly started step's allowance.
     if (discoveryFirst) {
       harness.events.get("focusin")();
-      await harness.timers.runWithDelay(150);
-      await harness.timers.runWithDelay(2000);
+      await harness.timers.runNextWithDelay(150);
+      await harness.timers.runNextWithDelay(2000);
       await waitForAsyncCallbacks();
     }
     assert.equal(harness.results.children[0], button);
@@ -993,7 +993,7 @@ test("a changed recipient or changed field is not treated as an identical replac
     if (change === "container")
       root = createTextElement("FORM", form.firstChild.data);
     harness.events.get("focusin")();
-    await harness.timers.runWithDelay(150);
+    await harness.timers.runNextWithDelay(150);
     await waitForAsyncCallbacks();
     assert.equal(harness.results.childElementCount, 0, change);
   }

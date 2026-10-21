@@ -21,21 +21,21 @@ test("polls whether codes are present or absent", async () => {
 test("popup collects pending results quickly without reporting an empty completed scan", async () => {
   const { state, timers, controls } = await createPopupHarness({ codes: [] });
   state.scanPending = true;
-  await timers.runWithDelay(8000);
+  await timers.runNextWithDelay(8000);
   assert.match(controls.status.textContent, /Checking/);
   state.scanPending = false;
   state.fetchCodes = async () => [verificationCodeMessage];
-  await timers.runWithDelay(1000);
+  await timers.runNextWithDelay(1000);
   assert.equal(state.sessionRequests.at(-1).collectOnly, true);
   assert.equal(controls.results.querySelectorAll("button").length, 1);
-  await timers.runWithDelay(8000);
+  await timers.runNextWithDelay(8000);
   assert.equal(state.sessionRequests.at(-1).collectOnly, false);
 });
 
 test("a manual popup retry starts a new scan instead of collecting a closed session", async () => {
   const { state, timers, controls } = await createPopupHarness({ codes: [] });
   state.scanPending = true;
-  await timers.runWithDelay(8000);
+  await timers.runNextWithDelay(8000);
   controls.checkCodes.trigger();
   await waitForAsyncCallbacks();
   assert.equal(state.sessionRequests.at(-1).collectOnly, false);
@@ -45,12 +45,12 @@ test("a slow account does not suppress normal popup scans for healthy accounts",
   const { state, timers } = await createPopupHarness({ codes: [] });
   state.scanPending = true;
   state.now += 8000;
-  await timers.runWithDelay(8000);
+  await timers.runNextWithDelay(8000);
   state.now += 1000;
-  await timers.runWithDelay(1000);
+  await timers.runNextWithDelay(1000);
   assert.equal(state.sessionRequests.at(-1).collectOnly, true);
   state.now += 7000;
-  await timers.runWithDelay(1000);
+  await timers.runNextWithDelay(1000);
   assert.equal(state.sessionRequests.at(-1).collectOnly, false);
 });
 

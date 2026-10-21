@@ -89,7 +89,7 @@ Code-step tracking identifies email recipients (including masked addresses) in n
 
 Mutation and code-context inspection read individual text nodes without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per mutation batch. Code-context reads skip hidden content, scripts, styles, and templates and reuse each root within a discovery or fill. See [mutation inspection](../extension/inline/mutation-inspection.js), [code-step context](../extension/inline/code-step-context.js), and [field handling](../extension/shared/code-fields.js).
 
-[Link-panel detection](../extension/inline/email-link-step.js) bounds traversal before layout or `innerText` reads. It skips explicitly hidden subtrees, scripts, styles, and templates; markup hidden only by CSS can still exhaust the raw-text budget.
+[Link-panel detection](../extension/inline/email-link-step.js) bounds traversal before layout or `innerText` reads. It skips descendants of elements with the `hidden` attribute, scripts, styles, and templates. CSS and `aria-hidden` are not inspected for this budget, so their concealed content can still exhaust it.
 
 ## Installation identity and updates
 

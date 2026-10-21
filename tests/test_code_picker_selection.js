@@ -191,7 +191,7 @@ test("switching CSS-hidden recipients blocks the previous code before discovery 
     await waitForAsyncCallbacks();
     assert.equal(results.children.length, 1);
     assert.equal(results.children[0].strong.textContent, "Fill code 222222");
-    await timers.runWithDelay(150);
+    await timers.runNextWithDelay(150);
     await waitForAsyncCallbacks();
     button.onclick();
     assert.equal(fills, 0, "the detached old selection stays blocked");

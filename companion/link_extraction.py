@@ -90,6 +90,28 @@ def is_password_reset_label(label):
     return bool(RESET_LABEL_PATTERN.search(label) or RESET_LINK_LABEL_PATTERN.fullmatch(label.strip()))
 
 
+def iter_plain_text_links(value):
+    # Require an explicit link instruction immediately before a URL.
+    previous_url_end = 0
+    for match in re.finditer(r"https?://[^\s<>\"']+", value):
+        # Even an unsupported HTTP URL ends its instruction; it must
+        # not label a later HTTPS footer URL.
+        context = value[max(previous_url_end, match.start() - 180):match.start()]
+        previous_url_end = match.end()
+        # Blank lines before the URL are layout, not a new paragraph.
+        # Keep only the last nonempty paragraph so unrelated prose
+        # still separates a footer URL from an earlier instruction.
+        context = re.split(r"\n\s*\n", context.rstrip())[-1]
+        # An action phrase in an earlier sentence must not turn a
+        # later help, privacy, or other unrelated URL into a candidate.
+        sentences = re.split(r"[.!?](?:\s+|$)", context)
+        context = next(
+            (sentence for sentence in reversed(sentences) if sentence.strip()),
+            "",
+        )
+        yield match.group().rstrip(".,);]"), context
+
+
 def extract_labelled_link(raw_message, label_matches, excluded_label_pattern, excluded_subject_pattern):
     message = email.message_from_bytes(raw_message, policy=policy.default)
     subject, display_metadata = extract_message_metadata(message)
@@ -105,26 +127,7 @@ def extract_labelled_link(raw_message, label_matches, excluded_label_pattern, ex
             links = parser.links
             candidates = html_candidates
         else:
-            # Require an explicit link instruction immediately before a URL.
-            links = []
-            previous_url_end = 0
-            for match in re.finditer(r"https?://[^\s<>\"']+", value):
-                # Even an unsupported HTTP URL ends its instruction; it must
-                # not label a later HTTPS footer URL.
-                context = value[max(previous_url_end, match.start() - 180):match.start()]
-                previous_url_end = match.end()
-                # Blank lines before the URL are layout, not a new paragraph.
-                # Keep only the last nonempty paragraph so unrelated prose
-                # still separates a footer URL from an earlier instruction.
-                context = re.split(r"\n\s*\n", context.rstrip())[-1]
-                # An action phrase in an earlier sentence must not turn a
-                # later help, privacy, or other unrelated URL into a candidate.
-                sentences = re.split(r"[.!?](?:\s+|$)", context)
-                context = next(
-                    (sentence for sentence in reversed(sentences) if sentence.strip()),
-                    "",
-                )
-                links.append((match.group().rstrip(".,);]"), context))
+            links = iter_plain_text_links(value)
             candidates = plain_candidates
         for url, label in links:
             label = re.sub(r"\s+", " ", label)

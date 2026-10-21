@@ -71,7 +71,7 @@ test("picker avoids page controls and reuses their discovery during scroll", asy
   observer([
     { type: "childList", target: {}, addedNodes: [control], removedNodes: [] },
   ]);
-  await timers.runWithDelay(150);
+  await timers.runNextWithDelay(150);
   assert.equal(mounted.style.top, "36px");
   const beforeScroll = queries;
   events.get("scroll")();
@@ -170,6 +170,6 @@ test("oversized picker mutations coalesce into one deferred discovery", async ()
   for (let index = 0; index < 20; index++) observer(records);
   assert.equal(discoveries, 1);
   assert.equal(timers.length, 1);
-  await timers.runWithDelay(150);
+  await timers.runNextWithDelay(150);
   assert.equal(discoveries, 2);
 });
