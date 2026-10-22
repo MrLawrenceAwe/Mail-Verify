@@ -40,9 +40,15 @@ class EmailLinkParser(VisibleEmailHTMLParser):
         self.links = []
         self.anchor_url = None
         self.anchor_text_parts = []
+        self.visible_text_parts = []
 
     def visible_start(self, tag, attrs):
+        if tag in ("br", "div", "p", "tr", "li"):
+            self.visible_text_parts.append("\n")
         if tag == "a":
+            # Keep anchor labels out of bare-URL instructions and prevent an
+            # instruction before an anchor from labelling a later footer URL.
+            self.visible_text_parts.append("\n\nLinked content\n\n")
             self.anchor_url = attrs.get("href", "")
             self.anchor_text_parts = []
         if tag == "img" and self.anchor_url is not None:
@@ -51,12 +57,17 @@ class EmailLinkParser(VisibleEmailHTMLParser):
     def visible_data(self, data):
         if self.anchor_url is not None:
             self.anchor_text_parts.append(data)
+        else:
+            self.visible_text_parts.append(data)
 
     def visible_end(self, tag):
+        if tag in ("div", "p", "tr", "li"):
+            self.visible_text_parts.append("\n\n")
         if tag == "a" and self.anchor_url is not None:
             self.links.append((self.anchor_url, " ".join(self.anchor_text_parts)))
             self.anchor_url = None
             self.anchor_text_parts = []
+            self.visible_text_parts.append("\n\nLinked content\n\n")
 
 
 RESET_LABEL_PATTERN = re.compile(
@@ -124,7 +135,7 @@ def extract_labelled_link(raw_message, label_matches, excluded_label_pattern, ex
         if content_type == "text/html":
             parser = EmailLinkParser()
             parser.feed(value)
-            links = parser.links
+            links = [*parser.links, *iter_plain_text_links("".join(parser.visible_text_parts))]
             candidates = html_candidates
         else:
             links = iter_plain_text_links(value)

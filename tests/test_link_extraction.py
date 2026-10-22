@@ -9,6 +9,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 from link_extraction import extract_confirmation_link_details, extract_password_reset_link_details, is_supported_email_link_url
 
 class ConfirmationLinkExtractionTests(unittest.TestCase):
+    def test_workday_bare_url_in_html_only_email(self):
+        body = ('<div>Click this link to confirm your email address and complete setup '
+                'for your candidate account<br>https://example.com/activate/synthetic?redirect=%2Fhome'
+                '<br>The link will expire after 24 hours.</div>')
+        result = extract_confirmation_link_details(make_raw_email(body, subject="Verify your candidate account", subtype="html"))
+        self.assertEqual(result["url"], "https://example.com/activate/synthetic?redirect=%2Fhome")
+
+    def test_html_bare_urls_preserve_visibility_purpose_and_ambiguity(self):
+        for body in (
+            '<div hidden>Confirm your email:<br>https://example.com/hidden</div>',
+            '<div>Confirm your email:<br>http://example.com/insecure</div>',
+            '<div>Confirm your email in your dashboard.</div><div>Privacy: https://example.com/privacy</div>',
+            '<a href="https://example.com/verify">Confirm your email</a><br>https://example.com/privacy',
+            '<div>Confirm your email: https://example.com/one</div><div>Confirm your email: https://example.com/two</div>',
+        ):
+            with self.subTest(body=body):
+                result = extract_confirmation_link_details(make_raw_email(body, subject="Verify your email", subtype="html"))
+                if body.startswith('<a '):
+                    self.assertEqual(result["url"], "https://example.com/verify")
+                else:
+                    self.assertIsNone(result)
+
     def test_signup_actions_in_html_and_plain_text(self):
         for label in ("Sign up to KeenTools Cloud", "Sign up", "Sign-up", "Sign up for Example", "Sign up with Example"):
             for subtype, body in (("html", f'<a href="https://example.com/verify?token=synthetic">{label}</a>'),

@@ -59,6 +59,12 @@ function matchesDefaultLinkWaitingPrompt(text) {
     return false;
   return (
     /\bcheck\s+(?:your\s+)?(?:e-?mail|inbox)\b/i.test(value) ||
+    /\be-?mail\s+has\s+been\s+sent\s+to\s+you[.!]?\s+(?:please\s+)?(?:verify|confirm|activate)\s+your\s+(?:account|e-?mail(?:\s+address)?)\b/i.test(
+      value,
+    ) ||
+    /\be-?mail\s+has\s+been\s+sent\s+to\s+you\b.{0,160}\byour\s+account\s+may\s+need\s+verification\b/i.test(
+      value,
+    ) ||
     /\b(?:we(?:'ve| have)?\s+)?sent\b.{0,65}\b(?:confirmation|verification|activation)\s+(?:e-?mail|link)\b/i.test(
       value,
     ) ||

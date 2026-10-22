@@ -222,3 +222,18 @@ test("a form inside the active modal owns its resend controls", () => {
   assert.equal(step.panel, form);
   assert.equal(step.mailType, "passwordResetLinks");
 });
+
+test("detects Workday's sent-email notice beside sign-in and password navigation", () => {
+  const notice = "An email has been sent to you. Please verify your account.";
+  const resendNotice = "An email has been sent to you.\nStill can't sign in? Be sure to check your spam folder, your account may need verification\nResend Account Verification";
+  for (const text of [notice, resendNotice, `Sign In\n${notice}\nEmail Address\nPassword\nSign In\nCreate Account\nForgot your password?`]) {
+    assert.equal(detectedMailType(text), "confirmationLinks", text);
+    assert.equal(matchesPasswordResetWaitingPrompt(text), false, text);
+  }
+  for (const text of [
+    "An email has been sent to you.",
+    "Please verify your account.",
+    "An email will be sent to you. Please verify your account.",
+    "An email has been sent to you. Please reset your password.",
+  ]) assert.notEqual(detectedMailType(text), "confirmationLinks", text);
+});
