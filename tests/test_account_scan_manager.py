@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 import account_scan_manager
+from support.account_scans import create_scan_manager
 
 
 class AccountScanManagerTests(unittest.TestCase):
@@ -23,7 +24,7 @@ class AccountScanManagerTests(unittest.TestCase):
         for error, guidance in cases:
             for partial in (False, True):
                 with self.subTest(error=error, partial=partial):
-                    manager = account_scan_manager.AccountScanManager()
+                    manager = create_scan_manager(self)
                     accounts = [{"email": "failed@yahoo.com", "password": "unused"}]
                     if partial:
                         accounts.append({"email": "healthy@yahoo.com", "password": "unused"})
@@ -31,24 +32,21 @@ class AccountScanManagerTests(unittest.TestCase):
                         if session.credentials["email"] == "failed@yahoo.com":
                             raise error
                         return []
-                    try:
-                        with patch.object(account_scan_manager, "scan_with_deadline", side_effect=scan):
-                            if partial:
-                                message = manager.poll_accounts(accounts)["warnings"][0]
-                            else:
-                                with self.assertRaises(account_scan_manager.UserError) as caught:
-                                    manager.poll_accounts(accounts)
-                                message = str(caught.exception)
-                        self.assertIn("failed@yahoo.com", message)
-                        self.assertIn(guidance, message)
-                        if not isinstance(error, account_scan_manager.UserError):
-                            self.assertNotIn(str(error), message)
-                    finally:
-                        manager.close()
+                    with patch.object(account_scan_manager, "scan_with_deadline", side_effect=scan):
+                        if partial:
+                            message = manager.poll_accounts(accounts)["warnings"][0]
+                        else:
+                            with self.assertRaises(account_scan_manager.UserError) as caught:
+                                manager.poll_accounts(accounts)
+                            message = str(caught.exception)
+                    self.assertIn("failed@yahoo.com", message)
+                    self.assertIn(guidance, message)
+                    if not isinstance(error, account_scan_manager.UserError):
+                        self.assertNotIn(str(error), message)
 
     def test_pending_scan_is_reported_until_completed_results_are_collected(self):
         release = threading.Event()
-        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager = create_scan_manager(self)
         accounts = [{"email": "test@yahoo.com", "password": "unused"}]
         def fetch(_session):
             release.wait(2)
@@ -69,7 +67,7 @@ class AccountScanManagerTests(unittest.TestCase):
 
     def test_collection_polls_do_not_restart_completed_accounts(self):
         release = threading.Event()
-        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager = create_scan_manager(self)
         accounts = [{"email": "slow@yahoo.com", "password": "unused"},
                     {"email": "healthy@yahoo.com", "password": "unused"}]
         calls = []
@@ -99,15 +97,12 @@ class AccountScanManagerTests(unittest.TestCase):
                 scan_manager.close()
 
     def test_collecting_without_pending_work_does_not_start_a_scan(self):
-        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager = create_scan_manager(self)
         accounts = [{"email": "test@yahoo.com", "password": "unused"}]
         with patch.object(account_scan_manager, "scan_with_deadline") as fetch:
-            try:
-                response = scan_manager.poll_accounts(accounts, collect_only=True)
-                self.assertEqual(response, {"codes": [], "warnings": [], "scanPending": False})
-                fetch.assert_not_called()
-            finally:
-                scan_manager.close()
+            response = scan_manager.poll_accounts(accounts, collect_only=True)
+            self.assertEqual(response, {"codes": [], "warnings": [], "scanPending": False})
+            fetch.assert_not_called()
 
     def test_codes_are_labeled_and_sorted_across_accounts(self):
         accounts = [
@@ -118,7 +113,7 @@ class AccountScanManagerTests(unittest.TestCase):
             [{"code": "111111", "receivedAt": 1000, "uid": 1}],
             [{"code": "222222", "receivedAt": 2000, "uid": 1}],
         ]):
-            result = account_scan_manager.AccountScanManager().poll_accounts(accounts)
+            result = create_scan_manager(self).poll_accounts(accounts)
         self.assertEqual(
             [item["accountEmail"] for item in result["codes"]],
             ["two@yahoo.com", "one@yahoo.com"],
@@ -126,7 +121,7 @@ class AccountScanManagerTests(unittest.TestCase):
 
     def test_switching_to_links_discards_code_scan_state(self):
         accounts = [{"email": "one@yahoo.com", "password": "unused"}]
-        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager = create_scan_manager(self)
         with patch.object(account_scan_manager, "scan_with_deadline", return_value=[]):
             scan_manager.poll_accounts(accounts)
             old = scan_manager.sessions["one@yahoo.com"]
@@ -138,7 +133,7 @@ class AccountScanManagerTests(unittest.TestCase):
 
     def test_reset_mail_type_discards_confirmation_scan_state(self):
         accounts = [{"email": "one@yahoo.com", "password": "unused"}]
-        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager = create_scan_manager(self)
         with patch.object(account_scan_manager, "scan_with_deadline", return_value=[]):
             scan_manager.poll_accounts(accounts, "confirmationLinks")
             old = scan_manager.sessions["one@yahoo.com"]
@@ -187,7 +182,7 @@ class AccountScanManagerTests(unittest.TestCase):
                 started.set()
                 release.wait(2)
             return [{"code": "123456", "receivedAt": int(time.time() * 1000), "uid": 1}]
-        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager = create_scan_manager(self)
         with patch.object(account_scan_manager, "scan_with_deadline", side_effect=fetch):
             try:
                 first = scan_manager.poll_accounts(accounts)
@@ -208,7 +203,7 @@ class AccountScanManagerTests(unittest.TestCase):
 
     def test_removal_defers_close_until_worker_finishes_and_discards_results(self):
         release = threading.Event()
-        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager = create_scan_manager(self)
         account = {"email": "test@yahoo.com", "password": "unused"}
         with patch.object(account_scan_manager, "scan_with_deadline", side_effect=lambda _: release.wait(2)):
             try:
@@ -232,7 +227,7 @@ class AccountScanManagerTests(unittest.TestCase):
         release = threading.Event()
         started = threading.Condition()
         calls = []
-        scan_manager = account_scan_manager.AccountScanManager()
+        scan_manager = create_scan_manager(self)
         accounts = [{"email": f"{index}@yahoo.com", "password": "unused"} for index in range(6)]
         def fetch(session):
             with started:

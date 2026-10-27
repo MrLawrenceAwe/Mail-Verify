@@ -2,7 +2,7 @@
 
 ## Use
 
-| Email type | On-page suggestion | Selected action | Manual popup check |
+| Email type | On-page suggestion | Selected action | Popup check button |
 | --- | --- | --- | --- |
 | Verification code | Beside a supported code field | **Fill code**, without clicking Submit | **Find verification codes** |
 | Account confirmation | Bottom-right card on a recognised “Check your email” screen | **Open confirmation link** in a new tab; this may immediately confirm the account | **Find confirmation links** |
@@ -10,11 +10,13 @@
 
 Request the email on the website, then choose its matching result. Review the account, sender, subject, arrival time, and link domain before using it. Results show the arrival time in your local timezone, including seconds to distinguish repeated requests. Code suggestions show the sender and inbox; hover to see the subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.
 
-Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion. Resending or navigating restores suggestions. Link cards also return when the waiting panel, recipient, or email purpose changes; code suggestions otherwise stay dismissed on that page. The toolbar popup handles account setup and manual checks. Reset links open in a new tab; complete the new password on the website.
+Use **↻** to restart checking, or **× / Escape** to dismiss an on-page suggestion. Resending or navigating restores suggestions. Link cards also return when the waiting panel, recipient, or email purpose changes; code suggestions otherwise stay dismissed on that page. The toolbar popup handles account setup and inbox checks. Reset links open in a new tab; complete the new password on the website.
 
 ## Checking and freshness
 
-Automatic checking runs in two-minute windows. Hiding a tab stops new on-page checks. Code suggestions start a new window when they return after hiding the tab or scrolling the code field offscreen. Link cards keep their existing deadline when the tab returns. Use **↻** or resend the email to start another window; a new verification step also starts one. Keep the popup open for manual checks.
+Automatic checking runs in two-minute windows. Hiding a tab stops new on-page checks. Code suggestions start a new window when they return after hiding the tab or scrolling the code field offscreen. Link cards keep their existing deadline when the tab returns. Use **↻** or resend the email to start another window; a new verification step also starts one.
+
+Opening the popup with connected accounts automatically checks for verification codes for up to two minutes. Its check buttons switch email type or restart the two-minute checking window. Keep the popup open while checking.
 
 Checks show inbox emails from the last ten minutes. Spam and other folders are excluded. Results from slower accounts may appear later.
 

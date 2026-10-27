@@ -27,8 +27,8 @@ export function createPopupController({
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout });
   let targetTab;
   let mailType = "codes";
-  let checking = false;
-  let busy = false;
+  let mailCheckInProgress = false;
+  let userActionInProgress = false;
   const scanSchedule = createScanSchedule({
     clock,
     intervalMs: DEFAULT_SCAN_INTERVAL_MS,
@@ -59,12 +59,12 @@ export function createPopupController({
     scanSchedule.clearPending();
     polling.cancelScheduledCheck();
     polling.invalidateResponses();
-    checking = false;
+    mailCheckInProgress = false;
     closeSession();
   }
   async function useSelectedResult(action) {
-    if (busy) return;
-    busy = true;
+    if (userActionInProgress) return;
+    userActionInProgress = true;
     resetMailCheckSession();
     view.setCheckAndRemoveButtonsDisabled(true);
     view.setResultButtonsDisabled(true);
@@ -75,7 +75,7 @@ export function createPopupController({
       view.setStatus(error.message, true);
       view.setResultButtonsDisabled(false);
     } finally {
-      busy = false;
+      userActionInProgress = false;
       view.setCheckAndRemoveButtonsDisabled(false);
       if (polling.deadline) scheduleCheck();
       else closeSession();
@@ -123,26 +123,26 @@ export function createPopupController({
       finishPolling();
       return;
     }
-    if (!busy) polling.schedule(checkInbox, delay);
+    if (!userActionInProgress) polling.schedule(checkInbox, delay);
     else polling.cancelScheduledCheck();
   }
   function finishPolling() {
     polling.endPollingWindow();
     closeSession();
-    if (!busy)
+    if (!userActionInProgress)
       view.setStatus(
         `Automatic checking finished. Check again for newer ${MAIL_PRESENTATION[mailType].resultLabel}.`,
       );
   }
   async function checkInbox() {
-    if (busy) return;
+    if (userActionInProgress) return;
     if (polling.hasExpired()) {
       finishPolling();
       return;
     }
-    if (checking) resetMailCheckSession();
+    if (mailCheckInProgress) resetMailCheckSession();
     polling.cancelScheduledCheck();
-    checking = true;
+    mailCheckInProgress = true;
     const requestGeneration = polling.generation;
     const startedAt = clock.now();
     let failed = false;
@@ -151,7 +151,7 @@ export function createPopupController({
       const { collectOnly } = scanSchedule.beginCheck();
       const response = await sendSessionRequest(mailType, collectOnly);
       const results = response[mailType];
-      if (!busy && polling.isCurrent(requestGeneration)) {
+      if (!userActionInProgress && polling.isCurrent(requestGeneration)) {
         scanSchedule.recordResponse(response.scanPending);
         if (mailType !== "codes") view.renderLinks(results, mailType);
         else view.renderCodes(results, targetTab);
@@ -167,15 +167,15 @@ export function createPopupController({
       }
     } catch (error) {
       failed = true;
-      if (!busy && polling.isCurrent(requestGeneration)) {
+      if (!userActionInProgress && polling.isCurrent(requestGeneration)) {
         scanSchedule.clearPending();
         view.clearResults();
         view.setStatus(error.message, true);
       }
     } finally {
       if (polling.isCurrent(requestGeneration)) {
-        checking = false;
-        view.setCheckAndRemoveButtonsDisabled(busy);
+        mailCheckInProgress = false;
+        view.setCheckAndRemoveButtonsDisabled(userActionInProgress);
         scheduleCheck(
           failed
             ? DEFAULT_SCAN_INTERVAL_MS
@@ -190,7 +190,7 @@ export function createPopupController({
     }
   }
   function startMailCheck(nextMailType) {
-    if (busy) return;
+    if (userActionInProgress) return;
     resetMailCheckSession();
     if (mailType !== nextMailType) view.clearResults();
     mailType = nextMailType;
@@ -201,8 +201,8 @@ export function createPopupController({
     startPolling();
   }
   async function saveAccount() {
-    if (busy) return;
-    busy = true;
+    if (userActionInProgress) return;
+    userActionInProgress = true;
     resetMailCheckSession();
     view.setAccountSaveDisabled(true);
     view.setCheckAndRemoveButtonsDisabled(true);
@@ -215,24 +215,24 @@ export function createPopupController({
         password,
       });
       view.clearAccountEmail();
-      busy = false;
+      userActionInProgress = false;
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
       view.setStatus(error.message, true);
     } finally {
-      busy = false;
+      userActionInProgress = false;
       view.setAccountSaveDisabled(false);
       view.setCheckAndRemoveButtonsDisabled(false);
-      if (polling.deadline && !checking) {
+      if (polling.deadline && !mailCheckInProgress) {
         if (polling.hasExpired()) polling.endPollingWindow();
         else scheduleCheck();
       }
     }
   }
   async function removeAccount(email) {
-    if (busy) return;
+    if (userActionInProgress) return;
     polling.endPollingWindow();
-    busy = true;
+    userActionInProgress = true;
     resetMailCheckSession();
     view.setCheckAndRemoveButtonsDisabled(true);
     try {
@@ -240,15 +240,15 @@ export function createPopupController({
         action: "removeAccount",
         email,
       });
-      busy = false;
+      userActionInProgress = false;
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
       view.setStatus(error.message, true);
       polling.renewDeadline();
     } finally {
-      busy = false;
+      userActionInProgress = false;
       view.setCheckAndRemoveButtonsDisabled(false);
-      if (polling.deadline && !checking) scheduleCheck();
+      if (polling.deadline && !mailCheckInProgress) scheduleCheck();
     }
   }
   async function initialize() {

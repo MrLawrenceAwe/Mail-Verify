@@ -12,7 +12,7 @@ import { startCodePicker } from '../../extension/inline/code-picker-controller.j
 import { startEmailLinkCard } from '../../extension/inline/email-link-card-controller.js';
 import { makeVerificationCodeMessage, makeEmailLinkMessage } from "../support/mail_results.js";
 import { createMockInlineRuntime } from '../support/mock_inline_runtime.js';
-const mode = new URL(location.href).searchParams.get('mode') || 'status';
+const mode = new URL(location.href).searchParams.get('mode') || 'page-reset';
 let panel = document.createElement(mode.startsWith('modal') ? 'dialog' : 'main');
 panel.innerHTML = mode === 'modal-code'
   ? '<h1>Email verification</h1><p>We sent a security code to preview@yahoo.com.</p><label>Verification code<input autocomplete="one-time-code"></label><p id="feedback"></p>'
