@@ -3,6 +3,6 @@
   "type": "module",
   "scripts": {
     "test": "python3 -m unittest discover -s tests -v && node --test tests/test_*.js",
-    "check": "node --experimental-vm-modules scripts/check-syntax.js"
+    "check": "node --experimental-vm-modules scripts/check-static.js"
   }
 }

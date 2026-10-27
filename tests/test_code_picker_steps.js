@@ -563,7 +563,7 @@ test("countdown completion retains codes without starting a new attempt", async 
   }
 });
 
-test("changed verification instructions reset codes on the same field and URL", async () => {
+test("recipient changes reset codes on the same field and URL while countdown changes retain them", async () => {
   let observer,
     now = 10_000,
     mounts = 0;

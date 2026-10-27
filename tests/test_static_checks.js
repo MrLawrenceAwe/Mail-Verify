@@ -11,8 +11,8 @@ function fixture(t) {
   for (const folder of ["extension", "tests", "docs", "scripts"])
     mkdirSync(join(root, folder));
   cpSync(
-    new URL("../scripts/check-syntax.js", import.meta.url),
-    join(root, "scripts/check-syntax.js"),
+    new URL("../scripts/check-static.js", import.meta.url),
+    join(root, "scripts/check-static.js"),
   );
   const write = (path, text) => writeFileSync(join(root, path), text);
   write("package.json", '{"type":"module"}');
@@ -44,7 +44,7 @@ function fixture(t) {
     saveManifest,
     run: () => spawnSync(
       process.execPath,
-      ["--experimental-vm-modules", join(root, "scripts/check-syntax.js")],
+      ["--experimental-vm-modules", join(root, "scripts/check-static.js")],
       { encoding: "utf8" },
     ),
   };

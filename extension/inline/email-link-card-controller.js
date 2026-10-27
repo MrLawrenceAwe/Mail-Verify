@@ -27,7 +27,7 @@ export function startEmailLinkCard({
   environment = globalThis,
   detectStep = detectEmailLinkStep,
   page = getPageCoordinator(environment),
-  detectCode = () => page.detectCodeField().ok,
+  hasCodeField = () => page.detectCodeField().ok,
   createView = createEmailLinkCardView,
 } = {}) {
   const {
@@ -71,7 +71,7 @@ export function startEmailLinkCard({
   async function checkForLinks() {
     polling.cancelScheduledCheck();
     if (!view || document.hidden || checks.busy) return;
-    if (lastURL !== location.href || detectCode() || !isCurrentStep()) {
+    if (lastURL !== location.href || hasCodeField() || !isCurrentStep()) {
       syncLinkCard();
       return;
     }
@@ -91,7 +91,7 @@ export function startEmailLinkCard({
       );
       if (!polling.isCurrent(requestGeneration) || !view || document.hidden)
         return;
-      if (lastURL !== location.href || detectCode() || !isCurrentStep()) {
+      if (lastURL !== location.href || hasCodeField() || !isCurrentStep()) {
         syncLinkCard();
         return;
       }
@@ -138,7 +138,7 @@ export function startEmailLinkCard({
       unmountCard();
       return;
     }
-    const nextStep = detectCode() ? null : detectStep(document);
+    const nextStep = hasCodeField() ? null : detectStep(document);
     if (nextStep === null) {
       unmountCard();
       dismissed = false;
@@ -185,7 +185,7 @@ export function startEmailLinkCard({
         if (
           document.hidden ||
           lastURL !== location.href ||
-          detectCode() ||
+          hasCodeField() ||
           !isCurrentStep() ||
           !currentLinks.some(
             (current) =>

@@ -85,7 +85,7 @@ export function createEmailLinkCardHarness(
           : { key: state.screenKey, mailType: state.mailType }
         : null;
     },
-    detectCode: () => state.code,
+    hasCodeField: () => state.code,
     createView(_document, callbacks) {
       const attributes = new Map();
       const view = {

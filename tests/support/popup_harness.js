@@ -86,32 +86,28 @@ export async function createPopupHarness({
     sendOneOff: null,
   };
   const tab = { id: 1, url: tabUrl };
+  const mailHandlers = new Map([
+    ["codes", () => state.fetchCodes()],
+    ["confirmationLinks", () => state.fetchConfirmationLinks()],
+    ["passwordResetLinks", () => state.fetchPasswordResetLinks()],
+  ]);
   const client = {
     closeSession() {
       state.closes++;
     },
     async sendSessionRequest(action, collectOnly = false) {
       state.sessionRequests.push({ action, collectOnly });
-      if (action === "status" && statusError) throw statusError;
-      return action === "status"
-        ? { accountEmails: account ? [account] : [] }
-        : action === "passwordResetLinks"
-          ? {
-              passwordResetLinks: await state.fetchPasswordResetLinks(),
-              scanPending: state.scanPending,
-              warnings: state.warnings,
-            }
-          : action === "confirmationLinks"
-            ? {
-                confirmationLinks: await state.fetchConfirmationLinks(),
-                scanPending: state.scanPending,
-                warnings: state.warnings,
-              }
-            : {
-                codes: await state.fetchCodes(),
-                scanPending: state.scanPending,
-                warnings: state.warnings,
-              };
+      if (action === "status") {
+        if (statusError) throw statusError;
+        return { accountEmails: account ? [account] : [] };
+      }
+      const fetchResults = mailHandlers.get(action);
+      assert.ok(fetchResults, `Unsupported mock session request: ${action}`);
+      return {
+        [action]: await fetchResults(),
+        scanPending: state.scanPending,
+        warnings: state.warnings,
+      };
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);

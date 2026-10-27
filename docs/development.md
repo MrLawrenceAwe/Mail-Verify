@@ -65,7 +65,14 @@ Each inbox retains the union of its five newest results and the newest result fr
 
 ## Detection and freshness rules
 
-Initial code and link detection accepts mail from the last ten minutes, matching the popup even when mail arrives before discovery. Subsequent code attempts allow mail delivered up to five seconds before the step appeared. Changes to an existing link step’s panel, recipient, or purpose use the next whole second as the cutoff, excluding mail delivered just before or during the change. The code picker keeps the newest code per sender and account. Seen and excluded message IDs retain arrival timestamps and are pruned during checks and page synchronisation once they fall outside the ten-minute freshness window. Resend countdown ticks and completion, including parenthesised countdowns, retain the same verification step. Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. The popup can show recent emails excluded by that rule.
+Freshness cutoffs depend on the verification attempt:
+
+- Initial code and link detection accepts mail from the last ten minutes, matching the popup even when mail arrives before discovery.
+- Subsequent code attempts allow mail delivered up to five seconds before the step appeared.
+- Changes to an existing link step’s panel, recipient, or purpose use the next whole second as the cutoff, excluding mail delivered just before or during the change.
+- Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. The popup can show recent emails excluded by that rule.
+
+The code picker keeps the newest code per sender and account. Seen and excluded message IDs retain arrival timestamps and are pruned during checks and page synchronisation once they fall outside the ten-minute freshness window.
 
 - Codes are numeric, 4–8 digits, directly labelled by common English instructions such as “Your code is”, “Security code:”, or “Sign in to Indeed with code:”. Emails with multiple candidate codes are omitted.
 - Code fields must be ordinary inputs or common split-digit forms on HTTPS pages with verification-related labels or attributes. A generic “code” label needs nearby email/sign-in instructions. Coupon and promo fields are excluded; unlabelled fields, cross-origin embedded forms, and unusual widgets may not work.
@@ -79,11 +86,21 @@ Initial code and link detection accepts mail from the last ten minutes, matching
 
 ## Page detection and performance
 
-Scroll and resize reuse cached field and page-control candidates and position the picker on the next animation frame. The picker tries below, above, and beside the field to avoid covering inputs, buttons, and links; when every position overlaps controls, it chooses the smallest overlap. Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Code inputs can use HTML labels, `aria-label`, or an accessible name assembled from `aria-labelledby` references; changes to referenced labels refresh detection. Supported split-digit groups use a stable labelled anchor so moving focus between digits preserves suggestions; selecting a separate group starts a new attempt. Filling rediscovers fields rather than trusting cached hints. Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
+Scroll and resize reuse cached field and page-control candidates and position the picker on the next animation frame. The picker tries below, above, and beside the field to avoid covering inputs, buttons, and links; when every position overlaps controls, it chooses the smallest overlap.
+
+Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Code inputs can use HTML labels, `aria-label`, or an accessible name assembled from `aria-labelledby` references; changes to referenced labels refresh detection.
+
+Supported split-digit groups use a stable labelled anchor so moving focus between digits preserves suggestions; selecting a separate group starts a new attempt. Filling rediscovers fields rather than trusting cached hints.
+
+Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
 
 Native modal dialogs take precedence over background forms. Their inputs use a separate discovery scope, and both suggestion types mount inside the modal rather than in the inert background. The active dialog is selected from focus or its viewport backdrop, rather than DOM order, including when multiple dialogs are open. Modal suggestions use manual popovers to keep viewport positioning and escape dialog transforms or clipping. Dialog opening and closing refresh detection.
 
-Code-step tracking identifies email recipients (including masked addresses) in nearby code-delivery instructions. Recipient changes, field changes, navigation, and explicit resend clicks start new attempts; incidental status messages retain valid codes. An identical detached input replaced inside the same unchanged context retains unused codes and their original freshness cutoff; fills validate the replacement input. Controls explicitly requesting only SMS, text messages, or phone delivery do not restart email checking. Resend controls belong to their owning form or task panel, so another form cannot invalidate active email results. Standalone resend controls beside a panel remain supported. An incomplete context retains the last known recipient identity.
+Code-step tracking identifies email recipients (including masked addresses) in nearby code-delivery instructions. Recipient changes, field changes, navigation, and explicit resend clicks start new attempts. Incidental status messages, resend countdown ticks and completion, including parenthesised countdowns, retain valid codes. An incomplete context retains the last known recipient identity.
+
+An identical detached input replaced inside the same unchanged context retains unused codes and their original freshness cutoff; fills validate the replacement input.
+
+Controls explicitly requesting only SMS, text messages, or phone delivery do not restart email checking. Resend controls belong to their owning form or task panel, so another form cannot invalidate active email results. Standalone resend controls beside a panel remain supported.
 
 | Inspection | Node budget | Text budget | Exhaustion behaviour |
 | --- | --- | --- | --- |

@@ -20,5 +20,5 @@ jobs:
           python-version: '3.13'
       - name: Python and JavaScript tests
         run: npm test
-      - name: Validate extension and JavaScript syntax
+      - name: Check syntax and local file references
         run: npm run check

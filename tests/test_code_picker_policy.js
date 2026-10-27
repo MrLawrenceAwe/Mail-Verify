@@ -182,7 +182,7 @@ test("recognises common resend labels without treating coupon requests as email 
   );
 });
 
-test("page mutations only rescan when fields or their form can change", () => {
+test("input, label and code-context mutations request rediscovery while unrelated changes do not", () => {
   const node = (tag, hasInput = false) => ({
     nodeType: 1,
     matches: (selector) => selector.split(", ").includes(tag),
