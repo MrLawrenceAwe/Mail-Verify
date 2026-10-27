@@ -159,7 +159,7 @@ export function detectOrFillCodeFields({
       if (parent === ancestor) return true;
     return false;
   };
-  const isCodeDigit = (input) =>
+  const hasCompatibleDigitHints = (input) =>
     hasCodeHint(input) ||
     Object.values(getInputHints(input)).flat().every(
       (hint) =>
@@ -195,7 +195,7 @@ export function detectOrFillCodeFields({
       group.length >= 4 &&
       group.length <= 8 &&
       group.some(hasCodeHint) &&
-      group.every(isCodeDigit) &&
+      group.every(hasCompatibleDigitHints) &&
       new Set(group.map(numericFieldIdentity).filter(Boolean)).size <= 1;
     const groupsByParent = new Map();
     const formGroup = digitInputs.filter((input) => input.form === anchor.form);

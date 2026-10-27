@@ -5,7 +5,7 @@ export function registerInlineRequests(chrome, timers = globalThis) {
   const sessionsByMailType = Object.fromEntries(
     ["codes", "confirmationLinks", "passwordResetLinks"].map((mailType) => [
       mailType,
-      { client: createCompanionClient(chrome.runtime) },
+      { client: createCompanionClient(chrome.runtime, timers) },
     ]),
   );
   chrome.runtime.onConnect.addListener((port) => {

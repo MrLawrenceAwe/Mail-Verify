@@ -89,8 +89,6 @@ class HostTests(unittest.TestCase):
         with patch.object(host, "access_saved_credentials", return_value=None), patch.object(session, "close") as close:
             with self.assertRaisesRegex(host.UserError, "Connect Yahoo Mail first"):
                 host.handle_request({"action": "codes"}, scan_manager)
-            # Account cleanup occurs when the next scan sees the changed list.
-            scan_manager.poll_accounts([])
             close.assert_called_once()
 
     def test_reused_session_keeps_connection_for_unchanged_account(self):

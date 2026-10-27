@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { registerInlineRequests } from "../extension/background.js";
+import { createTimerQueue } from "./support/timer_queue.js";
 
 function setup(nativeResponse = { ok: true, codes: [], scanPending: false }) {
   let listener,
     onMessage,
-    checks = 0,
-    closed = 0,
-    idle;
+    connectionsOpened = 0,
+    closed = 0;
+  const timers = createTimerQueue();
   const nativeRequests = [];
   const chrome = {
     runtime: {
@@ -18,7 +19,7 @@ function setup(nativeResponse = { ok: true, codes: [], scanPending: false }) {
         },
       },
       connectNative() {
-        checks++;
+        connectionsOpened++;
         return {
           onMessage: {
             addListener(fn) {
@@ -38,15 +39,7 @@ function setup(nativeResponse = { ok: true, codes: [], scanPending: false }) {
     },
     tabs: { query: async () => [{ id: 1 }] },
   };
-  registerInlineRequests(chrome, {
-    setTimeout(fn) {
-      idle = fn;
-      return 1;
-    },
-    clearTimeout() {
-      idle = undefined;
-    },
-  });
+  registerInlineRequests(chrome, timers);
   const sender = {
     id: "extension",
     frameId: 0,
@@ -72,10 +65,10 @@ function setup(nativeResponse = { ok: true, codes: [], scanPending: false }) {
     request,
     nativeRequests,
     expire() {
-      idle();
+      return timers.runNextWithDelay(15_000);
     },
-    get checks() {
-      return checks;
+    get connectionsOpened() {
+      return connectionsOpened;
     },
     get closed() {
       return closed;
@@ -93,7 +86,7 @@ test("background rejects inactive tabs, frames, and non-HTTPS senders", async ()
   ]) {
     assert.equal((await fixture.request(sender)).ok, false);
   }
-  assert.equal(fixture.checks, 0);
+  assert.equal(fixture.connectionsOpened, 0);
 });
 
 test("background rejects unknown checks without opening the companion", async () => {
@@ -102,21 +95,24 @@ test("background rejects unknown checks without opening the companion", async ()
     ok: false,
     error: "Unknown mail check.",
   });
-  assert.equal(fixture.checks, 0);
+  assert.equal(fixture.connectionsOpened, 0);
 });
 
 test("automatic checks reuse the connection and close it after polling stops", async () => {
   const fixture = setup();
   const responses = await Promise.all([fixture.request(), fixture.request()]);
   assert.ok(responses.every((result) => result.ok));
-  assert.equal(fixture.checks, 1);
+  assert.equal(fixture.connectionsOpened, 1);
+  assert.equal(fixture.nativeRequests.length, 1);
   assert.equal(fixture.closed, 0);
   await fixture.request();
-  assert.equal(fixture.checks, 1);
-  fixture.expire();
+  assert.equal(fixture.connectionsOpened, 1);
+  assert.equal(fixture.nativeRequests.length, 2);
+  await fixture.expire();
   assert.equal(fixture.closed, 1);
   await fixture.request();
-  assert.equal(fixture.checks, 2);
+  assert.equal(fixture.connectionsOpened, 2);
+  assert.equal(fixture.nativeRequests.length, 3);
 });
 
 test("automatic checks pass partial account warnings to the picker", async () => {
