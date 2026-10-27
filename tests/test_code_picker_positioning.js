@@ -131,7 +131,7 @@ test("scroll positioning uses animation frames and cached candidates; mutations 
   frames.shift()();
   assert.equal(mounted, undefined);
   observer([{ type: "attributes", target: { matches: () => true } }]);
-  timers.takeOldest()();
+  await timers.runNextWithDelay(150);
   assert.equal(discoveries, 2);
   visible = true;
   events.get("scroll")();

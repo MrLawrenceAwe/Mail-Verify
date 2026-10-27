@@ -160,14 +160,14 @@ test("rejects codes with future or invalid arrival times before filling", async 
 });
 
 test("rejects expired and unsafe links at click time", async () => {
-  for (const item of [
-    { ...emailLinkMessage, receivedAt: -700000 },
-    { ...emailLinkMessage, url: "http://example.com/confirm" },
-  ]) {
+  for (const scenario of ["expired", "unsafe"]) {
+    const item = { ...emailLinkMessage };
     const { controls, state } = await createPopupHarness();
     state.fetchConfirmationLinks = async () => [item];
     controls.checkConfirmationLinks.trigger();
     await waitForAsyncCallbacks();
+    if (scenario === "expired") item.receivedAt = -700000;
+    else item.url = "http://example.com/confirm";
     await controls.results.querySelectorAll("button")[0].trigger();
     assert.deepEqual(state.opened, []);
     assert.match(controls.status.textContent, /no longer current|not supported/);
@@ -220,15 +220,14 @@ test("reset links open only on click and stop polling after selection", async ()
 test("reset opening rejects expired or unsafe links and recovers from tab errors", async () => {
   for (const scenario of ["expired", "unsafe", "failed"]) {
     const { controls, state } = await createPopupHarness();
-    state.fetchPasswordResetLinks = async () => [{
-      ...emailLinkMessage,
-      receivedAt: scenario === "expired" ? -700000 : emailLinkMessage.receivedAt,
-      url: scenario === "unsafe" ? "http://example.com/reset" : emailLinkMessage.url,
-    }];
+    const item = { ...emailLinkMessage };
+    state.fetchPasswordResetLinks = async () => [item];
     state.failOpen = scenario === "failed";
     controls.checkPasswordResetLinks.trigger();
     await waitForAsyncCallbacks();
     const button = controls.results.querySelectorAll("button")[0];
+    if (scenario === "expired") item.receivedAt = -700000;
+    else if (scenario === "unsafe") item.url = "http://example.com/reset";
     await button.trigger();
     assert.deepEqual(state.opened, []);
     assert.equal(button.disabled, false);
@@ -303,5 +302,35 @@ test("popup link results identify inbox and missing sender without empty subject
         formatReceivedAt(emailLinkMessage.receivedAt),
       ],
     );
+  }
+});
+
+test("unsupported link results cannot prevent valid popup results from rendering", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    for (const valid of [false, true]) {
+      const { controls, state } = await createPopupHarness();
+      const items = [
+        { ...emailLinkMessage, url: "https://exa^mple.com/confirm" },
+        { ...emailLinkMessage, url: "http://example.com/confirm" },
+        ...(valid ? [emailLinkMessage] : []),
+      ];
+      const checkButton = mailType === "confirmationLinks"
+        ? controls.checkConfirmationLinks
+        : controls.checkPasswordResetLinks;
+      if (mailType === "confirmationLinks")
+        state.fetchConfirmationLinks = async () => items;
+      else state.fetchPasswordResetLinks = async () => items;
+      checkButton.trigger();
+      await waitForAsyncCallbacks();
+      const buttons = controls.results.querySelectorAll("button");
+      assert.equal(buttons.length, valid ? 1 : 0);
+      assert.doesNotMatch(controls.status.textContent, /Invalid URL/);
+      if (valid) {
+        await buttons[0].trigger();
+        assert.deepEqual(state.opened, [{ url: emailLinkMessage.url }]);
+      } else {
+        assert.match(controls.status.textContent, /No recent/);
+      }
+    }
   }
 });

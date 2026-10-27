@@ -29,6 +29,7 @@ export function createPopupController({
   let mailType = "codes";
   let mailCheckInProgress = false;
   let userActionInProgress = false;
+  let selectionCompleted = false;
   const scanSchedule = createScanSchedule({
     clock,
     intervalMs: DEFAULT_SCAN_INTERVAL_MS,
@@ -44,6 +45,8 @@ export function createPopupController({
     resetMailCheckSession();
     view.renderAccounts(accountEmails);
     view.clearResults();
+    selectionCompleted = false;
+    setUserActionInProgress(false);
     if (!accountEmails.length) {
       polling.endPollingWindow();
       view.setStatus("No email accounts connected.");
@@ -62,21 +65,25 @@ export function createPopupController({
     mailCheckInProgress = false;
     closeSession();
   }
+  function setUserActionInProgress(inProgress) {
+    userActionInProgress = inProgress;
+    view.setBusy(inProgress);
+    view.setResultButtonsDisabled(
+      inProgress || selectionCompleted || (mailType === "codes" && !targetTab),
+    );
+  }
   async function useSelectedResult(action) {
     if (userActionInProgress) return;
-    userActionInProgress = true;
+    setUserActionInProgress(true);
     resetMailCheckSession();
-    view.setCheckAndRemoveButtonsDisabled(true);
-    view.setResultButtonsDisabled(true);
     try {
       await action();
+      selectionCompleted = true;
       polling.endPollingWindow();
     } catch (error) {
       view.setStatus(error.message, true);
-      view.setResultButtonsDisabled(false);
     } finally {
-      userActionInProgress = false;
-      view.setCheckAndRemoveButtonsDisabled(false);
+      setUserActionInProgress(false);
       if (polling.deadline) scheduleCheck();
       else closeSession();
     }
@@ -150,8 +157,10 @@ export function createPopupController({
     try {
       const { collectOnly } = scanSchedule.beginCheck();
       const response = await sendSessionRequest(mailType, collectOnly);
-      const results = response[mailType];
       if (!userActionInProgress && polling.isCurrent(requestGeneration)) {
+        const results = mailType === "codes"
+          ? response[mailType]
+          : response[mailType].filter((item) => isSupportedEmailLinkUrl(item.url));
         scanSchedule.recordResponse(response.scanPending);
         if (mailType !== "codes") view.renderLinks(results, mailType);
         else view.renderCodes(results, targetTab);
@@ -175,7 +184,6 @@ export function createPopupController({
     } finally {
       if (polling.isCurrent(requestGeneration)) {
         mailCheckInProgress = false;
-        view.setCheckAndRemoveButtonsDisabled(userActionInProgress);
         scheduleCheck(
           failed
             ? DEFAULT_SCAN_INTERVAL_MS
@@ -196,16 +204,15 @@ export function createPopupController({
     mailType = nextMailType;
     // Unchanged results retain their buttons, including the disabled state
     // left by a successful fill. A manual check starts a new selection.
-    view.setResultButtonsDisabled(mailType === "codes" && !targetTab);
+    selectionCompleted = false;
+    setUserActionInProgress(false);
     view.setMailType(mailType);
     startPolling();
   }
   async function saveAccount() {
     if (userActionInProgress) return;
-    userActionInProgress = true;
+    setUserActionInProgress(true);
     resetMailCheckSession();
-    view.setAccountSaveDisabled(true);
-    view.setCheckAndRemoveButtonsDisabled(true);
     view.setStatus("Checking your Yahoo connection…");
     const { email, password } = view.readCredentialsAndClearPassword();
     try {
@@ -215,14 +222,11 @@ export function createPopupController({
         password,
       });
       view.clearAccountEmail();
-      userActionInProgress = false;
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
       view.setStatus(error.message, true);
     } finally {
-      userActionInProgress = false;
-      view.setAccountSaveDisabled(false);
-      view.setCheckAndRemoveButtonsDisabled(false);
+      setUserActionInProgress(false);
       if (polling.deadline && !mailCheckInProgress) {
         if (polling.hasExpired()) polling.endPollingWindow();
         else scheduleCheck();
@@ -232,22 +236,19 @@ export function createPopupController({
   async function removeAccount(email) {
     if (userActionInProgress) return;
     polling.endPollingWindow();
-    userActionInProgress = true;
+    setUserActionInProgress(true);
     resetMailCheckSession();
-    view.setCheckAndRemoveButtonsDisabled(true);
     try {
       const result = await sendOneOffRequest({
         action: "removeAccount",
         email,
       });
-      userActionInProgress = false;
       applyConnectedAccounts(result.accountEmails);
     } catch (error) {
       view.setStatus(error.message, true);
       polling.renewDeadline();
     } finally {
-      userActionInProgress = false;
-      view.setCheckAndRemoveButtonsDisabled(false);
+      setUserActionInProgress(false);
       if (polling.deadline && !mailCheckInProgress) scheduleCheck();
     }
   }

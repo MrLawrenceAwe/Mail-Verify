@@ -28,7 +28,7 @@ def is_supported_email_link_url(value):
         # Browsers reject percent-encoded or malformed hostnames that urlsplit
         # accepts, so do not pass those URLs through to the popup renderer.
         return (parsed.scheme == "https" and bool(parsed.hostname) and
-                "%" not in parsed.hostname and
+                not re.search(r"[%<>^|]", parsed.hostname) and
                 not parsed.username and not parsed.password and parsed.port in (None, 443))
     except ValueError:
         return False

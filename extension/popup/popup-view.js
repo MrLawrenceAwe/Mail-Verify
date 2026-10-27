@@ -45,10 +45,6 @@ export function createPopupView(
     getElement("codePageHelp").hidden = !!targetTab;
   }
 
-  function setAccountSaveDisabled(disabled) {
-    getElement("saveAccountSubmit").disabled = disabled;
-  }
-
   function readCredentialsAndClearPassword() {
     const email = getElement("email").value;
     const password = getElement("password").value;
@@ -60,7 +56,9 @@ export function createPopupView(
     getElement("email").value = "";
   }
 
-  function setCheckAndRemoveButtonsDisabled(disabled) {
+  function setBusy(disabled) {
+    getElement("saveAccountSubmit").disabled = disabled;
+    getElement("showAccountSetup").disabled = disabled;
     for (const [id] of checkButtonMailTypes) getElement(id).disabled = disabled;
     for (const button of getElement("accounts").querySelectorAll("button"))
       button.disabled = disabled;
@@ -164,10 +162,9 @@ export function createPopupView(
     showCompanionSetup,
     setMailType,
     setCodeTargetPage,
-    setAccountSaveDisabled,
     readCredentialsAndClearPassword,
     clearAccountEmail,
-    setCheckAndRemoveButtonsDisabled,
+    setBusy,
     setResultButtonsDisabled,
     markCodeFilled,
     markLinkOpened,

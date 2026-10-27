@@ -37,7 +37,7 @@ Code-picker mounting starts a new checking window, including remounting the same
 - The inline lifecycle owns its scan schedule: `restart(check)` renews the deadline and runs or queues the check; `invalidateChecks()` also clears pending-scan bookkeeping. Each controller retains its own step and result rules.
 - The [popup controller](../extension/popup/popup-controller.js) closes its native session when resetting a check, separately from the polling deadline.
 
-Popup account saving, account removal, and result selection share one busy state. Saving cancels scheduled checks and invalidates pending responses so inbox results cannot overwrite connection feedback. Successful saving immediately checks the updated account list; failed saving resumes the previous polling window only if it is still open.
+Popup account saving, account removal, and result selection share one busy state that disables save, account setup, check, removal, and result controls. Completed selections remain disabled until a manual check or account-list update; code results also stay disabled without an HTTPS target page. Saving cancels scheduled checks and invalidates pending responses so inbox results cannot overwrite connection feedback. Successful saving immediately checks the updated account list; failed saving resumes the previous polling window only if it is still open.
 
 ## Companion modules
 

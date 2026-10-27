@@ -161,7 +161,7 @@ test("a failed inbox check removes previously offered codes", async () => {
   assert.equal(results.childElementCount, 1);
 
   connected = false;
-  timers.takeNewest()();
+  await timers.runNextWithDelay(2000);
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 0);
   assert.match(elements["#status"].textContent, /Connect Yahoo Mail first/);
@@ -215,10 +215,10 @@ test("returning to a hidden tab starts a check while the old one is pending", as
   assert.equal(requests.length, 1);
   environment.document.hidden = true;
   events.get("visibilitychange")();
-  timers.takeOldest()();
+  await timers.runNextWithDelay(150);
   environment.document.hidden = false;
   events.get("visibilitychange")();
-  timers.takeOldest()();
+  await timers.runNextWithDelay(150);
   assert.equal(requests.length, 2);
   const code = makeVerificationCodeMessage({
     code: "111111",

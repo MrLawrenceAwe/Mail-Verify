@@ -136,6 +136,7 @@ export async function createPopupHarness({
           state.opened.push(options);
         },
         get: async () => {
+          if (state.fillWait) await state.fillWait;
           if (state.failFill) throw Error("Tab unavailable");
           return tab;
         },

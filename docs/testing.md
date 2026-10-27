@@ -36,7 +36,7 @@ The field harness evaluates the serialized entry point in an isolated VM to veri
 
 Code-picker step and selection tests, field tests, and step-context tests use `tests/support/dom_nodes.js` to build explicit element/text-node trees with shared parent and sibling wiring. Field tests define aggregate `textContent` reads locally; step-context tests reject them. Tests update `firstChild.data` to change instructions; the picker harness does not convert plain objects into DOM nodes.
 
-`tests/support/timer_queue.js` stores callbacks for explicit execution by insertion order or requested delay. `runNextWithDelay(registeredDelayMs)` immediately runs the first callback registered with that delay; it does not wait or advance a clock.
+`tests/support/timer_queue.js` stores callbacks for explicit execution by insertion order or requested delay. `runNextWithDelay(registeredDelayMs)` immediately runs the first callback registered with that delay; it does not wait or advance a clock. Code-picker tests select discovery and polling callbacks by delay rather than timer insertion order. When a check is deliberately pending, start the callback, resolve its mocked response, then await completion.
 
 `tests/support/email_messages.py` shares `make_raw_email()` across code extraction, link extraction, and inbox-scanning tests. Its subject, subtype, and sender options describe each synthetic message; multipart and attachment cases build their own MIME structure.
 

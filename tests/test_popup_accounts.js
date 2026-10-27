@@ -172,3 +172,45 @@ test("shows the connected account and inbox label while account setup opens", as
   assert.equal(controls.accountSetup.hidden, false);
   assert.equal(controls.connectedAccountsPanel.hidden, false);
 });
+
+test("account operations and result selection disable all conflicting controls", async () => {
+  for (const operation of ["save", "remove", "select"]) {
+    const { controls, state } = await createPopupHarness();
+    controls.showAccountSetup.trigger();
+    let rejectOperation;
+    const pending = new Promise((_resolve, reject) => {
+      rejectOperation = reject;
+    });
+    state.sendOneOff = () => pending;
+    const resultButton = controls.results.querySelectorAll("button")[0];
+    const removeButton = controls.accounts.querySelectorAll("button")[0];
+    if (operation === "select") state.fillWait = pending;
+    const action = operation === "save"
+      ? controls.accountForm.trigger("submit")
+      : operation === "remove"
+        ? removeButton.trigger()
+        : resultButton.trigger();
+    await waitForAsyncCallbacks();
+    const buttons = [
+      controls.saveAccountSubmit,
+      controls.showAccountSetup,
+      controls.checkCodes,
+      controls.checkConfirmationLinks,
+      controls.checkPasswordResetLinks,
+      removeButton,
+      resultButton,
+    ];
+    assert.ok(buttons.every((button) => button.disabled));
+    rejectOperation(new Error("Operation failed"));
+    await action;
+    assert.ok(buttons.every((button) => !button.disabled));
+  }
+});
+
+test("a failed account save retains the disabled state of codes without a target page", async () => {
+  const { controls, state } = await createPopupHarness({ tabUrl: "chrome://extensions" });
+  state.sendOneOff = async () => { throw new Error("App password rejected"); };
+  await controls.accountForm.trigger("submit");
+  assert.equal(controls.results.querySelectorAll("button")[0].disabled, true);
+  assert.equal(controls.saveAccountSubmit.disabled, false);
+});

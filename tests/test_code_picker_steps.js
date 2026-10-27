@@ -220,7 +220,7 @@ test("a successful fill allows a new code field on the same URL", async () => {
   anchor = {};
   codes = [oldCode, newCode];
   observer([{ type: "attributes", target: { matches: () => true } }]);
-  timers.takeNewest()();
+  await timers.runNextWithDelay(150);
   await waitForAsyncCallbacks();
   assert.equal(mounts, 2);
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
@@ -261,7 +261,7 @@ test("a successful fill keeps the same field closed until a resend", async () =>
   await waitForAsyncCallbacks();
   results.children[0].onclick();
   observer([{ type: "attributes", target: { matches: () => true } }]);
-  timers.takeNewest()();
+  await timers.runNextWithDelay(150);
   assert.equal(mounts, 1);
   now = 21_000;
   codes = [oldCode, newCode];
@@ -317,7 +317,7 @@ for (const resend of [
       oldCode,
       { ...oldCode, uid: 8, code: "222222", receivedAt: 10_000 },
     ];
-    timers.takeNewest()();
+    await timers.runNextWithDelay(2000);
     await waitForAsyncCallbacks();
     assert.equal(results.childElementCount, 1);
     assert.equal(results.children[0].strong.textContent, "Fill code 222222");
@@ -353,7 +353,7 @@ for (const textContent of [
 
     await waitForAsyncCallbacks();
     now = 130_000;
-    timers.takeNewest()();
+    await timers.runNextWithDelay(2000);
     await waitForAsyncCallbacks();
     assert.equal(timers.length, 0);
     const beforeResend = checks;
@@ -367,7 +367,7 @@ for (const textContent of [
       oldCode,
       { ...oldCode, uid: 8, code: "222222", receivedAt: 131_000 },
     ];
-    timers.takeNewest()();
+    await timers.runNextWithDelay(2000);
     await waitForAsyncCallbacks();
     assert.equal(results.children[0].strong.textContent, "Fill code 222222");
   });
@@ -405,7 +405,7 @@ test("resend before the first check returns does not revive an unseen old code",
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 0);
   now = 10500;
-  timers.takeNewest()();
+  const checking = timers.runNextWithDelay(2000);
   const newCode = makeVerificationCodeMessage({
     uid: 8,
     code: "222222",
@@ -413,6 +413,7 @@ test("resend before the first check returns does not revive an unseen old code",
     receivedAt: 10000,
   });
   requests.shift()({ ok: true, codes: [oldCode, newCode] });
+  await checking;
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 1);
 });
@@ -446,7 +447,7 @@ test("new route clears suggestions even when the code field is reused", async ()
   assert.equal(results.childElementCount, 0);
   responses = [{ ...oldCode, uid: 2, code: "222222", receivedAt: 11_000 }];
   now = 12_000;
-  timers.takeNewest()();
+  await timers.runNextWithDelay(2000);
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 1);
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
@@ -601,23 +602,23 @@ test("recipient changes reset codes on the same field and URL while countdown ch
     },
   });
 
-  const changeInstructions = (text) => {
+  const changeInstructions = async (text) => {
     form.firstChild.data = text;
     observer([{ type: "characterData", target: {} }]);
-    timers.takeNewest()();
+    await timers.runNextWithDelay(150);
   };
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 1);
-  changeInstructions(
+  await changeInstructions(
     "We sent a code to alice@example.test. Resend in 29 seconds",
   );
   assert.equal(mounts, 1);
-  changeInstructions("We sent a code to alice@example.test. Resend in 28");
-  changeInstructions("We sent a code to alice@example.test. Resend in 27");
+  await changeInstructions("We sent a code to alice@example.test. Resend in 28");
+  await changeInstructions("We sent a code to alice@example.test. Resend in 27");
   assert.equal(mounts, 1);
   assert.equal(results.children[0].strong.textContent, "Fill code 111111");
   now = 20_000;
-  changeInstructions(
+  await changeInstructions(
     "We sent a code to bob@example.test. Resend in 30 seconds",
   );
   await waitForAsyncCallbacks();
@@ -628,7 +629,7 @@ test("recipient changes reset codes on the same field and URL while countdown ch
     { ...oldCode, uid: 2, code: "222222", receivedAt: 21_000 },
   ];
   now = 22_000;
-  timers.takeNewest()();
+  await timers.runNextWithDelay(2000);
   await waitForAsyncCallbacks();
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
   now = 30_000;
@@ -639,7 +640,7 @@ test("recipient changes reset codes on the same field and URL while countdown ch
   observer([
     { type: "childList", target: parent, addedNodes: [], removedNodes: [] },
   ]);
-  timers.takeNewest()();
+  await timers.runNextWithDelay(150);
   await waitForAsyncCallbacks();
   assert.equal(mounts, 3);
   assert.equal(results.childElementCount, 0);
@@ -673,14 +674,14 @@ test("a new verification field on the same URL starts a fresh code window", asyn
     },
   });
 
-  const rescan = () => {
+  const rescan = async () => {
     observer([{ type: "attributes", target: { matches: () => true } }]);
-    timers.takeNewest()();
+    await timers.runNextWithDelay(150);
   };
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 1);
   warnings = ["one@yahoo.com: Yahoo took too long to respond."];
-  timers.takeNewest()();
+  await timers.runNextWithDelay(2000);
   await waitForAsyncCallbacks();
   assert.match(
     elements["#status"].textContent,
@@ -689,7 +690,7 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   const originalResponses = responses;
   responses = [];
   now = 131_000;
-  timers.takeNewest()();
+  await timers.runNextWithDelay(2000);
   await waitForAsyncCallbacks();
   assert.match(
     elements["#status"].textContent,
@@ -713,16 +714,16 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 0);
   now = 10500;
-  timers.takeNewest()();
+  await timers.runNextWithDelay(2000);
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 1);
   assert.equal(results.children[0].strong.textContent, "Fill code 222222");
   visible = false;
-  rescan();
+  await rescan();
   now = 20_000;
   visible = true;
   anchor = {};
-  rescan();
+  await rescan();
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 0);
   responses = [
@@ -733,12 +734,12 @@ test("a new verification field on the same URL starts a fresh code window", asyn
       receivedAt: 20_000,
     }),
   ];
-  timers.takeNewest()();
+  await timers.runNextWithDelay(2000);
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 1);
   now = 30_000;
   anchor = {};
-  rescan();
+  await rescan();
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 0);
 });
