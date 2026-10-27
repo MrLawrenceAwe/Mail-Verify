@@ -7,6 +7,64 @@ import { CompanionUnavailableError } from "../extension/shared/companion-client.
 
 const verificationCodeMessage = makeVerificationCodeMessage();
 
+test("saving pauses scheduled and pending checks and preserves connection feedback", async () => {
+  for (const pending of [false, true]) {
+    const { controls, state, timers } = await createPopupHarness();
+    let finishCheck;
+    if (pending) {
+      state.fetchCodes = () => new Promise((resolve) => {
+        finishCheck = resolve;
+      });
+      controls.checkCodes.trigger();
+    }
+    let failSave;
+    state.sendOneOff = () => new Promise((_resolve, reject) => {
+      failSave = reject;
+    });
+    const requestCount = state.sessionRequests.length;
+    const replacements = controls.results.replacements;
+    const saving = controls.accountForm.trigger("submit");
+    if (finishCheck) finishCheck([]);
+    await waitForAsyncCallbacks();
+    assert.equal(timers.length, 0, "saving cancels automatic checks");
+    assert.equal(controls.status.textContent, "Checking your Yahoo connection…");
+    assert.equal(controls.results.replacements, replacements);
+    assert.equal(state.sessionRequests.length, requestCount);
+
+    failSave(new Error("App password rejected"));
+    await saving;
+    assert.equal(controls.status.textContent, "App password rejected");
+    assert.equal(timers.length, 1, "failed saving resumes the existing polling window");
+    state.fetchCodes = async () => [];
+    await timers.runNextWithDelay(8000);
+    assert.equal(state.sessionRequests.length, requestCount + 1);
+    assert.equal(controls.checkCodes.disabled, false);
+  }
+});
+
+test("successful saving immediately checks the updated account list", async () => {
+  const { controls, state, timers } = await createPopupHarness();
+  const requestCount = state.sessionRequests.length;
+  await controls.accountForm.trigger("submit");
+  await waitForAsyncCallbacks();
+  assert.equal(state.sessionRequests.length, requestCount + 1);
+  assert.equal(timers.length, 1);
+});
+
+test("failed saving after polling expires retains its error without restarting checks", async () => {
+  const { controls, state, timers } = await createPopupHarness();
+  let failSave;
+  state.sendOneOff = () => new Promise((_resolve, reject) => {
+    failSave = reject;
+  });
+  const saving = controls.accountForm.trigger("submit");
+  state.now += 120001;
+  failSave(new Error("App password rejected"));
+  await saving;
+  assert.equal(controls.status.textContent, "App password rejected");
+  assert.equal(timers.length, 0);
+});
+
 test("shows installation guidance only for unavailable companions", async () => {
   for (const statusError of [
     new CompanionUnavailableError(),

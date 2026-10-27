@@ -48,6 +48,7 @@ export function startCodePicker({
   });
   const { checks, scanSchedule } = polling;
   let view;
+  let checkIssueMessage = "";
   let dismissed = false,
     filledStep = false,
     lastURL = location.href;
@@ -117,6 +118,7 @@ export function startCodePicker({
     view.host.style.top = `${top}px`;
   }
   function mountPicker(field, context = readStepContext(field.stepContext)) {
+    checkIssueMessage = "";
     minReceivedAtMs ??= stepStartCutoff(clock.now());
     anchor = field.anchor;
     stepContext = context;
@@ -163,9 +165,13 @@ export function startCodePicker({
     }
     if (checks.busy || !view || document.hidden || !detectCodeField().ok)
       return;
+    if (polling.hasExpired()) {
+      announceCheckingFinished();
+      positionPicker();
+      return;
+    }
     const checkToken = checks.start();
     const requestGeneration = polling.generation;
-    let checkIssueMessage = "";
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
       const { collectOnly } = scanSchedule.beginCheck();
@@ -204,8 +210,8 @@ export function startCodePicker({
           : "Waiting for an email code…";
       view.setStatus(status);
     } catch (error) {
-      checkIssueMessage = error.message;
       if (polling.isCurrent(requestGeneration) && view) {
+        checkIssueMessage = error.message;
         scanSchedule.clearPending();
         view.clearCodes();
         view.setStatus(error.message);
@@ -223,12 +229,15 @@ export function startCodePicker({
           polling.isCurrent(requestGeneration) ? scanSchedule.pollDelayMs : 0,
         );
       } else if (view) {
-        view.setStatus(
-          `${checkIssueMessage ? `${checkIssueMessage} ` : ""}Checking finished. Click ↻ to check again.`,
-        );
+        announceCheckingFinished();
       }
       if (view) positionPicker();
     }
+  }
+  function announceCheckingFinished() {
+    view.setStatus(
+      `${checkIssueMessage ? `${checkIssueMessage} ` : ""}Checking finished. Click ↻ to check again.`,
+    );
   }
   function resetAttempt({ newPage = false, advanceCutoff = false } = {}) {
     excludeSeenMessages();

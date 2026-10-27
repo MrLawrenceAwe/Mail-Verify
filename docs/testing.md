@@ -12,7 +12,9 @@ node --test tests/test_*.js
 npm run check
 ```
 
-`npm run check` validates the extension manifest and checks JavaScript syntax in source, tests, scripts, and preview modules without executing them. Any syntax error fails the command.
+`npm run check` checks JavaScript syntax in source, tests, scripts, and preview modules without executing them. It also checks literal manifest file paths, local static imports and re-exports, and local HTML script and stylesheet references. Content-script module entry points loaded through literal `import(chrome.runtime.getURL("…"))` calls and their static dependencies must be declared as web-accessible resources. Missing files, missing declarations, and syntax errors fail the command. This checks the project's file references, rather than the full Chrome manifest schema or browser behaviour.
+
+The checker uses Node's VM module parser with `--experimental-vm-modules`, supplied by the npm command; it never links or evaluates the parsed modules. No package installation is required.
 
 The installer test installs into a temporary directory, launches that copy to verify native-message framing and imports, then checks uninstall cleanup. It does not access Yahoo or Keychain.
 

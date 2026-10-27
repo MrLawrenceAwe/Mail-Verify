@@ -4,6 +4,35 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCodePickerHarness } from "./support/code_picker_harness.js";
 
+test("a scheduled code check after expiry makes no request until an explicit retry", async () => {
+  let now = 10000;
+  let requests = 0;
+  const anchor = {};
+  const { timers, elements } = createCodePickerHarness({
+    detectOrFillCodeFields: () => ({
+      ok: true,
+      anchor,
+      rect: { top: 100, bottom: 130, left: 20, right: 200 },
+    }),
+    now: () => now,
+    check: async () => {
+      requests++;
+      return { ok: true, codes: [] };
+    },
+  });
+  await waitForAsyncCallbacks();
+  now += 120001;
+  await timers.runNextWithDelay(2000);
+  await waitForAsyncCallbacks();
+  assert.equal(requests, 1);
+  assert.equal(timers.length, 0);
+  assert.match(elements["#status"].textContent, /Checking finished.*↻/);
+  elements["#retry"].onclick();
+  await waitForAsyncCallbacks();
+  assert.equal(requests, 2);
+  assert.equal(timers.length, 1);
+});
+
 test("checking completion is announced with results, no results, warnings, or errors", async () => {
   for (const outcome of ["results", "empty", "warning", "error"]) {
     let now = 10_000;
