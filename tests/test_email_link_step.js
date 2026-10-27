@@ -1,11 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectEmailLinkStep, matchesPasswordResetWaitingPrompt } from "../extension/inline/email-link-step.js";
+import { detectEmailLinkStep } from "../extension/inline/email-link-step.js";
 
 function detectedMailType(text) {
   const panel = { innerText: text, getClientRects: () => [{}], checkVisibility: () => true };
   return detectEmailLinkStep({ querySelectorAll: () => [panel] })?.mailType;
 }
+
+test("rendered panel text limits apply before classifying either link purpose", () => {
+  for (const [prompt, mailType] of [
+    ["Check your email", "confirmationLinks"],
+    ["Reset your password. Check your email", "passwordResetLinks"],
+  ]) {
+    const atLimit = `${prompt}\n${" ".repeat(2500 - prompt.length - 2)}x`;
+    assert.equal(atLimit.length, 2500);
+    assert.equal(detectedMailType(atLimit), mailType);
+    assert.equal(detectedMailType(`  ${atLimit}\n`), mailType);
+    assert.equal(detectedMailType(`${atLimit}x`), undefined);
+  }
+});
 
 test("classifies confirmation prompts without treating resets, newsletters or long pages as confirmation", () => {
   for (const text of ["Check your inbox", "We've sent a verification email", "Follow the link in your email to confirm your account"])
@@ -138,21 +151,21 @@ test("the active stacked modal determines link purpose instead of the first dial
 
 test("detects reset email waiting screens while excluding request and new-password forms", () => {
   for (const text of ["Reset your password. Check your inbox", "Password reset link sent to your email", "We sent a link to reset your password", "Follow the link in your email to change your password"])
-    assert.equal(matchesPasswordResetWaitingPrompt(text), true, text);
+    assert.equal(detectedMailType(text), "passwordResetLinks", text);
   for (const text of ["Forgot password? Enter your email", "Choose a new password", "Check your email", "Reset password newsletter. Check your email", "x".repeat(2501)])
-    assert.equal(matchesPasswordResetWaitingPrompt(text), false, text);
+    assert.notEqual(detectedMailType(text), "passwordResetLinks", text);
 });
 
 test("reset intent must belong to the email instruction or its heading", () => {
   for (const innerText of [
     "Check your email. Sign in. Forgot password?",
     "Check your email. Contact support. Reset password",
-  ]) assert.equal(matchesPasswordResetWaitingPrompt(innerText), false, innerText);
+  ]) assert.notEqual(detectedMailType(innerText), "passwordResetLinks", innerText);
   for (const innerText of [
     "Forgot password? Check your inbox for the reset link",
     "Check your email for a password reset link. Sign in",
     "We sent you a link to reset your password. Sign in",
-  ]) assert.equal(matchesPasswordResetWaitingPrompt(innerText), true, innerText);
+  ]) assert.equal(detectedMailType(innerText), "passwordResetLinks", innerText);
 });
 
 test("line-separated navigation still cannot select reset mail type", () => {
@@ -161,7 +174,6 @@ test("line-separated navigation still cannot select reset mail type", () => {
     "Check your email\nSign in\nReset password",
     "Check your email to confirm your account\nForgot password?",
   ]) {
-    assert.equal(matchesPasswordResetWaitingPrompt(text), false, text);
     assert.equal(detectedMailType(text), "confirmationLinks", text);
   }
 });
@@ -190,7 +202,6 @@ test("unrelated password navigation cannot override explicit confirmation instru
     "Check your inbox to verify your email. Forgot password?",
     "We sent an activation email. Sign in. Forgot password?",
   ]) {
-    assert.equal(matchesPasswordResetWaitingPrompt(text), false, text);
     assert.equal(detectedMailType(text), "confirmationLinks", text);
   }
 });
@@ -202,7 +213,6 @@ test("line-separated headings and continuation lines retain reset intent", () =>
     "Check your inbox\nWe sent you a\nlink to\nreset your\npassword",
     "Check your email\nWe sent you a link\nto reset your password",
   ]) {
-    assert.equal(matchesPasswordResetWaitingPrompt(text), true, text);
     assert.equal(detectedMailType(text), "passwordResetLinks", text);
   }
 });
@@ -228,7 +238,6 @@ test("detects Workday's sent-email notice beside sign-in and password navigation
   const resendNotice = "An email has been sent to you.\nStill can't sign in? Be sure to check your spam folder, your account may need verification\nResend Account Verification";
   for (const text of [notice, resendNotice, `Sign In\n${notice}\nEmail Address\nPassword\nSign In\nCreate Account\nForgot your password?`]) {
     assert.equal(detectedMailType(text), "confirmationLinks", text);
-    assert.equal(matchesPasswordResetWaitingPrompt(text), false, text);
   }
   for (const text of [
     "An email has been sent to you.",

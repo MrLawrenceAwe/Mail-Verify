@@ -108,7 +108,7 @@ Controls explicitly requesting only SMS, text messages, or phone delivery do not
 | Code-step context | 500 across all context roots | 10,000 code units across all context roots | Retain the last known recipient identity. |
 | Generic code-field context | 500 per context root | 10,000 code units per context root | Skip the incomplete root; explicit field hints remain supported. |
 | Link panel, before layout/text extraction | 500 per panel | 10,000 raw code units per panel | Skip the panel, including an oversized body fallback; continue with later panels. |
-| Rendered link-panel text | — | 2,500 characters per panel | Skip the panel. |
+| Rendered link-panel text | — | 2,500 code units per panel after trimming outer whitespace; internal whitespace counts | Skip the panel before classifying confirmation or reset purpose. |
 
 Mutation and code-context inspection read individual text nodes without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per mutation batch. Code-context reads skip hidden content, scripts, styles, and templates and reuse each root within a discovery or fill. See [mutation inspection](../extension/inline/mutation-inspection.js), [code-step context](../extension/inline/code-step-context.js), and [field handling](../extension/shared/code-fields.js).
 

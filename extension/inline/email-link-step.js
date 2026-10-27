@@ -8,6 +8,7 @@ const emailLinkPanelIds = new WeakMap();
 let nextEmailLinkPanelId = 1;
 const MAX_PANEL_NODES = 500;
 const MAX_PANEL_TEXT_UNITS = 10_000;
+const MAX_RENDERED_PANEL_TEXT_UNITS = 2_500;
 
 function recipientIdentity(text) {
   return recipientKeyFromText(text, (context) => {
@@ -51,12 +52,6 @@ function isWithinPanelBudget(panel) {
 function matchesDefaultLinkWaitingPrompt(text) {
   // Generic “Check your email” prompts qualify when no reset purpose is detected.
   const value = text.replace(/\s+/g, " ").trim();
-  if (
-    !value ||
-    value.length > 2500 ||
-    /\b(?:newsletter|unsubscribe)\b/i.test(value)
-  )
-    return false;
   return (
     /\bcheck\s+(?:your\s+)?(?:e-?mail|inbox)\b/i.test(value) ||
     /\be-?mail\s+has\s+been\s+sent\s+to\s+you[.!]?\s+(?:please\s+)?(?:verify|confirm|activate)\s+your\s+(?:account|e-?mail(?:\s+address)?)\b/i.test(
@@ -77,14 +72,7 @@ function matchesDefaultLinkWaitingPrompt(text) {
   );
 }
 
-export function matchesPasswordResetWaitingPrompt(text) {
-  const value = text.trim();
-  if (
-    !value ||
-    value.length > 2500 ||
-    /\b(?:newsletter|unsubscribe)\b/i.test(value)
-  )
-    return false;
+function matchesPasswordResetWaitingPrompt(value) {
   const passwordReset =
     /\b(?:reset|forgot|recover|change)\b.{0,35}\bpassword\b|\bpassword\b.{0,35}\b(?:reset|recovery)\b/i;
   const resetHeading =
@@ -133,7 +121,14 @@ export function detectEmailLinkStep(document) {
       !panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
     )
       continue;
-    const text = panel.innerText || "";
+    // Validate once before purpose matching; keep line breaks for reset headings.
+    const text = (panel.innerText || "").trim();
+    if (
+      !text ||
+      text.length > MAX_RENDERED_PANEL_TEXT_UNITS ||
+      /\b(?:newsletter|unsubscribe)\b/i.test(text)
+    )
+      continue;
     const mailType = matchesPasswordResetWaitingPrompt(text)
       ? "passwordResetLinks"
       : matchesDefaultLinkWaitingPrompt(text)
