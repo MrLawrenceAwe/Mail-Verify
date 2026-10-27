@@ -14,7 +14,7 @@ Use **↻** to restart checking, or **× / Escape** to dismiss an on-page sugges
 
 ## Checking and freshness
 
-Automatic checking lasts up to two minutes while the tab is active. Keep the popup open for manual checks. Hiding a tab stops new on-page checks.
+Automatic checking runs in two-minute windows. Hiding a tab stops new on-page checks. Code suggestions start a new window when they return after hiding the tab or scrolling the code field offscreen. Link cards keep their existing deadline when the tab returns. Use **↻** or resend the email to start another window; a new verification step also starts one. Keep the popup open for manual checks.
 
 Checks show inbox emails from the last ten minutes. Spam and other folders are excluded. Results from slower accounts may appear later.
 

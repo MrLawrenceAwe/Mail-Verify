@@ -81,6 +81,47 @@ test("does not start a scheduled check after the deadline", async () => {
   assert.ok(state.closes >= 1);
 });
 
+test("failed selections after polling finishes retain their specific error", async () => {
+  for (const mailType of ["codes", "confirmationLinks", "passwordResetLinks"]) {
+    for (const expired of [false, true]) {
+      const { controls, timers, state } = await createPopupHarness();
+      const control =
+        mailType === "codes"
+          ? controls.checkCodes
+          : mailType === "confirmationLinks"
+            ? controls.checkConfirmationLinks
+            : controls.checkPasswordResetLinks;
+      state.fetchConfirmationLinks = async () => [emailLinkMessage];
+      state.fetchPasswordResetLinks = async () => [emailLinkMessage];
+      control.trigger();
+      await waitForAsyncCallbacks();
+      state.now += expired ? 600_001 : 120_001;
+      await timers.takeOldest()();
+      assert.match(controls.status.textContent, /Automatic checking finished/);
+
+      state.failFill = true;
+      state.failOpen = true;
+      const requestCount = state.sessionRequests.length;
+      await controls.results.querySelectorAll("button")[0].trigger();
+      assert.equal(
+        controls.status.textContent,
+        expired
+          ? mailType === "codes"
+            ? "This code is no longer current. Request a new code."
+            : "This link is no longer current. Request a new email."
+          : "Tab unavailable",
+      );
+      assert.equal(timers.length, 0);
+      assert.equal(state.sessionRequests.length, requestCount);
+
+      control.trigger();
+      await waitForAsyncCallbacks();
+      assert.equal(state.sessionRequests.length, requestCount + 1);
+      assert.equal(timers.length, 1, "manual checking starts a new window");
+    }
+  }
+});
+
 test("retries temporary mail errors", async () => {
   const { controls, timers, state } = await createPopupHarness();
   state.fetchCodes = async () => {

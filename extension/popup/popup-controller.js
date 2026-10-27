@@ -129,7 +129,7 @@ export function createPopupController({
     else polling.cancelScheduledCheck();
   }
   function finishPolling() {
-    polling.cancelScheduledCheck();
+    polling.endPollingWindow();
     closeSession();
     if (!usingResult && !removingAccount)
       view.setStatus(

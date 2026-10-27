@@ -25,7 +25,9 @@ Failed native responses include `ok: false` and a display message in `error`. Un
 
 ### Polling lifecycle
 
-Automatic checking lasts up to two minutes. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. Pending scans are collected every second, while full checks continue at the normal interval so healthy accounts can discover new mail.
+Automatic checking runs in two-minute windows. Code suggestions normally check two seconds after each response; link cards and the popup check about every eight seconds. Pending scans are collected every second, while full checks continue at the normal interval so healthy accounts can discover new mail.
+
+Code-picker mounting starts a new checking window, including remounting the same step after a hidden tab returns or an offscreen field becomes visible. Its freshness cutoff stays unchanged for that step. Link-card remounting retains the existing deadline, including time spent hidden. Explicit retries, resends, and new verification steps start new windows; popup manual checks also renew the window.
 
 [Scan scheduling](../extension/shared/scan-schedule.js) decides between collection and full checks and supplies the next delay. [Polling lifecycle](../extension/shared/polling-lifecycle.js) owns timers, deadlines, response invalidation, and queued retries:
 
