@@ -21,6 +21,4 @@ jobs:
       - name: Python and JavaScript tests
         run: npm test
       - name: Validate extension and JavaScript syntax
-        run: |
-          python3 -m json.tool extension/manifest.json >/dev/null
-          find extension -name '*.js' -exec node --check {} \;
+        run: npm run check

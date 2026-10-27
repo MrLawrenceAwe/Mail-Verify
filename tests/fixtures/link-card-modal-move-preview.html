@@ -21,6 +21,7 @@
     <dialog></dialog>
     <script type="module">
       import { startEmailLinkCard } from "../../extension/inline/email-link-card-controller.js";
+      import { makeEmailLinkMessage } from "../support/mail_results.js";
       import { createMockInlineRuntime } from "../support/mock_inline_runtime.js";
 
       const main = document.querySelector("main");
@@ -30,14 +31,15 @@
       window.chrome = {
         runtime: createMockInlineRuntime(() => ({
           ok: true,
-          confirmationLinks: [{
-            uid: 1,
-            accountEmail: "preview@yahoo.com",
-            sender: "auth@example.test",
-            subject: "Confirm your account",
-            url: "https://example.test/verify",
-            receivedAt,
-          }],
+          confirmationLinks: [
+            makeEmailLinkMessage({
+              accountEmail: "preview@yahoo.com",
+              sender: "auth@example.test",
+              subject: "Confirm your account",
+              url: "https://example.test/verify",
+              receivedAt,
+            }),
+          ],
           scanPending: false,
         })),
       };

@@ -10,6 +10,7 @@
 <script type="module">
 import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
 import { startEmailLinkCard } from '../../extension/inline/email-link-card-controller.js';
+import { makeVerificationCodeMessage, makeEmailLinkMessage } from "../support/mail_results.js";
 import { createMockInlineRuntime } from '../support/mock_inline_runtime.js';
 const mode = new URL(location.href).searchParams.get('mode') || 'status';
 let panel = document.createElement(mode.startsWith('modal') ? 'dialog' : 'main');
@@ -34,12 +35,13 @@ if (stacked && panel.tagName === 'DIALOG') {
   active.showModal();
   panel = active;
 }
-let receivedAt = Date.now();
-const item = { uid:1, accountEmail:'preview@yahoo.com', code:'331519',
-  sender:'auth@example.test', subject:'Your verification email',
-  url:'https://example.test/reset', receivedAt };
-window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true, codes:[item],
-  confirmationLinks:[item], passwordResetLinks:[item], scanPending:false })) };
+const mailType = mode === 'modal-code' ? 'codes' : 'passwordResetLinks';
+const metadata = { accountEmail:'preview@yahoo.com', sender:'auth@example.test', receivedAt:Date.now() };
+const item = mailType === 'codes'
+  ? makeVerificationCodeMessage({ ...metadata, code:'331519', subject:'Your verification email' })
+  : makeEmailLinkMessage({ ...metadata, url:'https://example.test/reset', subject:'Reset your password' });
+window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true,
+  [mailType]:[item], scanPending:false })) };
 panel.querySelector('input')?.addEventListener('input', event => {
   panel.querySelector('#feedback').textContent = event.target.value === item.code ? 'Code filled successfully.' : 'Incorrect code';
 });

@@ -1,3 +1,4 @@
+import { makeVerificationCodeMessage } from "./support/mail_results.js";
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import { formatReceivedAt } from "../extension/shared/mail-presentation.js";
 import test from "node:test";
@@ -8,13 +9,10 @@ import { createTextElement } from "./support/dom_nodes.js";
 test("picker passes its mounted field to the fill action", async () => {
   const anchor = {};
   const fills = [];
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
-    code: "123456",
+  const code = makeVerificationCodeMessage({
     sender: "auth@example.test",
     receivedAt: 9_000,
-  };
+  });
   const { results } = createCodePickerHarness({
     detectOrFillCodeFields: (request) => {
       if (request.action === "fill") {
@@ -47,13 +45,11 @@ test("selection revalidates the verification step before the queued discovery ru
       { contains: () => true },
     );
     const anchor = { form };
-    const code = {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
+    const code = makeVerificationCodeMessage({
       code: "111111",
       sender: "auth@example.test",
       receivedAt: 9000,
-    };
+    });
     const { timers, results } = createCodePickerHarness({
       detectOrFillCodeFields: ({ action }) => {
         if (action === "fill") {
@@ -139,13 +135,11 @@ test("switching CSS-hidden recipients blocks the previous code before discovery 
       parentNode: bob,
     };
     const anchor = {};
-    const oldCode = {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
+    const oldCode = makeVerificationCodeMessage({
       code: "111111",
       sender: "auth@example.test",
       receivedAt: 9000,
-    };
+    });
     const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20000 };
     let codes = [oldCode];
     const { results, timers } = createCodePickerHarness({
@@ -219,13 +213,10 @@ test("failed fills retain specific field guidance and use a fallback when absent
       check: async () => ({
         ok: true,
         codes: [
-          {
-            uid: 1,
-            accountEmail: "test@yahoo.com",
-            code: "123456",
+          makeVerificationCodeMessage({
             sender: "auth@example.test",
             receivedAt: 9000,
-          },
+          }),
         ],
       }),
     });
@@ -241,27 +232,26 @@ test("failed fills retain specific field guidance and use a fallback when absent
 
 test("visible code suggestions distinguish senders and inboxes without hovering", async () => {
   const codes = [
-    {
-      uid: 1,
+    makeVerificationCodeMessage({
       accountEmail: "first@yahoo.com",
       sender: "login@example.test",
       code: "111111",
       receivedAt: 9000,
-    },
-    {
+    }),
+    makeVerificationCodeMessage({
       uid: 2,
       accountEmail: "first@yahoo.com",
       sender: "security@other.test",
       code: "222222",
       receivedAt: 9000,
-    },
-    {
+    }),
+    makeVerificationCodeMessage({
       uid: 3,
       accountEmail: "second@yahoo.com",
       sender: "",
       code: "333333",
       receivedAt: 9000,
-    },
+    }),
   ];
   const { results } = createCodePickerHarness({
     detectOrFillCodeFields: () => ({

@@ -14,12 +14,13 @@
 <p id="feedback" aria-live="polite"></p>
 <script type="module">
   import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
+  import { makeVerificationCodeMessage } from "../support/mail_results.js";
   import { createMockInlineRuntime } from '../support/mock_inline_runtime.js';
   const inputs = document.querySelectorAll('input');
-  window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true, codes:[{
-    uid:1, accountEmail:'preview@yahoo.com', code:'331519', sender:'auth@example.test',
+  window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true, codes:[makeVerificationCodeMessage({
+    accountEmail:'preview@yahoo.com', code:'331519', sender:'auth@example.test',
     subject:'Your email security code', receivedAt:Date.now(),
-  }], scanPending:false })) };
+  })], scanPending:false })) };
   inputs[0].focus();
   inputs[0].addEventListener('input', () => {
     document.querySelector('#feedback').textContent = inputs[0].value === '331519' && inputs[1].value === '654321'

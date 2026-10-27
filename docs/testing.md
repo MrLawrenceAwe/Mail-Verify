@@ -9,8 +9,10 @@ Run `npm test` for the Python and JavaScript suites. To run them separately or c
 ```sh
 python3 -m unittest discover -s tests -v
 node --test tests/test_*.js
-find extension -name "*.js" -exec node --check {} \;
+npm run check
 ```
+
+`npm run check` validates the extension manifest and checks JavaScript syntax in source, tests, scripts, and preview modules without executing them. Any syntax error fails the command.
 
 The installer test installs into a temporary directory, launches that copy to verify native-message framing and imports, then checks uninstall cleanup. It does not access Yahoo or Keychain.
 

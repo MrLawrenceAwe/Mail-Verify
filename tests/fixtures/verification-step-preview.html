@@ -24,6 +24,7 @@
 <script type="module">
 import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
 import { startEmailLinkCard } from '../../extension/inline/email-link-card-controller.js';
+import { makeVerificationCodeMessage, makeEmailLinkMessage } from "../support/mail_results.js";
 import { createMockInlineRuntime } from '../support/mock_inline_runtime.js';
 const mode = new URL(location.href).searchParams.get('mode') || 'codes';
 if (new URL(location.href).searchParams.has('sameForm'))
@@ -37,16 +38,17 @@ document.querySelector('#instruction').textContent = isCode
     : 'Check your email for a confirmation link. We sent a link to preview@yahoo.com.';
 document.querySelector('#codeField').hidden = !isCode;
 document.querySelector('#replace').hidden = !isCode;
-let item = { uid:1, accountEmail:'preview@yahoo.com', code:'331519',
-  sender:'auth@example.test', subject:'Your verification email',
-  url:'https://example.test/verify', receivedAt:Date.now() };
-window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true, codes:[item],
-  confirmationLinks:[item], passwordResetLinks:[item], scanPending:false })) };
+const metadata = { accountEmail:'preview@yahoo.com', sender:'auth@example.test', receivedAt:Date.now() };
+let item = isCode
+  ? makeVerificationCodeMessage({ ...metadata, code:'331519', subject:'Your verification email' })
+  : makeEmailLinkMessage({ ...metadata, url:'https://example.test/verify', subject:'Your verification email' });
+window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true,
+  [mode]:[item], scanPending:false })) };
 const feedback = document.querySelector('#feedback');
 document.querySelector('#phoneResend').onclick = () => { feedback.textContent = 'Only an SMS was requested. The existing email result must remain usable.'; };
 document.querySelector('#resend').onclick = () => { feedback.textContent = 'A new email was requested. The previous email result must disappear.'; };
 document.querySelector('#deliver').onclick = () => {
-  item = { ...item, uid:item.uid+1, code:'654321', receivedAt:Date.now() };
+  item = { ...item, uid:item.uid+1, receivedAt:Date.now(), ...(isCode ? { code:'654321' } : {}) };
   feedback.textContent = 'Replacement email delivered.';
 };
 document.querySelector('#replace').onclick = () => {

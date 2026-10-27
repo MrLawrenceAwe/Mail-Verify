@@ -1,3 +1,4 @@
+import { makeVerificationCodeMessage } from "./support/mail_results.js";
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -7,13 +8,10 @@ import { createTextElement } from "./support/dom_nodes.js";
 
 test("initial code suggestions accept recent mail received before field discovery", async () => {
   const now = 1_000_000;
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
-    code: "123456",
+  const code = makeVerificationCodeMessage({
     sender: "noreply@email.trac.jobs",
     receivedAt: now - 30_000,
-  };
+  });
   let fills = 0;
   const anchor = {};
   const { results } = createCodePickerHarness({
@@ -126,13 +124,10 @@ test("focus moves within split digits preserve suggestions, but another group st
         },
       },
     });
-    const code = {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
-      code: "123456",
+    const code = makeVerificationCodeMessage({
       sender: "auth@example.test",
       receivedAt: 9000,
-    };
+    });
     const { events, timers, results } = createCodePickerHarness({
       detectOrFillCodeFields: context.handle,
       now: () => 10000,
@@ -192,13 +187,11 @@ test("a successful fill allows a new code field on the same URL", async () => {
     now = 10_000,
     anchor = {};
   let mounts = 0;
-  const oldCode = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
+  const oldCode = makeVerificationCodeMessage({
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9_000,
-  };
+  });
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20_000 };
   let codes = [oldCode];
   const { timers, results } = createCodePickerHarness({
@@ -237,13 +230,11 @@ test("a successful fill keeps the same field closed until a resend", async () =>
   let observer,
     now = 10_000;
   const anchor = {};
-  const oldCode = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
+  const oldCode = makeVerificationCodeMessage({
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9_000,
-  };
+  });
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 22_000 };
   let codes = [oldCode],
     mounts = 0;
@@ -292,13 +283,12 @@ for (const resend of [
 ])
   test(`${resend.value || resend.textContent} clears the old suggestion and waits for newer mail`, async () => {
     let now = 9500;
-    const oldCode = {
+    const oldCode = makeVerificationCodeMessage({
       uid: 7,
-      accountEmail: "test@yahoo.com",
       code: "111111",
       sender: "auth@example.test",
       receivedAt: 9000,
-    };
+    });
     let codes = [oldCode];
     const { events, timers, results } = createCodePickerHarness({
       detectOrFillCodeFields: () => ({
@@ -341,13 +331,12 @@ for (const textContent of [
   test(`${textContent} restarts checking after the polling deadline`, async () => {
     let now = 9500,
       checks = 0;
-    const oldCode = {
+    const oldCode = makeVerificationCodeMessage({
       uid: 7,
-      accountEmail: "test@yahoo.com",
       code: "111111",
       sender: "auth@example.test",
       receivedAt: 9000,
-    };
+    });
     let codes = [oldCode];
     const { events, timers, results } = createCodePickerHarness({
       detectOrFillCodeFields: () => ({
@@ -397,13 +386,12 @@ test("resend before the first check returns does not revive an unseen old code",
     check: () => new Promise((resolve) => requests.push(resolve)),
   });
 
-  const oldCode = {
+  const oldCode = makeVerificationCodeMessage({
     uid: 7,
-    accountEmail: "test@yahoo.com",
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   assert.equal(requests.length, 1);
   events.get("click")({
     target: {
@@ -418,13 +406,12 @@ test("resend before the first check returns does not revive an unseen old code",
   assert.equal(results.childElementCount, 0);
   now = 10500;
   timers.takeNewest()();
-  const newCode = {
+  const newCode = makeVerificationCodeMessage({
     uid: 8,
-    accountEmail: "test@yahoo.com",
     code: "222222",
     sender: "auth@example.test",
     receivedAt: 10000,
-  };
+  });
   requests.shift()({ ok: true, codes: [oldCode, newCode] });
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 1);
@@ -432,13 +419,11 @@ test("resend before the first check returns does not revive an unseen old code",
 
 test("new route clears suggestions even when the code field is reused", async () => {
   let now = 10_000;
-  const oldCode = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
+  const oldCode = makeVerificationCodeMessage({
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   let responses = [oldCode];
   const anchor = {};
   const { environment, events, timers, results } = createCodePickerHarness({
@@ -479,13 +464,11 @@ test("scrolling away and back keeps a code from the same verification step", asy
         ? { left: 20, right: 120, top: 100, bottom: 130 }
         : { left: 20, right: 120, top: -130, bottom: -100 },
   };
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
+  const code = makeVerificationCodeMessage({
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9_000,
-  };
+  });
   const { events, results } = createCodePickerHarness({
     detectOrFillCodeFields: () => ({
       ok: visible,
@@ -527,13 +510,11 @@ test("countdown completion retains codes without starting a new attempt", async 
       { contains: () => true },
     );
     const anchor = { form };
-    const code = {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
+    const code = makeVerificationCodeMessage({
       code: "111111",
       sender: "auth@example.test",
       receivedAt: 9000,
-    };
+    });
     let requests = 0;
     const { timers, results, elements } = createCodePickerHarness({
       detectOrFillCodeFields: () => ({
@@ -593,13 +574,11 @@ test("changed verification instructions reset codes on the same field and URL", 
     { contains: () => true, parentElement: parent },
   );
   const anchor = { form };
-  const oldCode = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
+  const oldCode = makeVerificationCodeMessage({
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   let responses = [oldCode];
   const { timers, results } = createCodePickerHarness({
     detectOrFillCodeFields: () => ({
@@ -674,13 +653,11 @@ test("a new verification field on the same URL starts a fresh code window", asyn
     responses = [],
     warnings = [];
   responses = [
-    {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
+    makeVerificationCodeMessage({
       code: "111111",
       sender: "auth@example.test",
       receivedAt: 9000,
-    },
+    }),
   ];
   const { events, timers, results, elements } = createCodePickerHarness({
     detectOrFillCodeFields: () => ({
@@ -723,13 +700,12 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   now = 9500;
   responses = [
     responses[0],
-    {
+    makeVerificationCodeMessage({
       uid: 2,
-      accountEmail: "test@yahoo.com",
       code: "222222",
       sender: "auth@example.test",
       receivedAt: 10000,
-    },
+    }),
   ];
   events.get("click")({
     target: { closest: () => ({ textContent: "Resend code" }) },
@@ -750,13 +726,12 @@ test("a new verification field on the same URL starts a fresh code window", asyn
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 0);
   responses = [
-    {
+    makeVerificationCodeMessage({
       uid: 3,
-      accountEmail: "test@yahoo.com",
       code: "333333",
       sender: "auth@example.test",
       receivedAt: 20_000,
-    },
+    }),
   ];
   timers.takeNewest()();
   await waitForAsyncCallbacks();
@@ -775,13 +750,10 @@ test("incidental form messages retain codes through discovery, retry and selecti
     contains: () => true,
   });
   const anchor = {};
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
-    code: "123456",
+  const code = makeVerificationCodeMessage({
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   const { timers, results, elements } = createCodePickerHarness({
     detectOrFillCodeFields: ({ action }) => {
       if (action === "fill") {
@@ -829,13 +801,10 @@ test("an oversized step keeps the last known recipient and remains selectable", 
     contains: () => true,
   });
   const anchor = {};
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
-    code: "123456",
+  const code = makeVerificationCodeMessage({
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   const { timers, results } = createCodePickerHarness({
     detectOrFillCodeFields: ({ action }) => {
       if (action === "fill") {
@@ -875,13 +844,10 @@ test("an oversized step keeps the last known recipient and remains selectable", 
 test("resends in an independent form leave the active code usable", async () => {
   const form = createTextElement("FORM", "We sent a code to test@yahoo.com.");
   const anchor = { form };
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
-    code: "123456",
+  const code = makeVerificationCodeMessage({
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   const harness = createCodePickerHarness({
     detectOrFillCodeFields: () => ({
       ok: true,
@@ -919,13 +885,10 @@ test("an identical detached field replacement retains old mail and fills the liv
     let anchor = original,
       now = 10000,
       filledAnchor;
-    const code = {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
-      code: "123456",
+    const code = makeVerificationCodeMessage({
       sender: "auth@example.test",
       receivedAt: 9000,
-    };
+    });
     const harness = createCodePickerHarness({
       detectOrFillCodeFields: (request) => {
         if (request.action === "fill") {
@@ -968,13 +931,10 @@ test("a changed recipient or changed field is not treated as an identical replac
       isEqualNode: () => change !== "attributes",
     };
     let anchor = original;
-    const code = {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
-      code: "123456",
+    const code = makeVerificationCodeMessage({
       sender: "auth@example.test",
       receivedAt: 9000,
-    };
+    });
     const harness = createCodePickerHarness({
       detectOrFillCodeFields: () => ({
         ok: true,

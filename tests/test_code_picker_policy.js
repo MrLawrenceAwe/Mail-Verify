@@ -1,3 +1,4 @@
+import { makeVerificationCodeMessage } from "./support/mail_results.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -7,20 +8,17 @@ import {
 } from "../extension/inline/code-picker-policy.js";
 
 test("old codes are withheld while waiting for this verification attempt", () => {
-  const older = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
+  const older = makeVerificationCodeMessage({
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 1000,
-  };
-  const newest = {
+  });
+  const newest = makeVerificationCodeMessage({
     uid: 2,
-    accountEmail: "test@yahoo.com",
     code: "222222",
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   assert.deepEqual(selectSuggestedCodes([older], 5000, 10000), []);
   assert.deepEqual(selectSuggestedCodes([older, newest], 5000, 10000), [
     newest,
@@ -30,27 +28,23 @@ test("old codes are withheld while waiting for this verification attempt", () =>
 
 test("only the latest code per sender is suggested, without changing the response", () => {
   const codes = [
-    {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
+    makeVerificationCodeMessage({
       code: "111111",
       sender: "AUTH@example.test",
       receivedAt: 8000,
-    },
-    {
+    }),
+    makeVerificationCodeMessage({
       uid: 2,
-      accountEmail: "test@yahoo.com",
       code: "222222",
       sender: "auth@example.test",
       receivedAt: 9000,
-    },
-    {
+    }),
+    makeVerificationCodeMessage({
       uid: 3,
-      accountEmail: "test@yahoo.com",
       code: "333333",
       sender: "other@example.test",
       receivedAt: 9500,
-    },
+    }),
   ];
   assert.deepEqual(
     selectSuggestedCodes(codes, 5000, 10000).map((x) => x.code),
@@ -61,20 +55,17 @@ test("only the latest code per sender is suggested, without changing the respons
 
 test("codes without a sender remain separate suggestions", () => {
   const codes = [
-    {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
+    makeVerificationCodeMessage({
       code: "111111",
       sender: "",
       receivedAt: 9000,
-    },
-    {
+    }),
+    makeVerificationCodeMessage({
       uid: 2,
-      accountEmail: "test@yahoo.com",
       code: "222222",
       sender: "",
       receivedAt: 9500,
-    },
+    }),
   ];
   assert.deepEqual(
     selectSuggestedCodes(codes, 8000, 10000).map((item) => item.code),
@@ -83,20 +74,18 @@ test("codes without a sender remain separate suggestions", () => {
 });
 
 test("UID exclusion distinguishes two messages received in the same second", () => {
-  const old = {
+  const old = makeVerificationCodeMessage({
     uid: 7,
-    accountEmail: "test@yahoo.com",
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
-  const newer = {
+  });
+  const newer = makeVerificationCodeMessage({
     uid: 8,
-    accountEmail: "test@yahoo.com",
     code: "222222",
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   assert.deepEqual(
     selectSuggestedCodes(
       [old, newer],
@@ -110,20 +99,20 @@ test("UID exclusion distinguishes two messages received in the same second", () 
 
 test("same sender and UID in separate accounts remain distinct", () => {
   const codes = [
-    {
+    makeVerificationCodeMessage({
       uid: 7,
       code: "111111",
       sender: "auth@example.test",
       accountEmail: "one@yahoo.com",
       receivedAt: 9000,
-    },
-    {
+    }),
+    makeVerificationCodeMessage({
       uid: 7,
       code: "222222",
       sender: "auth@example.test",
       accountEmail: "two@yahoo.com",
       receivedAt: 9100,
-    },
+    }),
   ];
   assert.deepEqual(
     selectSuggestedCodes(codes, 8000, 10000).map((x) => x.code),

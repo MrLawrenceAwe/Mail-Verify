@@ -56,8 +56,8 @@ export function startCodePicker({
   let minReceivedAtMs = clock.now() - MAX_MESSAGE_AGE_MS;
   let anchor, stepContext;
   let pageControls;
-  let seenMessageKeys = new Set(),
-    excludedMessageKeys = new Set();
+  const seenMessages = new Map(),
+    excludedMessages = new Map();
   const detectCodeField = (options) => page.detectCodeField(options);
   const readStepContext = (context) =>
     readCodeStepContext(context, environment.getComputedStyle);
@@ -74,8 +74,15 @@ export function startCodePicker({
     dismissed = true;
     unmountPicker();
   }
+  function pruneMessageHistory(now = clock.now()) {
+    for (const history of [seenMessages, excludedMessages])
+      for (const [key, receivedAt] of history)
+        if (!isFreshMessage(receivedAt, now)) history.delete(key);
+  }
   function excludeSeenMessages() {
-    for (const key of seenMessageKeys) excludedMessageKeys.add(key);
+    pruneMessageHistory();
+    for (const [key, receivedAt] of seenMessages)
+      excludedMessages.set(key, receivedAt);
   }
   function positionPicker(field = detectCodeField()) {
     if (!view || !field.ok) return;
@@ -178,12 +185,16 @@ export function startCodePicker({
       checkIssueMessage = response.warnings?.length
         ? formatAccountCheckWarnings(response.warnings)
         : "";
-      for (const item of response.codes) seenMessageKeys.add(messageKey(item));
+      const now = clock.now();
+      pruneMessageHistory(now);
+      for (const item of response.codes)
+        if (isFreshMessage(item.receivedAt, now))
+          seenMessages.set(messageKey(item), item.receivedAt);
       const codes = selectSuggestedCodes(
         response.codes,
         minReceivedAtMs,
-        clock.now(),
-        excludedMessageKeys,
+        now,
+        excludedMessages,
       );
       view.renderCodes(codes, location.hostname);
       const status = checkIssueMessage
@@ -228,11 +239,12 @@ export function startCodePicker({
       : undefined;
     if (newPage) {
       dismissed = false;
-      seenMessageKeys = new Set();
+      seenMessages.clear();
       page.invalidateCandidates();
     }
   }
   function syncPicker({ refreshCandidates = true } = {}) {
+    pruneMessageHistory();
     if (refreshCandidates) pageControls = undefined;
     if (lastURL !== location.href) {
       resetAttempt({ newPage: true });

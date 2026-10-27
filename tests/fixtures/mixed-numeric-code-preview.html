@@ -21,15 +21,16 @@
 <p id="feedback" aria-live="polite"></p>
 <script type="module">
   import { startCodePicker } from '../../extension/inline/code-picker-controller.js';
+  import { makeVerificationCodeMessage } from "../support/mail_results.js";
   import { createMockInlineRuntime } from '../support/mock_inline_runtime.js';
   const digits = [...document.querySelectorAll('.digits input')];
   const phone = document.querySelector('input[autocomplete]');
   const feedback = document.querySelector('#feedback');
   let testingEmail = false;
-  window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true, codes:[{
+  window.chrome = { runtime:createMockInlineRuntime(() => ({ ok:true, codes:[makeVerificationCodeMessage({
     uid:testingEmail ? 2 : 1, accountEmail:'preview@yahoo.com', code:'331519', sender:'auth@example.test',
     subject:'Your security code', receivedAt:Date.now(),
-  }], scanPending:false })) };
+  })], scanPending:false })) };
   phone.addEventListener('input', () => {
     feedback.textContent = !testingEmail && phone.value === '331519' && digits.every(input => input.value === '')
       ? 'Phone code filled successfully; email digits unchanged.' : 'Unexpected field values.';

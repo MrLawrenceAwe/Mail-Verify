@@ -1,3 +1,4 @@
+import { makeVerificationCodeMessage } from "./support/mail_results.js";
 import { waitForAsyncCallbacks } from "./support/async_callbacks.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -8,13 +9,10 @@ test("checking completion is announced with results, no results, warnings, or er
     let now = 10_000;
     let checks = 0;
     const anchor = {};
-    const code = {
-      uid: 1,
-      accountEmail: "test@yahoo.com",
-      code: "123456",
+    const code = makeVerificationCodeMessage({
       sender: "auth@example.test",
       receivedAt: 9_000,
-    };
+    });
     const { timers, results, elements } = createCodePickerHarness({
       detectOrFillCodeFields: () => ({
         ok: true,
@@ -56,13 +54,10 @@ test("checking completion is announced with results, no results, warnings, or er
 test("code picker collects pending scans quickly then resumes normal checks", async () => {
   const modes = [];
   const anchor = {};
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
-    code: "123456",
+  const code = makeVerificationCodeMessage({
     sender: "auth@example.test",
     receivedAt: 9000,
-  };
+  });
   const { timers, results } = createCodePickerHarness({
     detectOrFillCodeFields: () => ({
       ok: true,
@@ -115,13 +110,10 @@ test("a slow account does not suppress normal code scans for healthy accounts", 
 });
 
 test("a failed inbox check removes previously offered codes", async () => {
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
-    code: "123456",
+  const code = makeVerificationCodeMessage({
     sender: "auth@example.test",
     receivedAt: 9_000,
-  };
+  });
   let connected = true;
   const { timers, results, elements } = createCodePickerHarness({
     detectOrFillCodeFields: () => ({
@@ -149,13 +141,11 @@ test("a failed inbox check removes previously offered codes", async () => {
 test("retry during an active check ignores its response and checks again immediately", async () => {
   let resolveFirst;
   let checks = 0;
-  const oldCode = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
+  const oldCode = makeVerificationCodeMessage({
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9_000,
-  };
+  });
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 10_000 };
   const { results, elements } = createCodePickerHarness({
     detectOrFillCodeFields: () => ({
@@ -201,13 +191,11 @@ test("returning to a hidden tab starts a check while the old one is pending", as
   events.get("visibilitychange")();
   timers.takeOldest()();
   assert.equal(requests.length, 2);
-  const code = {
-    uid: 1,
-    accountEmail: "test@yahoo.com",
+  const code = makeVerificationCodeMessage({
     code: "111111",
     sender: "auth@example.test",
     receivedAt: 9_000,
-  };
+  });
   requests[0]({ ok: true, codes: [] });
   await waitForAsyncCallbacks();
   assert.equal(results.childElementCount, 0);
