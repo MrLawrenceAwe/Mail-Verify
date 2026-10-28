@@ -208,7 +208,7 @@ class InboxSessionTests(unittest.TestCase):
         self.assertEqual(connection.searches[0], (None, "UID", "13:*"))
         self.assertTrue(connection.closed)
 
-    def test_returns_first_code_and_defers_older_mail_behind_new_arrivals(self):
+    def test_processes_matching_batch_and_defers_older_mail_behind_new_arrivals(self):
         class FakeConnection:
             count = 12
 

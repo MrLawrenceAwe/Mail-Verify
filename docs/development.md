@@ -39,6 +39,8 @@ Code-picker mounting starts a new checking window, including remounting the same
 
 Popup account saving, account removal, and result selection share one busy state that disables save, account setup, check, removal, and result controls. Completed selections remain disabled until a manual check or account-list update; code results also stay disabled without an HTTPS target page. Saving cancels scheduled checks and invalidates pending responses so inbox results cannot overwrite connection feedback. Successful saving immediately checks the updated account list; failed saving resumes the previous polling window only if it is still open.
 
+When automatic popup checking ends, its completion message retains the latest unresolved mail-check error or account warning. A successful check clears errors and updates account warnings; a new checking window starts with no retained issue.
+
 ## Companion modules
 
 `host.py` frames and dispatches native requests. `account_scan_manager.py` owns

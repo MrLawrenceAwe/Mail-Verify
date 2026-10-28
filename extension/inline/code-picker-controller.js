@@ -224,10 +224,7 @@ export function startCodePicker({
         return;
       }
       if (view && !polling.hasExpired()) {
-        polling.schedule(
-          checkForCodes,
-          polling.isCurrent(requestGeneration) ? scanSchedule.pollDelayMs : 0,
-        );
+        polling.schedule(checkForCodes, scanSchedule.pollDelayMs);
       } else if (view) {
         announceCheckingFinished();
       }

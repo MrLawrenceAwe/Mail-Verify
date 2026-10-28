@@ -81,6 +81,67 @@ test("does not start a scheduled check after the deadline", async () => {
   assert.ok(state.closes >= 1);
 });
 
+test("popup completion retains mail errors and account warnings at either expiry boundary", async () => {
+  for (const [control, fetchResults, label] of [
+    ["checkCodes", "fetchCodes", "codes"],
+    ["checkConfirmationLinks", "fetchConfirmationLinks", "confirmation links"],
+    ["checkPasswordResetLinks", "fetchPasswordResetLinks", "password reset links"],
+  ]) {
+    for (const failed of [false, true]) {
+      for (const expiresDuringCheck of [false, true]) {
+        const { controls, timers, state } = await createPopupHarness();
+        const warning = "other@yahoo.com: Yahoo took too long to respond.";
+        state.warnings = failed ? [] : [warning];
+        state[fetchResults] = async () => {
+          if (expiresDuringCheck) state.now += 120001;
+          if (failed) throw Error("Temporary mail error");
+          return [control === "checkCodes" ? verificationCodeMessage : emailLinkMessage];
+        };
+        controls[control].trigger();
+        await waitForAsyncCallbacks();
+        if (!expiresDuringCheck) {
+          state.now += 120001;
+          await timers.takeOldest()();
+        }
+        const issue = failed
+          ? "Temporary mail error"
+          : `Some accounts could not be checked: ${warning}`;
+        assert.equal(
+          controls.status.textContent,
+          `${issue} Automatic checking finished. Check again for newer ${label}.`,
+        );
+        assert.equal(timers.length, 0);
+        const buttons = controls.results.querySelectorAll("button");
+        assert.equal(buttons.length, failed ? 0 : 1);
+        if (!failed) assert.equal(buttons[0].disabled, false);
+      }
+    }
+  }
+});
+
+test("successful automatic checks clear retained issues before popup completion", async () => {
+  for (const failed of [false, true]) {
+    const { controls, timers, state } = await createPopupHarness();
+    state.warnings = failed ? [] : ["other@yahoo.com: Offline"];
+    state.fetchCodes = async () => {
+      if (failed) throw Error("Temporary mail error");
+      return [verificationCodeMessage];
+    };
+    controls.checkCodes.trigger();
+    await waitForAsyncCallbacks();
+    state.warnings = [];
+    state.fetchCodes = async () => [verificationCodeMessage];
+    state.now += 8000;
+    await timers.runNextWithDelay(8000);
+    state.now += 120001;
+    await timers.takeOldest()();
+    assert.equal(
+      controls.status.textContent,
+      "Automatic checking finished. Check again for newer codes.",
+    );
+  }
+});
+
 test("failed selections after polling finishes retain their specific error", async () => {
   for (const mailType of ["codes", "confirmationLinks", "passwordResetLinks"]) {
     for (const expired of [false, true]) {

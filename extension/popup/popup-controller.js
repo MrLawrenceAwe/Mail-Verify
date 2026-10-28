@@ -30,6 +30,7 @@ export function createPopupController({
   let mailCheckInProgress = false;
   let userActionInProgress = false;
   let selectionCompleted = false;
+  let checkIssue;
   const scanSchedule = createScanSchedule({
     clock,
     intervalMs: DEFAULT_SCAN_INTERVAL_MS,
@@ -55,6 +56,7 @@ export function createPopupController({
     startPolling();
   }
   function startPolling() {
+    checkIssue = undefined;
     polling.renewDeadline();
     checkInbox();
   }
@@ -138,7 +140,8 @@ export function createPopupController({
     closeSession();
     if (!userActionInProgress)
       view.setStatus(
-        `Automatic checking finished. Check again for newer ${MAIL_PRESENTATION[mailType].resultLabel}.`,
+        `${checkIssue ? `${checkIssue.message} ` : ""}Automatic checking finished. Check again for newer ${MAIL_PRESENTATION[mailType].resultLabel}.`,
+        checkIssue?.error === true,
       );
   }
   async function checkInbox() {
@@ -164,9 +167,12 @@ export function createPopupController({
         scanSchedule.recordResponse(response.scanPending);
         if (mailType !== "codes") view.renderLinks(results, mailType);
         else view.renderCodes(results, targetTab);
+        checkIssue = response.warnings?.length
+          ? { message: formatAccountCheckWarnings(response.warnings) }
+          : undefined;
         view.setStatus(
-          response.warnings?.length
-            ? formatAccountCheckWarnings(response.warnings)
+          checkIssue
+            ? checkIssue.message
             : results.length
               ? MAIL_PRESENTATION[mailType].foundStatus
               : scanSchedule.pending
@@ -179,6 +185,7 @@ export function createPopupController({
       if (!userActionInProgress && polling.isCurrent(requestGeneration)) {
         scanSchedule.clearPending();
         view.clearResults();
+        checkIssue = { message: error.message, error: true };
         view.setStatus(error.message, true);
       }
     } finally {

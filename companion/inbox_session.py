@@ -211,7 +211,7 @@ class InboxSession:
                 eligible[uid] = min(received, now)
         return eligible
 
-    def _fetch_items(self, candidates):
+    def _fetch_until_matching_batch(self, candidates):
         # Process every downloaded body before returning a batch's results.
         # Older candidates stay unfetched until a later poll; empty batches
         # continue this check, with at most five bodies downloaded at a time.
@@ -293,7 +293,7 @@ class InboxSession:
             }
             self.pending_body_timestamps_seconds.update(self._eligible_arrival_times(metadata, now))
             candidates = self._prune_pending_messages(now)
-            self._fetch_items(candidates)
+            self._fetch_until_matching_batch(candidates)
             return self._select_and_prune_results()
         except Exception:
             self.close()
