@@ -7,13 +7,13 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from errors import UserError, inbox_error_message
 from inbox_session import InboxSession, MAX_MESSAGE_AGE_SECONDS
 
-ACCOUNT_CHECK_TIMEOUT_SECONDS = 25
+SCAN_TIMEOUT_SECONDS = 25
 SCAN_RESPONSE_WAIT_SECONDS = 0.25
-MAX_CONCURRENT_ACCOUNTS = 4
+MAX_CONCURRENT_SCANS_PER_HOST = 4
 
 
 def scan_with_deadline(session):
-    session.deadline = time.monotonic() + ACCOUNT_CHECK_TIMEOUT_SECONDS
+    session.deadline = time.monotonic() + SCAN_TIMEOUT_SECONDS
     try:
         result = session.scan_inbox()
     except Exception:
@@ -71,7 +71,7 @@ class AccountScanManager:
             if email not in active:
                 self.discard_account_state(email)
         if not self.executor:
-            self.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS)
+            self.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_SCANS_PER_HOST)
         for account in account_credentials:
             key = account["email"].lower()
             session = self.sessions.get(key)

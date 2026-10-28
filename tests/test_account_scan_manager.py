@@ -144,14 +144,14 @@ class AccountScanManagerTests(unittest.TestCase):
             self.assertIs(scan_manager.sessions["one@yahoo.com"].extract_item, extract_password_reset_link_details)
 
     def test_account_scan_times_out(self):
-        with patch.object(account_scan_manager, "ACCOUNT_CHECK_TIMEOUT_SECONDS", 0.01), patch.object(
+        with patch.object(account_scan_manager, "SCAN_TIMEOUT_SECONDS", 0.01), patch.object(
             account_scan_manager.InboxSession, "scan_inbox", side_effect=lambda: time.sleep(0.2)
         ):
             with self.assertRaisesRegex(account_scan_manager.UserError, "too long"):
                 account_scan_manager.scan_with_deadline(account_scan_manager.InboxSession({}))
 
     def test_scan_failures_preserve_errors_until_deadline_and_clear_deadlines(self):
-        for elapsed in (1, account_scan_manager.ACCOUNT_CHECK_TIMEOUT_SECONDS):
+        for elapsed in (1, account_scan_manager.SCAN_TIMEOUT_SECONDS):
             with self.subTest(elapsed=elapsed):
                 session = account_scan_manager.InboxSession({})
                 connection = session.connection = Mock(deadline=elapsed)
