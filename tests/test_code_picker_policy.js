@@ -250,128 +250,6 @@ test("input, label and code-context mutations request rediscovery while unrelate
   );
 });
 
-test("repeated unrelated attribute targets are inspected once per batch", () => {
-  let visits = 0;
-  const target = {
-    nodeType: 1,
-    matches: () => false,
-    get firstChild() {
-      visits++;
-      return null;
-    },
-  };
-  const records = Array.from({ length: 1000 }, () => ({
-    type: "attributes",
-    target,
-  }));
-  assert.equal(mutationAffectsPicker(records), false);
-  assert.equal(visits, 1);
-});
-
-test("picker bounds added and removed subtrees without aggregate text or queries", () => {
-  const root = {
-    nodeType: 1,
-    matches: () => false,
-    get textContent() {
-      assert.fail("must not aggregate element text");
-    },
-    querySelector() {
-      assert.fail("must not query an unrestricted subtree");
-    },
-  };
-  root.firstChild = {
-    nodeType: 3,
-    textContent: "x".repeat(1_000_000),
-    parentNode: root,
-  };
-  const context = [{ contains: () => true }];
-  for (const changed of ["addedNodes", "removedNodes"]) {
-    const record = {
-      type: "childList",
-      target: {},
-      addedNodes: [],
-      removedNodes: [],
-    };
-    record[changed] = [root];
-    assert.equal(
-      mutationAffectsPicker([record], { fieldContextRoots: context }),
-      true,
-    );
-  }
-});
-
-test("picker node budget covers the whole batch including attribute descendants", () => {
-  for (const type of ["childList", "attributes"]) {
-    let visits = 0;
-    const records = Array.from({ length: 2000 }, () => {
-      const root = {
-        nodeType: 1,
-        matches: () => false,
-        querySelector() {
-          assert.fail("must traverse with a budget");
-        },
-        get firstChild() {
-          visits++;
-          return null;
-        },
-      };
-      return {
-        type,
-        target: type === "attributes" ? root : {},
-        addedNodes: [root],
-        removedNodes: [],
-      };
-    });
-    assert.equal(mutationAffectsPicker(records), true);
-    assert.equal(visits, 500);
-  }
-});
-
-test("picker character-data node accounting also bounds records outside field context", () => {
-  for (const inContext of [false, true]) {
-    let inspections = 0;
-    const records = Array.from({ length: 1000 }, () => ({
-      type: "characterData",
-      target: {
-        nodeType: 3,
-        textContent: "x",
-        parentElement: { closest: () => null },
-      },
-      oldValue: "y",
-    }));
-    const options = {
-      fieldContextRoots: [{ contains() { inspections++; return inContext; } }],
-    };
-    assert.equal(mutationAffectsPicker(records.slice(0, 500), options), false);
-    assert.equal(inspections, 500);
-    inspections = 0;
-    assert.equal(mutationAffectsPicker(records, options), true);
-    assert.equal(inspections, 500);
-  }
-});
-
-test("picker text budget includes current and previous text across records", () => {
-  let reads = 0;
-  const records = Array.from({ length: 100 }, () => ({
-    type: "characterData",
-    target: {
-      nodeType: 3,
-      get textContent() {
-        reads++;
-        return "x".repeat(1000);
-      },
-    },
-    oldValue: "y".repeat(1000),
-  }));
-  assert.equal(
-    mutationAffectsPicker(records, {
-      fieldContextRoots: [{ contains: () => true }],
-    }),
-    true,
-  );
-  assert.equal(reads, 6);
-});
-
 test("picker bounded traversal preserves nested fields and split context prompts", () => {
   const root = { nodeType: 1, matches: () => false };
   const span = { nodeType: 1, matches: () => false, parentNode: root };
@@ -411,4 +289,22 @@ test("referenced accessible labels invalidate detection for any text change", ()
     { type: "attributes", attributeName: "id", target: root },
   ])
     assert.equal(mutationAffectsPicker([record], { labelRoots: [root] }), true);
+});
+
+test("an ID change still requests discovery after another attribute on the same target", () => {
+  const target = { nodeType: 1, matches: () => false };
+  for (const attributes of [["class", "id"], ["id", "class"]]) {
+    const records = attributes.map((attributeName) => ({
+      type: "attributes", attributeName, target,
+    }));
+    assert.equal(mutationAffectsPicker(records), true);
+    assert.equal(mutationAffectsPicker(records, { suggestionHost: target }), false);
+  }
+});
+
+test("picker inspects previous code-context text when current text is unrelated", () => {
+  const target = { nodeType: 3, textContent: "Try again" };
+  assert.equal(mutationAffectsPicker([
+    { type: "characterData", target, oldValue: "Check your email for a code" },
+  ], { fieldContextRoots: [{ contains: () => true }] }), true);
 });

@@ -50,45 +50,49 @@ export function mutationAffectsPicker(
   } = createMutationInspection((value) =>
     /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value),
   );
-  return recordsRequireRediscovery(records, suggestionHost, (record) => {
-    const target = record.target;
-    if (labelRoots.some((root) => root === target || root.contains?.(target)))
-      return true;
-    if (record.type === "childList" && target === stepParent) return true;
-    if (
-      stepRoots.some((root) => root.contains?.(target)) &&
-      (record.type === "characterData" || record.type === "childList")
-    )
-      return true;
-    const inContext = fieldContextRoots.some((root) => root.contains?.(target));
-    if (record.type === "attributes")
-      return (
-        record.attributeName === "id" ||
-        target?.matches?.("input, label") ||
-        subtreeRequiresRediscovery(target, "input")
-      );
-    if (record.type === "characterData") {
+  return recordsRequireRediscovery(
+    records,
+    suggestionHost,
+    (record, inspectAttributeSubtree) => {
+      const target = record.target;
+      if (labelRoots.some((root) => root === target || root.contains?.(target)))
+        return true;
+      if (record.type === "childList" && target === stepParent) return true;
       if (
-        inContext &&
-        (textRequiresRediscovery(target.textContent || "") ||
-          textRequiresRediscovery(record.oldValue || ""))
+        stepRoots.some((root) => root.contains?.(target)) &&
+        (record.type === "characterData" || record.type === "childList")
       )
         return true;
-      return !!target?.parentElement?.closest?.("label");
-    }
-    if (target?.closest?.("label")) return true;
-    for (const nodes of [record.addedNodes, record.removedNodes])
-      for (const node of nodes)
+      const inContext = fieldContextRoots.some((root) => root.contains?.(target));
+      if (record.type === "attributes")
+        return (
+          record.attributeName === "id" ||
+          target?.matches?.("input, label") ||
+          (inspectAttributeSubtree && subtreeRequiresRediscovery(target, "input"))
+        );
+      if (record.type === "characterData") {
         if (
-          subtreeRequiresRediscovery(
-            node,
-            'input, label, form, main, button, a[href], select, textarea, [role="button"], [role="link"]',
-            inContext,
-          )
+          inContext &&
+          (textRequiresRediscovery(target.textContent || "") ||
+            textRequiresRediscovery(record.oldValue || ""))
         )
           return true;
-    return false;
-  });
+        return !!target?.parentElement?.closest?.("label");
+      }
+      if (target?.closest?.("label")) return true;
+      for (const nodes of [record.addedNodes, record.removedNodes])
+        for (const node of nodes)
+          if (
+            subtreeRequiresRediscovery(
+              node,
+              'input, label, form, main, button, a[href], select, textarea, [role="button"], [role="link"]',
+              inContext,
+            )
+          )
+            return true;
+      return false;
+    },
+  );
 }
 
 export function isCodeRequestControl(control) {

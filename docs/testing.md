@@ -26,6 +26,8 @@ JavaScript result builders live in `tests/support/mail_results.js`; code and lin
 
 The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle.
 
+`test_mutation_inspection.js` owns shared traversal, node/text budgets, suggestion exclusion, and attribute subtree deduplication checks. Picker and link-card policy suites retain their selectors, context rules, and attribute-specific rediscovery cases.
+
 | Suite | Behaviour groups | Shared harness |
 | --- | --- | --- |
 | `test_code_picker_steps.js`, `test_code_picker_polling.js`, `test_code_picker_positioning.js`, `test_code_picker_selection.js` | Steps, polling, positioning, selection | `support/code_picker_harness.js` |

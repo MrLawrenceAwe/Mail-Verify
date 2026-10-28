@@ -47,31 +47,38 @@ export function mutationAffectsEmailLinkCard(
       value,
     ),
   );
-  return recordsRequireRediscovery(records, host, (record) => {
-    const target = record.target;
-    if (record.type === "attributes")
-      return subtreeRequiresRediscovery(target, relevantElements, true);
-    const element = target.nodeType === 1 ? target : target.parentElement;
-    const mutationInCandidatePanel =
-      hasActiveStep &&
-      Boolean(
-        element?.closest?.(EMAIL_LINK_PANEL_SELECTOR) ||
-          !document.querySelector?.(EMAIL_LINK_PANEL_SELECTOR),
-      );
-    if (record.type === "characterData")
-      return (
-        mutationInCandidatePanel ||
-        textRequiresRediscovery(target.textContent || "") ||
-        textRequiresRediscovery(record.oldValue || "")
-      );
-    if (record.type === "childList") {
-      if (mutationInCandidatePanel) return true;
-      for (const nodes of [record.addedNodes, record.removedNodes])
-        for (const node of nodes)
-          if (subtreeRequiresRediscovery(node, relevantElements, true))
-            return true;
+  return recordsRequireRediscovery(
+    records,
+    host,
+    (record, inspectAttributeSubtree) => {
+      const target = record.target;
+      if (record.type === "attributes")
+        return (
+          inspectAttributeSubtree &&
+          subtreeRequiresRediscovery(target, relevantElements, true)
+        );
+      const element = target.nodeType === 1 ? target : target.parentElement;
+      const mutationInCandidatePanel =
+        hasActiveStep &&
+        Boolean(
+          element?.closest?.(EMAIL_LINK_PANEL_SELECTOR) ||
+            !document.querySelector?.(EMAIL_LINK_PANEL_SELECTOR),
+        );
+      if (record.type === "characterData")
+        return (
+          mutationInCandidatePanel ||
+          textRequiresRediscovery(target.textContent || "") ||
+          textRequiresRediscovery(record.oldValue || "")
+        );
+      if (record.type === "childList") {
+        if (mutationInCandidatePanel) return true;
+        for (const nodes of [record.addedNodes, record.removedNodes])
+          for (const node of nodes)
+            if (subtreeRequiresRediscovery(node, relevantElements, true))
+              return true;
+        return false;
+      }
       return false;
-    }
-    return false;
-  });
+    },
+  );
 }

@@ -1,7 +1,7 @@
 const MAX_MUTATION_NODES = 500;
 const MAX_MUTATION_TEXT_UNITS = 10_000;
 
-// One inspector owns the budgets and attribute deduplication for a mutation batch.
+// One inspector owns the budgets and attribute subtree deduplication for a batch.
 // Exhaustion requests a scan rather than dropping potentially relevant changes.
 export function createMutationInspection(matchesText) {
   const attributeTargets = new Set();
@@ -38,22 +38,18 @@ export function createMutationInspection(matchesText) {
     }
     return includeText && matchesText(text.join(""));
   }
-  // Attribute targets can be claimed only once per batch.
-  function claimRecord(record, host) {
-    const target = record.target;
-    if (target === host || host?.contains(target)) return false;
-    if (record.type === "attributes") {
-      if (attributeTargets.has(target)) return false;
-      attributeTargets.add(target);
-    }
-    return true;
-  }
   function recordsRequireRediscovery(records, host, inspectRecord) {
     return records.some((record) => {
-      if (!claimRecord(record, host)) return false;
+      const target = record.target;
+      if (target === host || host?.contains(target)) return false;
+      // Preserve every attribute-specific decision, but traverse each target
+      // only once. Different attributes on the same element can have different
+      // meanings even though their final subtree is identical.
+      const inspectAttributeSubtree = !attributeTargets.has(target);
+      if (record.type === "attributes") attributeTargets.add(target);
       // Subtree traversal charges its own nodes; text records have no subtree.
       if (record.type === "characterData" && !consumeNodeBudget()) return true;
-      return inspectRecord(record);
+      return inspectRecord(record, inspectAttributeSubtree);
     });
   }
   return {
