@@ -774,6 +774,52 @@ test("independently labelled numeric codes are not combined into digit groups", 
   }
 });
 
+test("split-field discovery reads each field's labels once per invocation", () => {
+  const parentElement = {};
+  let labelReads = 0, referenceReads = 0;
+  let labelText = "Verification code";
+  const inputs = Array.from({ length: 6 }, () => new FakeInput({
+    type: "number",
+    parentElement,
+    labels: [{ get textContent() { labelReads++; return labelText; } }],
+  }));
+  for (const input of inputs)
+    input.getAttribute = (name) => name === "aria-labelledby" ? "purpose" : "";
+  const handle = createVerificationFieldHarness({
+    document: {
+      querySelectorAll: () => inputs,
+      activeElement: inputs[2],
+      getElementById: () => ({
+        get textContent() { referenceReads++; return labelText; },
+      }),
+    },
+  }).handle;
+  assert.equal(handle({ action: "detect" }).anchor, inputs[0]);
+  assert.equal(labelReads, 6);
+  assert.equal(referenceReads, 6);
+  labelText = "Product code";
+  assert.equal(handle({ action: "detect" }).ok, false);
+  assert.equal(labelReads, 12);
+  assert.equal(referenceReads, 12);
+});
+
+test("split filling refreshes hints when an input handler changes the group label", () => {
+  const parentElement = {};
+  const label = { textContent: "Verification code" };
+  const inputs = Array.from({ length: 6 }, (_, index) => new FakeInput({
+    maxLength: 1,
+    parentElement,
+    labels: index === 0 ? [label] : [],
+  }));
+  inputs[0].dispatchEvent = function (event) {
+    this.events.push(event.type);
+    if (event.type === "input") label.textContent = "Product code";
+  };
+  assert.equal(run(inputs, inputs[0]).ok, false);
+  assert.equal(inputs[0].value, "1");
+  assert.ok(inputs.slice(1).every((input) => input.value === undefined));
+});
+
 test("numeric digit indices retain a shared OTP identity", () => {
   const parentElement = {};
   const inputs = Array.from({ length: 6 }, (_, index) => new FakeInput({

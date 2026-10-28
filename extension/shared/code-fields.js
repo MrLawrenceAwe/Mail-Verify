@@ -36,6 +36,9 @@ export function detectOrFillCodeFields({
 
   const contextRoots = new Set();
   const labelRoots = new Set();
+  // Reuse labels and classifications only until the next write or invocation.
+  const inputHints = new Map();
+  const codeHints = new Map();
   const referencedLabels = (input) => {
     const ids = (input.getAttribute("aria-labelledby") || "")
       .trim()
@@ -50,15 +53,19 @@ export function detectOrFillCodeFields({
       })
       .join(" ");
   };
-  const getInputHints = (input) => ({
-    autocomplete: input.autocomplete,
-    name: input.name,
-    id: input.id,
-    placeholder: input.placeholder,
-    ariaLabel: input.getAttribute("aria-label"),
-    referencedLabels: referencedLabels(input),
-    labels: [...(input.labels || [])].map((label) => label.textContent),
-  });
+  const getInputHints = (input) => {
+    if (!inputHints.has(input))
+      inputHints.set(input, {
+        autocomplete: input.autocomplete,
+        name: input.name,
+        id: input.id,
+        placeholder: input.placeholder,
+        ariaLabel: input.getAttribute("aria-label"),
+        referencedLabels: referencedLabels(input),
+        labels: [...(input.labels || [])].map((label) => label.textContent),
+      });
+    return inputHints.get(input);
+  };
   const verificationContext = (input) => {
     const container = input.form || input.parentElement;
     if (!container) return { roots: [], parent: undefined };
@@ -135,14 +142,17 @@ export function detectOrFillCodeFields({
     return false;
   };
   const hasCodeHint = (input) => {
+    if (codeHints.has(input)) return codeHints.get(input);
     const hints = Object.values(getInputHints(input)).flat();
-    return (
+    const matches = (
       hints.some((value) =>
         /(?:^|[^\w])(?:one[-_ ]?time[-_ ]?code|verification[-_ ]?code|security[-_ ]?code|passcode|otp|auth(?:entication)?[-_ ]?code|confirmation[-_ ]?code|sign[-_ ]?in[-_ ]?code|login[-_ ]?code)(?:$|[^\w])/i.test(
           value || "",
         ),
       ) || hasContextualCodeHint(input, hints)
     );
+    codeHints.set(input, matches);
+    return matches;
   };
   const hasSupportedType = (input) =>
     ["text", "tel", "number", "password", ""].includes(input.type);
@@ -360,6 +370,10 @@ export function detectOrFillCodeFields({
     setter.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+    // Page handlers can change labels, instructions, or the remaining fields.
+    inputHints.clear();
+    codeHints.clear();
+    contextMatches.clear();
   };
   if (fields) {
     const form = fields[0].form;

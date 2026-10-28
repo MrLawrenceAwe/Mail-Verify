@@ -48,10 +48,17 @@ export function createMutationInspection(matchesText) {
     }
     return true;
   }
+  function recordsRequireRediscovery(records, host, inspectRecord) {
+    return records.some((record) => {
+      if (!claimRecord(record, host)) return false;
+      // Subtree traversal charges its own nodes; text records have no subtree.
+      if (record.type === "characterData" && !consumeNodeBudget()) return true;
+      return inspectRecord(record);
+    });
+  }
   return {
-    consumeNodeBudget,
+    recordsRequireRediscovery,
     textRequiresRediscovery,
     subtreeRequiresRediscovery,
-    claimRecord,
   };
 }

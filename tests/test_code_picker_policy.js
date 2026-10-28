@@ -327,6 +327,29 @@ test("picker node budget covers the whole batch including attribute descendants"
   }
 });
 
+test("picker character-data node accounting also bounds records outside field context", () => {
+  for (const inContext of [false, true]) {
+    let inspections = 0;
+    const records = Array.from({ length: 1000 }, () => ({
+      type: "characterData",
+      target: {
+        nodeType: 3,
+        textContent: "x",
+        parentElement: { closest: () => null },
+      },
+      oldValue: "y",
+    }));
+    const options = {
+      fieldContextRoots: [{ contains() { inspections++; return inContext; } }],
+    };
+    assert.equal(mutationAffectsPicker(records.slice(0, 500), options), false);
+    assert.equal(inspections, 500);
+    inspections = 0;
+    assert.equal(mutationAffectsPicker(records, options), true);
+    assert.equal(inspections, 500);
+  }
+});
+
 test("picker text budget includes current and previous text across records", () => {
   let reads = 0;
   const records = Array.from({ length: 100 }, () => ({

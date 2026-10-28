@@ -44,16 +44,14 @@ export function mutationAffectsPicker(
   } = {},
 ) {
   const {
-    consumeNodeBudget,
+    recordsRequireRediscovery,
     textRequiresRediscovery,
     subtreeRequiresRediscovery,
-    claimRecord,
   } = createMutationInspection((value) =>
     /code|email|verif|sign.?in|\bsent\b|\bcheck\b/i.test(value),
   );
-  return records.some((record) => {
+  return recordsRequireRediscovery(records, suggestionHost, (record) => {
     const target = record.target;
-    if (!claimRecord(record, suggestionHost)) return false;
     if (labelRoots.some((root) => root === target || root.contains?.(target)))
       return true;
     if (record.type === "childList" && target === stepParent) return true;
@@ -72,8 +70,7 @@ export function mutationAffectsPicker(
     if (record.type === "characterData") {
       if (
         inContext &&
-        (!consumeNodeBudget() ||
-          textRequiresRediscovery(target.textContent || "") ||
+        (textRequiresRediscovery(target.textContent || "") ||
           textRequiresRediscovery(record.oldValue || ""))
       )
         return true;

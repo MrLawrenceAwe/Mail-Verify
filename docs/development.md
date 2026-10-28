@@ -112,6 +112,8 @@ Controls explicitly requesting only SMS, text messages, or phone delivery do not
 
 Mutation and code-context inspection read individual text nodes without aggregating element `textContent` or querying unrestricted descendants. Attribute targets are deduplicated per mutation batch. Code-context reads skip hidden content, scripts, styles, and templates and reuse each root within a discovery or fill. See [mutation inspection](../extension/inline/mutation-inspection.js), [code-step context](../extension/inline/code-step-context.js), and [field handling](../extension/shared/code-fields.js).
 
+The shared mutation inspector charges character-data records against the same node budget as subtree traversal. Field discovery reuses input hints and code classifications within each pass; filling clears these and context-text matches after every write so page handlers cannot leave later digits using stale labels or instructions.
+
 [Link-panel detection](../extension/inline/email-link-step.js) bounds traversal before layout or `innerText` reads. It skips descendants of elements with the `hidden` attribute, scripts, styles, and templates. CSS and `aria-hidden` are not inspected for this budget, so their concealed content can still exhaust it.
 
 ## Installation identity and updates

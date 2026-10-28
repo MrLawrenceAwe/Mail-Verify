@@ -238,6 +238,32 @@ test("mutation node and text budgets apply across the whole batch", () => {
   assert.equal(textReads, 11);
 });
 
+test("short character-data records share the node budget with subtree traversal", () => {
+  let reads = 0;
+  const records = Array.from({ length: 1000 }, () => ({
+    type: "characterData",
+    target: {
+      nodeType: 3,
+      get textContent() {
+        reads++;
+        return "x";
+      },
+    },
+    oldValue: "y",
+  }));
+  const subtree = {
+    type: "childList",
+    target: { nodeType: 1 },
+    addedNodes: [{ nodeType: 1, matches: () => false }],
+    removedNodes: [],
+  };
+  assert.equal(mutationAffectsEmailLinkCard(records.slice(0, 500), null, {}, false), false);
+  assert.equal(reads, 500);
+  reads = 0;
+  assert.equal(mutationAffectsEmailLinkCard([subtree, ...records], null, {}, false), true);
+  assert.equal(reads, 499);
+});
+
 test("bounded mutation traversal preserves prompts split across nested elements", () => {
   const root = { nodeType: 1, matches: () => false };
   const span = { nodeType: 1, matches: () => false, parentNode: root };

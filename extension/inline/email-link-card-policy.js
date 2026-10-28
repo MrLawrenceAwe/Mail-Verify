@@ -38,15 +38,17 @@ export function mutationAffectsEmailLinkCard(
   hasActiveStep,
 ) {
   const relevantElements = `${EMAIL_LINK_PANEL_SELECTOR}, input`;
-  const { textRequiresRediscovery, subtreeRequiresRediscovery, claimRecord } =
-    createMutationInspection((value) =>
-      /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(
-        value,
-      ),
-    );
-  return records.some((record) => {
+  const {
+    textRequiresRediscovery,
+    subtreeRequiresRediscovery,
+    recordsRequireRediscovery,
+  } = createMutationInspection((value) =>
+    /check|inbox|e-?mail|confirm|verif|activat|password|reset|\blink\b/i.test(
+      value,
+    ),
+  );
+  return recordsRequireRediscovery(records, host, (record) => {
     const target = record.target;
-    if (!claimRecord(record, host)) return false;
     if (record.type === "attributes")
       return subtreeRequiresRediscovery(target, relevantElements, true);
     const element = target.nodeType === 1 ? target : target.parentElement;
