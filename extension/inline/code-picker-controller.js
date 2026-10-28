@@ -14,7 +14,7 @@ import { detectOrFillCodeFields as defaultDetectOrFillCodeFields } from "../shar
 import { calculatePickerPosition } from "./code-picker-position.js";
 import { createCodePickerView } from "./code-picker-view.js";
 import {
-  stepStartCutoff,
+  codeStepCutoffMs,
   isFreshMessage,
   nextSecondCutoff,
   CODE_PICKER_SCAN_INTERVAL_MS,
@@ -119,7 +119,7 @@ export function startCodePicker({
   }
   function mountPicker(field, context = readStepContext(field.stepContext)) {
     checkIssueMessage = "";
-    minReceivedAtMs ??= stepStartCutoff(clock.now());
+    minReceivedAtMs ??= codeStepCutoffMs(clock.now());
     anchor = field.anchor;
     stepContext = context;
     const mountedView = createCodePickerView(document, {
@@ -244,7 +244,7 @@ export function startCodePicker({
     unmountPicker();
     filledStep = false;
     minReceivedAtMs = advanceCutoff
-      ? Math.max(minReceivedAtMs ?? -Infinity, stepStartCutoff(clock.now()))
+      ? Math.max(minReceivedAtMs ?? -Infinity, codeStepCutoffMs(clock.now()))
       : undefined;
     if (newPage) {
       dismissed = false;

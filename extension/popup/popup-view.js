@@ -69,6 +69,14 @@ export function createPopupView(
       button.disabled = disabled;
   }
 
+  function resetResultLabels(mailType) {
+    const label = mailType === "codes"
+      ? "Fill code"
+      : MAIL_PRESENTATION[mailType].actionLabel;
+    for (const button of getElement("results").querySelectorAll("button"))
+      button.textContent = label;
+  }
+
   function markCodeFilled(button) {
     button.textContent = "Filled";
   }
@@ -166,6 +174,7 @@ export function createPopupView(
     clearAccountEmail,
     setBusy,
     setResultButtonsDisabled,
+    resetResultLabels,
     markCodeFilled,
     markLinkOpened,
     renderAccounts,

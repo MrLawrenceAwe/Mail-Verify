@@ -99,11 +99,13 @@ test("checking again after a fill makes unchanged codes selectable", async () =>
   const buttons = controls.results.querySelectorAll("button");
   await buttons[0].trigger();
   assert.ok(buttons.every((button) => button.disabled));
+  assert.equal(buttons[0].textContent, "Filled");
 
   controls.checkCodes.trigger();
   await waitForAsyncCallbacks();
   assert.deepEqual(controls.results.querySelectorAll("button"), buttons);
   assert.ok(buttons.every((button) => !button.disabled));
+  assert.ok(buttons.every((button) => button.textContent === "Fill code"));
   await buttons[1].trigger();
   assert.equal(state.scriptArgs.args[0].code, second.code);
 });
@@ -146,6 +148,28 @@ test("finds links only on request and opens only the selected link", async () =>
   await button.trigger();
   assert.deepEqual(state.opened, [{ url: emailLinkMessage.url }]);
   assert.equal(timers.length, 0);
+});
+
+test("checking again restores unchanged link action labels", async () => {
+  for (const [checkControl, fetchResults, actionLabel] of [
+    ["checkConfirmationLinks", "fetchConfirmationLinks", "Open confirmation link ↗"],
+    ["checkPasswordResetLinks", "fetchPasswordResetLinks", "Open reset link ↗"],
+  ]) {
+    const { controls, state } = await createPopupHarness();
+    state[fetchResults] = async () => [emailLinkMessage];
+    controls[checkControl].trigger();
+    await waitForAsyncCallbacks();
+    const button = controls.results.querySelectorAll("button")[0];
+    await button.trigger();
+    assert.equal(button.textContent, "Opened");
+    assert.equal(button.disabled, true);
+
+    controls[checkControl].trigger();
+    await waitForAsyncCallbacks();
+    assert.equal(controls.results.querySelectorAll("button")[0], button);
+    assert.equal(button.textContent, actionLabel);
+    assert.equal(button.disabled, false);
+  }
 });
 
 test("rejects codes with future or invalid arrival times before filling", async () => {

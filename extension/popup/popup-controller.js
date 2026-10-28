@@ -202,9 +202,9 @@ export function createPopupController({
     resetMailCheckSession();
     if (mailType !== nextMailType) view.clearResults();
     mailType = nextMailType;
-    // Unchanged results retain their buttons, including the disabled state
-    // left by a successful fill. A manual check starts a new selection.
+    // Retain unchanged cards, but restore their actions for a new selection.
     selectionCompleted = false;
+    view.resetResultLabels(mailType);
     setUserActionInProgress(false);
     view.setMailType(mailType);
     startPolling();
