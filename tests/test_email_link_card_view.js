@@ -76,15 +76,33 @@ test("both link types block rejected selections for primary and middle clicks", 
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     let approved = false;
     const { action } = setup(mailType, { acceptLinkSelection: () => approved });
-    for (const eventName of ["click", "auxclick"]) {
+    for (const [eventName, button] of [["click", 0], ["auxclick", 1]]) {
       let prevented = false;
-      action.listeners[eventName]({ preventDefault() { prevented = true; } });
+      action.listeners[eventName]({ button, preventDefault() { prevented = true; } });
       assert.equal(prevented, true);
       approved = true;
       prevented = false;
-      action.listeners[eventName]({ preventDefault() { prevented = true; } });
+      action.listeners[eventName]({ button, preventDefault() { prevented = true; } });
       assert.equal(prevented, false);
       approved = false;
+    }
+  }
+});
+
+test("non-activating auxiliary clicks do not select links or prevent their default action", () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    let selections = 0;
+    const { action } = setup(mailType, {
+      acceptLinkSelection() {
+        selections++;
+        return false;
+      },
+    });
+    for (const button of [2, 3, 4]) {
+      let prevented = false;
+      action.listeners.auxclick({ button, preventDefault() { prevented = true; } });
+      assert.equal(selections, 0);
+      assert.equal(prevented, false);
     }
   }
 });

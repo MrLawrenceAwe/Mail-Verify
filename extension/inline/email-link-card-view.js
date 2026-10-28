@@ -120,6 +120,7 @@ export function createEmailLinkCardView(
         actionElement.rel = "noopener noreferrer";
         for (const eventName of ["click", "auxclick"]) {
           actionElement.addEventListener(eventName, (event) => {
+            if (eventName === "auxclick" && event.button !== 1) return;
             if (!acceptLinkSelection(item)) event.preventDefault();
           });
         }
