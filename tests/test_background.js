@@ -2,14 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { registerInlineRequests } from "../extension/background.js";
 import { createTimerQueue } from "./support/timer_queue.js";
+import { createMockNativeRuntime } from "./support/mock_native_runtime.js";
 
 function setup(nativeResponse = { ok: true, codes: [], scanPending: false }) {
-  let listener,
-    onMessage,
-    connectionsOpened = 0,
-    closed = 0;
+  let listener;
   const timers = createTimerQueue();
-  const nativeRequests = [];
+  const nativeRuntime = createMockNativeRuntime((request, port) => {
+    queueMicrotask(() => {
+      port.reply(
+        typeof nativeResponse === "function" ? nativeResponse(request) : nativeResponse,
+      );
+    });
+  });
   const chrome = {
     runtime: {
       id: "extension",
@@ -18,24 +22,7 @@ function setup(nativeResponse = { ok: true, codes: [], scanPending: false }) {
           listener = fn;
         },
       },
-      connectNative() {
-        connectionsOpened++;
-        return {
-          onMessage: {
-            addListener(fn) {
-              onMessage = fn;
-            },
-          },
-          onDisconnect: { addListener() {} },
-          postMessage(request) {
-            nativeRequests.push(request);
-            queueMicrotask(() => onMessage(nativeResponse));
-          },
-          disconnect() {
-            closed++;
-          },
-        };
-      },
+      connectNative: nativeRuntime.connectNative,
     },
     tabs: { query: async () => [{ id: 1 }] },
   };
@@ -63,15 +50,15 @@ function setup(nativeResponse = { ok: true, codes: [], scanPending: false }) {
     });
   return {
     request,
-    nativeRequests,
+    nativeRequests: nativeRuntime.requests,
     expire() {
       return timers.runNextWithDelay(15_000);
     },
     get connectionsOpened() {
-      return connectionsOpened;
+      return nativeRuntime.ports.length;
     },
     get closed() {
-      return closed;
+      return nativeRuntime.ports.filter((port) => port.closed).length;
     },
   };
 }
@@ -172,4 +159,39 @@ test("password reset requests return reset links and enforce active tab access",
     (await fixture.request({ tab: { id: 2 } }, "passwordResetLinks")).ok,
     false,
   );
+});
+
+test("concurrent mail types keep native responses and session lifetimes separate", async () => {
+  const results = {
+    codes: [{ code: "123456", receivedAt: 1000 }],
+    confirmationLinks: [{ url: "https://example.com/confirm", receivedAt: 2000 }],
+    passwordResetLinks: [{ url: "https://example.com/reset", receivedAt: 3000 }],
+  };
+  const fixture = setup(({ action }) => ({
+    ok: true,
+    [action]: results[action],
+    scanPending: false,
+  }));
+  const mailTypes = Object.keys(results);
+  const responses = await Promise.all(
+    mailTypes.map((type) => fixture.request({}, type)),
+  );
+  for (const [index, type] of mailTypes.entries()) {
+    assert.deepEqual(responses[index], {
+      ok: true,
+      [type]: results[type],
+      warnings: [],
+      scanPending: false,
+    });
+  }
+  assert.equal(fixture.connectionsOpened, 3);
+  assert.deepEqual(fixture.nativeRequests.map(({ action }) => action), mailTypes);
+  await fixture.expire();
+  assert.equal(fixture.closed, 1);
+  const reset = await fixture.request({}, "passwordResetLinks");
+  assert.deepEqual(reset.passwordResetLinks, results.passwordResetLinks);
+  assert.equal(fixture.connectionsOpened, 3, "closing codes preserves the reset session");
+  const codes = await fixture.request();
+  assert.deepEqual(codes.codes, results.codes);
+  assert.equal(fixture.connectionsOpened, 4, "codes reconnect independently");
 });

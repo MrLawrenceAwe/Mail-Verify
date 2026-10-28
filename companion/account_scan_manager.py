@@ -35,6 +35,7 @@ class AccountScanManager:
         self.sessions = {}
         self.pending_scans = {}
         self.cached_results_by_account = {}
+        self.warnings_by_account = {}
         self.executor = None
         self.mail_type = "codes"
 
@@ -50,6 +51,7 @@ class AccountScanManager:
         session = self.sessions.pop(key, None)
         future = self.pending_scans.pop(key, None)
         self.cached_results_by_account.pop(key, None)
+        self.warnings_by_account.pop(key, None)
         if session:
             if future and not future.done() and not future.cancel():
                 # The worker owns its connection until the scan finishes.
@@ -85,7 +87,6 @@ class AccountScanManager:
                 self.pending_scans[key] = self.executor.submit(scan_with_deadline, session)
         if self.pending_scans:
             wait(self.pending_scans.values(), timeout=SCAN_RESPONSE_WAIT_SECONDS)
-        warnings = []
         for account in account_credentials:
             email = account["email"]
             key = email.lower()
@@ -95,9 +96,16 @@ class AccountScanManager:
             self.pending_scans.pop(key)
             try:
                 self.cached_results_by_account[key] = [dict(item, accountEmail=email) for item in future.result()]
+                self.warnings_by_account.pop(key, None)
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
-                self.discard_account_state(key)
-                warnings.append(f"{email}: {inbox_error_message(exc)}")
+                # Keep the closed session's credentials so removal or credential
+                # changes still invalidate this failure before the next scan.
+                self.sessions[key].close()
+                self.cached_results_by_account.pop(key, None)
+                self.warnings_by_account[key] = f"{email}: {inbox_error_message(exc)}"
+        warnings = [self.warnings_by_account[account["email"].lower()]
+                    for account in account_credentials
+                    if account["email"].lower() in self.warnings_by_account]
         if warnings and not self.cached_results_by_account and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
         items = [item for results in self.cached_results_by_account.values() for item in results]

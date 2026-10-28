@@ -5,6 +5,7 @@ import {
   CompanionUnavailableError,
 } from "../extension/shared/companion-client.js";
 import { createTimerQueue } from "./support/timer_queue.js";
+import { createMockNativeRuntime } from "./support/mock_native_runtime.js";
 
 const code = { code: "123456" };
 
@@ -19,28 +20,10 @@ test("distinguishes unavailable native hosts from operational status errors", as
     CompanionUnavailableError,
   );
 
-  let reply, disconnect;
-  const client = createCompanionClient(
-    {
-      connectNative: () => ({
-        onMessage: {
-          addListener(listener) {
-            reply = listener;
-          },
-        },
-        onDisconnect: {
-          addListener(listener) {
-            disconnect = listener;
-          },
-        },
-        postMessage() {},
-        disconnect() {},
-      }),
-    },
-    createTimerQueue(),
-  );
+  const runtime = createMockNativeRuntime();
+  const client = createCompanionClient(runtime, createTimerQueue());
   const denied = client.sendSessionRequest("status");
-  reply({
+  runtime.ports[0].reply({
     ok: false,
     error: "Keychain access was denied. Unlock your login Keychain.",
   });
@@ -52,42 +35,19 @@ test("distinguishes unavailable native hosts from operational status errors", as
   );
 
   const missingHost = client.sendSessionRequest("status");
-  disconnect();
+  runtime.ports[0].disconnect();
   await assert.rejects(missingHost, CompanionUnavailableError);
 });
 
 test("reuses the host and ignores replies from closed ports", async () => {
-  const ports = [];
-  const client = createCompanionClient({
-    connectNative: () => {
-      const port = {
-        messages: [],
-        onMessage: {
-          addListener(listener) {
-            port.message = listener;
-          },
-        },
-        onDisconnect: {
-          addListener(listener) {
-            port.disconnected = listener;
-          },
-        },
-        postMessage(message) {
-          port.messages.push(message);
-        },
-        disconnect() {
-          port.disconnected();
-        },
-      };
-      ports.push(port);
-      return port;
-    },
-  });
+  const runtime = createMockNativeRuntime();
+  const { ports } = runtime;
+  const client = createCompanionClient(runtime, createTimerQueue());
   const status = client.sendSessionRequest("status");
-  ports[0].message({ ok: true, accountEmails: ["test@yahoo.com"] });
+  ports[0].reply({ ok: true, accountEmails: ["test@yahoo.com"] });
   assert.deepEqual((await status).accountEmails, ["test@yahoo.com"]);
   const first = client.sendSessionRequest("codes");
-  ports[0].message({ ok: true, codes: [code] });
+  ports[0].reply({ ok: true, codes: [code] });
   assert.equal((await first).codes[0].code, code.code);
   assert.equal(ports.length, 1, "startup and checks reuse one native host");
   const interrupted = client.sendSessionRequest("codes");
@@ -95,8 +55,8 @@ test("reuses the host and ignores replies from closed ports", async () => {
   await assert.rejects(interrupted, /interrupted/);
   const retry = client.sendSessionRequest("codes");
   assert.equal(ports.length, 2);
-  ports[0].message({ ok: true, codes: [code] });
-  ports[1].message({ ok: true, codes: [] });
+  ports[0].deliverLateReply({ ok: true, codes: [code] });
+  ports[1].reply({ ok: true, codes: [] });
   assert.equal(
     (await retry).codes.length,
     0,
@@ -105,51 +65,29 @@ test("reuses the host and ignores replies from closed ports", async () => {
 });
 
 test("rejects overlapping session requests without losing the first response", async () => {
-  let reply;
-  const client = createCompanionClient({
-    connectNative: () => ({
-      onMessage: {
-        addListener(listener) {
-          reply = listener;
-        },
-      },
-      onDisconnect: { addListener() {} },
-      postMessage() {},
-      disconnect() {},
-    }),
-  });
+  const runtime = createMockNativeRuntime();
+  const client = createCompanionClient(runtime, createTimerQueue());
   const first = client.sendSessionRequest("codes");
   assert.throws(
     () => client.sendSessionRequest("status"),
     /already in progress/,
   );
-  reply({ ok: true, codes: [code] });
+  runtime.ports.at(-1).reply({ ok: true, codes: [code] });
   assert.equal((await first).codes[0].code, code.code);
 });
 
 test("uses the same response errors for one-off and session requests", async () => {
-  let reply;
-  const client = createCompanionClient({
-    connectNative: () => ({
-      onMessage: {
-        addListener(listener) {
-          reply = listener;
-        },
-      },
-      onDisconnect: { addListener() {} },
-      postMessage() {},
-      disconnect() {},
-    }),
-  });
+  const runtime = createMockNativeRuntime();
+  const client = createCompanionClient(runtime, createTimerQueue());
   const oneOff = client.sendOneOffRequest({ action: "saveAccount" });
-  reply({ ok: false, error: "Denied" });
+  runtime.ports.at(-1).reply({ ok: false, error: "Denied" });
   await assert.rejects(oneOff, /Denied/);
   const request = client.sendSessionRequest("codes");
-  reply({ ok: false, error: "Denied" });
+  runtime.ports.at(-1).reply({ ok: false, error: "Denied" });
   await assert.rejects(request, /Denied/);
 
   const unclassified = client.sendSessionRequest("codes");
-  reply({ ok: false, error: "Unsupported request." });
+  runtime.ports.at(-1).reply({ ok: false, error: "Unsupported request." });
   await assert.rejects(unclassified, { message: "Unsupported request." });
 
   for (const request of [
@@ -157,7 +95,7 @@ test("uses the same response errors for one-off and session requests", async () 
     () => client.sendOneOffRequest({ action: "saveAccount" }),
   ]) {
     const unsupported = request();
-    reply({
+    runtime.ports.at(-1).reply({
       ok: false,
       errorCode: "unsupportedRequest",
       error: "This action is unavailable.",
@@ -171,42 +109,16 @@ test("uses the same response errors for one-off and session requests", async () 
 
 test("silent hosts time out, disconnect, and allow a fresh request", async () => {
   const timers = createTimerQueue();
-  const ports = [];
-  const client = createCompanionClient(
-    {
-      connectNative() {
-        const port = {
-          onMessage: {
-            addListener(fn) {
-              port.reply = fn;
-            },
-          },
-          onDisconnect: {
-            addListener(fn) {
-              port.disconnected = fn;
-            },
-          },
-          postMessage(request) {
-            port.request = request;
-          },
-          disconnect() {
-            port.closed = true;
-            port.disconnected();
-          },
-        };
-        ports.push(port);
-        return port;
-      },
-    },
-    timers,
-  );
+  const runtime = createMockNativeRuntime();
+  const { ports } = runtime;
+  const client = createCompanionClient(runtime, timers);
   const stalled = client.sendSessionRequest("status");
   const rejected = assert.rejects(stalled, /too long/);
   await timers.runNextWithDelay(35_000);
   await rejected;
   assert.equal(ports[0].closed, true);
   const retry = client.sendSessionRequest("codes");
-  ports[0].reply({ ok: true, codes: [code] });
+  ports[0].deliverLateReply({ ok: true, codes: [code] });
   ports[1].reply({ ok: true, codes: [] });
   assert.deepEqual((await retry).codes, []);
   assert.equal(timers.length, 0);
@@ -216,7 +128,7 @@ test("silent hosts time out, disconnect, and allow a fresh request", async () =>
     email: "test@yahoo.com",
     password: "unused",
   });
-  assert.equal(ports[2].request.email, "test@yahoo.com");
+  assert.equal(ports[2].messages[0].email, "test@yahoo.com");
   const saveRejected = assert.rejects(save, /too long/);
   await timers.runNextWithDelay(60_000);
   await saveRejected;

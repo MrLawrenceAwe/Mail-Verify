@@ -6,6 +6,7 @@ import time
 import threading
 import imaplib
 import unittest
+from concurrent.futures import Future
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
@@ -14,6 +15,65 @@ from support.account_scans import create_scan_manager
 
 
 class AccountScanManagerTests(unittest.TestCase):
+    def test_failures_survive_collection_and_pending_retries_until_recovery(self):
+        manager = create_scan_manager(self)
+        accounts = [{"email": "failed@yahoo.com", "password": "unused"},
+                    {"email": "slow@yahoo.com", "password": "unused"}]
+        failed, slow, retry, healthy = (Future() for _ in range(4))
+        failed.set_exception(OSError("Offline"))
+        healthy.set_result([])
+        manager.executor = Mock()
+        manager.executor.submit.side_effect = [failed, slow, retry, healthy]
+
+        first = manager.poll_accounts(accounts)
+        self.assertTrue(first["scanPending"])
+        self.assertEqual(len(first["warnings"]), 1)
+        self.assertIn("failed@yahoo.com", first["warnings"][0])
+        collected = manager.poll_accounts(accounts, collect_only=True)
+        self.assertEqual(collected["warnings"], first["warnings"])
+        self.assertTrue(collected["scanPending"])
+        self.assertEqual(manager.executor.submit.call_count, 2)
+
+        slow.set_result([])
+        completed = manager.poll_accounts(accounts, collect_only=True)
+        self.assertFalse(completed["scanPending"])
+        self.assertEqual(completed["warnings"], first["warnings"])
+        retrying = manager.poll_accounts(accounts)
+        self.assertTrue(retrying["scanPending"])
+        self.assertEqual(retrying["warnings"], first["warnings"])
+
+        retry.set_result([])
+        recovered = manager.poll_accounts(accounts, collect_only=True)
+        self.assertEqual(recovered["warnings"], [])
+        self.assertFalse(recovered["scanPending"])
+
+    def test_account_state_changes_clear_retained_failures(self):
+        for change in ("credentials", "removal", "mail_type", "close"):
+            with self.subTest(change=change):
+                manager = create_scan_manager(self)
+                account = {"email": "failed@yahoo.com", "password": "old"}
+                failed = Future()
+                failed.set_exception(OSError("Offline"))
+                manager.executor = Mock()
+                manager.executor.submit.return_value = failed
+                with self.assertRaises(account_scan_manager.UserError):
+                    manager.poll_accounts([account])
+                with self.assertRaises(account_scan_manager.UserError):
+                    manager.poll_accounts([account], collect_only=True)
+                self.assertEqual(manager.executor.submit.call_count, 1)
+
+                if change == "credentials":
+                    response = manager.poll_accounts([{**account, "password": "new"}], collect_only=True)
+                elif change == "removal":
+                    response = manager.poll_accounts([], collect_only=True)
+                elif change == "mail_type":
+                    response = manager.poll_accounts([account], "confirmationLinks", collect_only=True)
+                else:
+                    manager.close()
+                self.assertEqual(manager.warnings_by_account, {})
+                if change != "close":
+                    self.assertEqual(response["warnings"], [])
+
     def test_inbox_failures_give_recovery_guidance_for_the_affected_account(self):
         cases = (
             (imaplib.IMAP4.error(b"[AUTHENTICATIONFAILED] LOGIN failed"), "Add or update Yahoo account"),

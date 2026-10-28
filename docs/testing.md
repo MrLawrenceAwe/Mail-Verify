@@ -22,6 +22,8 @@ Test suites stay at `tests/`; shared harnesses, mocks, and message builders live
 
 JavaScript result builders live in `tests/support/mail_results.js`; code and link messages share metadata without inheriting each other’s result fields. `mock_inline_runtime.js` supplies the fake runtime and its connection ports. Browser fixtures live in `tests/fixtures/`.
 
+`tests/support/mock_native_runtime.js` supplies native ports for background and companion-client tests. Each port owns its listeners, requests, and disconnect state. Tests can reply through a specific port or explicitly deliver a callback queued before disconnection. Concurrent mail-type tests check that responses and session lifetimes remain separate.
+
 The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-detection suites cover pure matching and filtering; controller suites cover polling and page lifecycle.
 
 | Suite | Behaviour groups | Shared harness |
