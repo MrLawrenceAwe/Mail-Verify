@@ -61,6 +61,45 @@ test("a failed inbox check removes previously offered links", async () => {
   assert.equal(view.callbacks.acceptLinkSelection(emailLinkMessage), false);
 });
 
+test("finished link checks retain issues until a successful retry clears them", async () => {
+  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+    for (const outcome of ["error", "warning"]) {
+      const harness = createEmailLinkCardHarness(null, mailType);
+      await waitForAsyncCallbacks();
+      const view = harness.state.views[0];
+      const issue = outcome === "error"
+        ? "Connect Yahoo Mail first."
+        : "Some accounts could not be checked: other@yahoo.com: Connection failed.";
+      harness.state.respond = async () => outcome === "error"
+        ? { ok: false, error: issue }
+        : {
+            ok: true,
+            [mailType]: [emailLinkMessage],
+            warnings: ["other@yahoo.com: Connection failed."],
+            scanPending: false,
+          };
+      await harness.run(8000);
+      harness.state.now += 120000;
+      const requests = harness.state.requests;
+      await harness.run(8000);
+      assert.equal(harness.state.requests, requests);
+      assert.equal(view.status, `${issue} Checking finished. Click ↻ to check again.`);
+
+      harness.state.respond = async () => ({
+        ok: true,
+        [mailType]: [],
+        warnings: [],
+        scanPending: false,
+      });
+      view.callbacks.onRetry();
+      await waitForAsyncCallbacks();
+      harness.state.now += 120000;
+      await harness.run(8000);
+      assert.equal(view.status, "Checking finished. Click ↻ to check again.");
+    }
+  }
+});
+
 test("hides when tab is hidden and does not reset the polling deadline", async () => {
   const harness = createEmailLinkCardHarness();
   await waitForAsyncCallbacks();

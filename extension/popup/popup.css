@@ -112,7 +112,7 @@ button:hover {
 }
 button:disabled {
   opacity: 0.5;
-  cursor: wait;
+  cursor: default;
 }
 .button-secondary {
   background: transparent;

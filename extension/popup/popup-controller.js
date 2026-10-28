@@ -13,7 +13,7 @@ import { createPopupView } from "./popup-view.js";
 import { createPollingLifecycle } from "../shared/polling-lifecycle.js";
 import { CompanionUnavailableError } from "../shared/companion-client.js";
 
-const MIN_POLL_PAUSE_MS = 2_000;
+const MIN_COMPLETED_SCAN_PAUSE_MS = 2_000;
 
 export function createPopupController({
   document,
@@ -190,7 +190,7 @@ export function createPopupController({
             : scanSchedule.pending
               ? scanSchedule.pollDelayMs
               : Math.max(
-                  MIN_POLL_PAUSE_MS,
+                  MIN_COMPLETED_SCAN_PAUSE_MS,
                   DEFAULT_SCAN_INTERVAL_MS - (clock.now() - startedAt),
                 ),
         );

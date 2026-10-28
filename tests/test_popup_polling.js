@@ -164,7 +164,7 @@ test("lets a manual retry supersede a pending check", async () => {
   assert.equal(controls.checkCodes.disabled, false);
 });
 
-test("waits at least two seconds between checks", async () => {
+test("waits at least two seconds after successful checks without pending scans", async () => {
   for (const [duration, expected] of [
     [3000, 5000],
     [10000, 2000],

@@ -19,9 +19,6 @@ export function createTimerQueue() {
     clearTimeout(id) {
       pending.delete(id);
     },
-    takeNewest() {
-      return take([...pending.keys()].at(-1));
-    },
     takeOldest() {
       return take(pending.keys().next().value);
     },

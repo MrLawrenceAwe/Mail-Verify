@@ -51,6 +51,7 @@ export function startEmailLinkCard({
     minReceivedAtMs;
   let activeStep = null;
   let currentLinks = [];
+  let checkIssueMessage = "";
   function isCurrentStep() {
     const step = detectStep(document);
     return (
@@ -76,7 +77,9 @@ export function startEmailLinkCard({
       return;
     }
     if (polling.hasExpired()) {
-      view.setStatus("Checking finished. Click ↻ to check again.");
+      view.setStatus(
+        `${checkIssueMessage ? `${checkIssueMessage} ` : ""}Checking finished. Click ↻ to check again.`,
+      );
       return;
     }
     const { mailType } = activeStep;
@@ -104,15 +107,19 @@ export function startEmailLinkCard({
         clock.now(),
       );
       view.renderLinks(currentLinks);
+      checkIssueMessage = response.warnings?.length
+        ? formatAccountCheckWarnings(response.warnings)
+        : "";
       view.setStatus(
-        response.warnings?.length
-          ? formatAccountCheckWarnings(response.warnings)
+        checkIssueMessage
+          ? checkIssueMessage
           : currentLinks.length
             ? MAIL_PRESENTATION[mailType].foundStatus
             : MAIL_PRESENTATION[mailType].waitingStatus,
       );
     } catch (error) {
       if (polling.isCurrent(requestGeneration) && view) {
+        checkIssueMessage = error.message;
         scanSchedule.clearPending();
         currentLinks = [];
         view.renderLinks(currentLinks);
@@ -166,6 +173,7 @@ export function startEmailLinkCard({
     }
     if (dismissed) return;
     if (!activeStep) {
+      checkIssueMessage = "";
       activeStep = nextStep;
       minReceivedAtMs ??= clock.now() - MAX_MESSAGE_AGE_MS;
       polling.renewDeadline();
@@ -240,6 +248,7 @@ export function startEmailLinkCard({
       )
         return;
       minReceivedAtMs = nextSecondCutoff(clock.now());
+      checkIssueMessage = "";
       dismissed = false;
       unmountCard();
       polling.renewDeadline();

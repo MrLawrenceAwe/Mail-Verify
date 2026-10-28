@@ -26,9 +26,9 @@ The suites use synthetic mail and fake Chrome/IMAP connections. Policy and step-
 
 | Suite | Behaviour groups | Shared harness |
 | --- | --- | --- |
-| `test_code_picker_*.js` controller suites | Steps, polling, positioning, selection | `support/code_picker_harness.js` |
+| `test_code_picker_steps.js`, `test_code_picker_polling.js`, `test_code_picker_positioning.js`, `test_code_picker_selection.js` | Steps, polling, positioning, selection | `support/code_picker_harness.js` |
 | `test_code_picker_position_calculation.js` | Pure positioning calculations and obstacle avoidance | — |
-| `test_email_link_card_*.js` controller suites | Steps, polling, mutations, selection | `support/email_link_card_harness.js` |
+| `test_email_link_card_steps.js`, `test_email_link_card_polling.js`, `test_email_link_card_mutations.js`, `test_email_link_card_selection.js` | Steps, polling, mutations, selection | `support/email_link_card_harness.js` |
 | `test_popup_*.js` | Polling, accounts, result selection with the real view | `support/popup_harness.js` |
 | `test_code_fields.js` | Detection and filling, including numeric split-digit length checks | `support/verification_field_harness.js` |
 
