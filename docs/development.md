@@ -44,7 +44,8 @@ When automatic popup checking ends, its completion message retains the latest un
 ## Companion modules
 
 `host.py` frames and dispatches native requests. `account_scan_manager.py` owns
-workers and result caches; `inbox_session.py` owns IMAP connections and discovery.
+one state record per account containing its session, pending scan, cached results,
+and warning; `inbox_session.py` owns IMAP connections and discovery.
 Code and link extractors share MIME/visible-HTML traversal in `email_content.py`.
 `keychain.py` handles credentials, `errors.py` defines user-facing errors, and
 `install.py` installs or removes runtime modules.
@@ -80,13 +81,23 @@ The code picker keeps the newest code per sender and account. Seen and excluded 
 
 - Codes are numeric, 4–8 digits, directly labelled by common English instructions such as “Your code is”, “Security code:”, or “Sign in to Indeed with code:”. Emails with multiple candidate codes are omitted.
 - Code fields must be ordinary inputs or common split-digit forms on HTTPS pages with verification-related labels or attributes. A generic “code” label needs nearby email/sign-in instructions. Coupon and promo fields are excluded; unlabelled fields and unusual widgets may not work. On-page suggestions and popup fills operate only in the top-level document; forms inside iframes are unsupported, including same-origin iframes.
-- Split-code filling follows box replacements only within the original group container and form owner. Removing that container or form stops the fill instead of redirecting later digits to another widget.
 - Link cards recognise common English waiting prompts in short visible panels, including “Use the verification link sent to your email address”. Newsletter screens are excluded.
-- Link-step identity tracks the panel, email purpose, and recipients in delivery instructions. Incidental status text and countdowns retain results and the polling deadline; panel replacement, recipient changes, purpose changes, navigation, and explicit resends start new attempts.
 - Confirmation links require instructions such as “Verify email”, “Confirm account”, “Activate account”, or “Sign up to KeenTools Cloud”; sign-up help, newsletter and mailing-list labels and password-reset subjects are excluded. Reset links require instructions such as “Reset your password”, “Change your password”, or “Password reset”; help/support links and negated reset instructions are excluded.
 - Both link types require a labelled HTML link that passes the HTML visibility filter or instructions immediately before a plain-text URL. Qualifying HTML takes precedence over plain text. Only supported HTTPS URLs are accepted; attachment content and emails with multiple distinct qualifying links are omitted.
 - The shared HTML visibility filter skips scripts, styles, templates, and elements marked with `hidden`, `aria-hidden="true"`, or inline `display: none` / `visibility: hidden`, together with their descendants. It does not evaluate stylesheets or other hiding techniques, so CSS-class-hidden codes and links can still qualify. Plain-text alternatives are evaluated independently.
 - Extraction runs locally without AI or visiting links. It does not authenticate senders or match results to the current website. Link details show the link domain; redirects and subsequent steps are handled by the website. Unusual wording, other languages, alphanumeric codes, and older emails may not appear.
+
+### Verification step identity
+
+Link-step identity tracks the panel, email purpose, and recipients in delivery instructions. Incidental status text and countdowns retain results and the polling deadline; panel replacement, recipient changes, purpose changes, navigation, and explicit resends start new attempts.
+
+Supported split-digit groups use a stable labelled anchor so moving focus between digits preserves suggestions; selecting a separate group starts a new attempt. Filling rediscovers fields rather than trusting cached hints.
+
+Code-step tracking identifies email recipients (including masked addresses) in nearby code-delivery instructions. Recipient changes, field changes, navigation, and explicit resend clicks start new attempts. Incidental status messages, resend countdown ticks and completion, including parenthesised countdowns, retain valid codes. An incomplete context retains the last known recipient identity.
+
+An identical detached input replaced inside the same unchanged context retains unused codes and their original freshness cutoff; fills validate the replacement input. Split-code filling follows box replacements only within the original group container and form owner. Removing that container or form stops the fill instead of redirecting later digits to another widget.
+
+Controls explicitly requesting only SMS, text messages, or phone delivery do not restart email checking. Resend controls belong to their owning form or task panel, so another form cannot invalidate active email results. Standalone resend controls beside a panel remain supported.
 
 ## Page detection and performance
 
@@ -94,17 +105,11 @@ Scroll and resize reuse cached field and page-control candidates and position th
 
 Relevant DOM mutations refresh discovery. Field detection supplies context roots for both generic code matching and step tracking. Code inputs can use HTML labels, `aria-label`, or an accessible name assembled from `aria-labelledby` references; changes to referenced labels refresh detection.
 
-Supported split-digit groups use a stable labelled anchor so moving focus between digits preserves suggestions; selecting a separate group starts a new attempt. Filling rediscovers fields rather than trusting cached hints.
-
 Hidden documents skip mutation dispatch and invalidate candidates for rediscovery when visible. Hiding stops new on-page mail requests; existing companion workers can finish.
 
 Native modal dialogs take precedence over background forms. Their inputs use a separate discovery scope, and both suggestion types mount inside the modal rather than in the inert background. The active dialog is selected from focus or its viewport backdrop, rather than DOM order, including when multiple dialogs are open. Modal suggestions use manual popovers to keep viewport positioning and escape dialog transforms or clipping. Dialog opening and closing refresh detection.
 
-Code-step tracking identifies email recipients (including masked addresses) in nearby code-delivery instructions. Recipient changes, field changes, navigation, and explicit resend clicks start new attempts. Incidental status messages, resend countdown ticks and completion, including parenthesised countdowns, retain valid codes. An incomplete context retains the last known recipient identity.
-
-An identical detached input replaced inside the same unchanged context retains unused codes and their original freshness cutoff; fills validate the replacement input.
-
-Controls explicitly requesting only SMS, text messages, or phone delivery do not restart email checking. Resend controls belong to their owning form or task panel, so another form cannot invalidate active email results. Standalone resend controls beside a panel remain supported.
+See [detection and freshness rules](#detection-and-freshness-rules) for step identity, recipient changes, resend scope, and field replacement behaviour.
 
 | Inspection | Node budget | Text budget | Exhaustion behaviour |
 | --- | --- | --- | --- |

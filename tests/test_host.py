@@ -41,7 +41,7 @@ class HostTests(unittest.TestCase):
             result = host.handle_request({"action": "passwordResetLinks"}, scan_manager)
         self.assertEqual(result, {"passwordResetLinks": [{**item, "accountEmail": credentials["email"]}], "warnings": [], "scanPending": False})
         from link_extraction import extract_password_reset_link_details
-        self.assertIs(scan_manager.sessions[credentials["email"]].extract_item, extract_password_reset_link_details)
+        self.assertIs(scan_manager.accounts[credentials["email"]].session.extract_item, extract_password_reset_link_details)
 
     def test_non_string_actions_are_rejected_as_unsupported(self):
         for action in (None, [], {}):
@@ -83,7 +83,7 @@ class HostTests(unittest.TestCase):
         credentials = {"email": "test@yahoo.com", "password": "test-password"}
         session = account_scan_manager.InboxSession(credentials)
         scan_manager = create_scan_manager(self)
-        scan_manager.sessions["test@yahoo.com"] = session
+        scan_manager.accounts["test@yahoo.com"] = account_scan_manager.AccountScanState(session)
         with patch.object(host, "access_saved_credentials", return_value=None), patch.object(session, "close") as close:
             with self.assertRaisesRegex(host.UserError, "Connect Yahoo Mail first"):
                 host.handle_request({"action": "codes"}, scan_manager)
@@ -93,7 +93,7 @@ class HostTests(unittest.TestCase):
         credentials = {"email": "test@yahoo.com", "password": "test-password"}
         session = account_scan_manager.InboxSession(credentials)
         scan_manager = create_scan_manager(self)
-        scan_manager.sessions["test@yahoo.com"] = session
+        scan_manager.accounts["test@yahoo.com"] = account_scan_manager.AccountScanState(session)
         with patch.object(host, "access_saved_credentials", return_value={"accounts": [dict(credentials)]}), patch.object(session, "close") as close, patch.object(account_scan_manager, "scan_with_deadline", return_value=[]) as check:
             self.assertEqual(host.handle_request({"action": "codes"}, scan_manager), {"codes": [], "warnings": [], "scanPending": False})
             close.assert_not_called()

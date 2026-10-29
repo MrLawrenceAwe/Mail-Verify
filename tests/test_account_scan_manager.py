@@ -70,7 +70,7 @@ class AccountScanManagerTests(unittest.TestCase):
                     response = manager.poll_accounts([account], "confirmationLinks", collect_only=True)
                 else:
                     manager.close()
-                self.assertEqual(manager.warnings_by_account, {})
+                self.assertTrue(all(state.warning is None for state in manager.accounts.values()))
                 if change != "close":
                     self.assertEqual(response["warnings"], [])
 
@@ -117,7 +117,7 @@ class AccountScanManagerTests(unittest.TestCase):
                 self.assertEqual(response["codes"], [])
                 self.assertTrue(response["scanPending"])
                 release.set()
-                scan_manager.pending_scans[accounts[0]["email"]].result(timeout=2)
+                scan_manager.accounts[accounts[0]["email"]].pending_scan.result(timeout=2)
                 response = scan_manager.poll_accounts(accounts, collect_only=True)
                 self.assertFalse(response["scanPending"])
                 self.assertEqual(len(response["codes"]), 1)
@@ -145,7 +145,7 @@ class AccountScanManagerTests(unittest.TestCase):
                 self.assertTrue(second["scanPending"])
                 self.assertEqual(calls.count("healthy@yahoo.com"), 1)
                 release.set()
-                scan_manager.pending_scans["slow@yahoo.com"].result(timeout=2)
+                scan_manager.accounts["slow@yahoo.com"].pending_scan.result(timeout=2)
                 final = scan_manager.poll_accounts(accounts, collect_only=True)
                 self.assertFalse(final["scanPending"])
                 self.assertEqual(len(final["codes"]), 2)
@@ -184,24 +184,24 @@ class AccountScanManagerTests(unittest.TestCase):
         scan_manager = create_scan_manager(self)
         with patch.object(account_scan_manager, "scan_with_deadline", return_value=[]):
             scan_manager.poll_accounts(accounts)
-            old = scan_manager.sessions["one@yahoo.com"]
+            old = scan_manager.accounts["one@yahoo.com"].session
             with patch.object(old, "close") as close:
                 self.assertEqual(scan_manager.poll_accounts(accounts, "confirmationLinks"), {"confirmationLinks": [], "warnings": [], "scanPending": False})
                 close.assert_called_once()
             from link_extraction import extract_confirmation_link_details
-            self.assertIs(scan_manager.sessions["one@yahoo.com"].extract_item, extract_confirmation_link_details)
+            self.assertIs(scan_manager.accounts["one@yahoo.com"].session.extract_item, extract_confirmation_link_details)
 
     def test_reset_mail_type_discards_confirmation_scan_state(self):
         accounts = [{"email": "one@yahoo.com", "password": "unused"}]
         scan_manager = create_scan_manager(self)
         with patch.object(account_scan_manager, "scan_with_deadline", return_value=[]):
             scan_manager.poll_accounts(accounts, "confirmationLinks")
-            old = scan_manager.sessions["one@yahoo.com"]
+            old = scan_manager.accounts["one@yahoo.com"].session
             with patch.object(old, "close") as close:
                 self.assertEqual(scan_manager.poll_accounts(accounts, "passwordResetLinks"), {"passwordResetLinks": [], "warnings": [], "scanPending": False})
                 close.assert_called_once()
             from link_extraction import extract_password_reset_link_details
-            self.assertIs(scan_manager.sessions["one@yahoo.com"].extract_item, extract_password_reset_link_details)
+            self.assertIs(scan_manager.accounts["one@yahoo.com"].session.extract_item, extract_password_reset_link_details)
 
     def test_account_scan_times_out(self):
         with patch.object(account_scan_manager, "SCAN_TIMEOUT_SECONDS", 0.01), patch.object(
@@ -253,7 +253,7 @@ class AccountScanManagerTests(unittest.TestCase):
                 self.assertEqual(calls.count("slow@yahoo.com"), 1)
                 self.assertEqual(len(second["codes"]), 1)
                 release.set()
-                scan_manager.pending_scans["slow@yahoo.com"].result(timeout=2)
+                scan_manager.accounts["slow@yahoo.com"].pending_scan.result(timeout=2)
                 final = scan_manager.poll_accounts(accounts)
                 self.assertEqual({x["accountEmail"] for x in final["codes"]},
                                  {"slow@yahoo.com", "healthy@yahoo.com"})
@@ -268,16 +268,15 @@ class AccountScanManagerTests(unittest.TestCase):
         with patch.object(account_scan_manager, "scan_with_deadline", side_effect=lambda _: release.wait(2)):
             try:
                 scan_manager.poll_accounts([account])
-                session = scan_manager.sessions[account["email"]]
-                future = scan_manager.pending_scans[account["email"]]
+                session = scan_manager.accounts[account["email"]].session
+                future = scan_manager.accounts[account["email"]].pending_scan
                 closed = threading.Event()
                 with patch.object(session, "close", side_effect=closed.set):
                     scan_manager.discard_account_state(account["email"])
                     self.assertFalse(closed.is_set())
                     release.set()
                     self.assertTrue(closed.wait(2))
-                self.assertNotIn(account["email"], scan_manager.sessions)
-                self.assertFalse(scan_manager.cached_results_by_account)
+                self.assertFalse(scan_manager.accounts)
                 self.assertTrue(future.done())
             finally:
                 release.set()
@@ -301,15 +300,15 @@ class AccountScanManagerTests(unittest.TestCase):
                 with started:
                     self.assertTrue(started.wait_for(lambda: len(calls) == 4, timeout=2))
                 old_executor = scan_manager.executor
-                old_sessions = set(scan_manager.sessions.values())
+                old_sessions = {state.session for state in scan_manager.accounts.values()}
                 self.assertEqual(scan_manager.poll_accounts(accounts[:1], "confirmationLinks")["confirmationLinks"], [])
                 self.assertIs(scan_manager.executor, old_executor)
                 self.assertEqual(len(calls), 4)
                 release.set()
-                scan_manager.pending_scans[accounts[0]["email"]].result(timeout=2)
+                scan_manager.accounts[accounts[0]["email"]].pending_scan.result(timeout=2)
                 result = scan_manager.poll_accounts(accounts[:1], "confirmationLinks")
                 self.assertEqual(len(result["confirmationLinks"]), 1)
-                self.assertFalse(old_sessions.intersection(scan_manager.sessions.values()))
+                self.assertFalse(old_sessions.intersection(state.session for state in scan_manager.accounts.values()))
             finally:
                 release.set()
                 scan_manager.close()

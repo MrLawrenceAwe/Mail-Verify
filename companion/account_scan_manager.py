@@ -2,7 +2,9 @@
 
 import imaplib
 import time
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass, field
+from typing import Optional
 
 from errors import UserError, inbox_error_message
 from inbox_session import InboxSession, MAX_MESSAGE_AGE_SECONDS
@@ -30,84 +32,89 @@ def scan_with_deadline(session):
             session.connection.deadline = None
 
 
+@dataclass
+class AccountScanState:
+    session: InboxSession
+    pending_scan: Optional[Future] = None
+    cached_results: list = field(default_factory=list)
+    warning: Optional[str] = None
+
+
 class AccountScanManager:
     def __init__(self):
-        self.sessions = {}
-        self.pending_scans = {}
-        self.cached_results_by_account = {}
-        self.warnings_by_account = {}
+        self.accounts = {}
         self.executor = None
         self.mail_type = "codes"
 
     def close(self):
-        for email in list(self.sessions):
+        for email in list(self.accounts):
             self.discard_account_state(email)
         if self.executor:
             self.executor.shutdown(wait=False, cancel_futures=True)
             self.executor = None
 
     def discard_account_state(self, email):
-        key = email.lower()
-        session = self.sessions.pop(key, None)
-        future = self.pending_scans.pop(key, None)
-        self.cached_results_by_account.pop(key, None)
-        self.warnings_by_account.pop(key, None)
-        if session:
+        state = self.accounts.pop(email.lower(), None)
+        if state:
+            future = state.pending_scan
             if future and not future.done() and not future.cancel():
                 # The worker owns its connection until the scan finishes.
-                future.add_done_callback(lambda _future: session.close())
+                future.add_done_callback(lambda _future: state.session.close())
             else:
-                session.close()
+                state.session.close()
 
     def poll_accounts(self, account_credentials, mail_type="codes", collect_only=False):
         if mail_type != self.mail_type:
-            for email in list(self.sessions):
+            for email in list(self.accounts):
                 self.discard_account_state(email)
             self.mail_type = mail_type
         now = time.time()
-        self.cached_results_by_account = {key: [item for item in items
-            if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS]
-            for key, items in self.cached_results_by_account.items()}
+        for state in self.accounts.values():
+            state.cached_results = [item for item in state.cached_results
+                if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS]
         active = {account["email"].lower() for account in account_credentials}
-        for email in list(self.sessions):
+        for email in list(self.accounts):
             if email not in active:
                 self.discard_account_state(email)
         if not self.executor:
             self.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_SCANS_PER_HOST)
         for account in account_credentials:
             key = account["email"].lower()
-            session = self.sessions.get(key)
-            if session and session.credentials != account:
+            state = self.accounts.get(key)
+            if state and state.session.credentials != account:
                 self.discard_account_state(key)
-                session = None
-            if not session:
-                session = self.sessions[key] = InboxSession(account, mail_type)
+                state = None
+            if not state:
+                state = self.accounts[key] = AccountScanState(InboxSession(account, mail_type))
             # Keep a completed scan until its response has been collected.
-            if not collect_only and key not in self.pending_scans:
-                self.pending_scans[key] = self.executor.submit(scan_with_deadline, session)
-        if self.pending_scans:
-            wait(self.pending_scans.values(), timeout=SCAN_RESPONSE_WAIT_SECONDS)
+            if not collect_only and state.pending_scan is None:
+                state.pending_scan = self.executor.submit(scan_with_deadline, state.session)
+        pending = [state.pending_scan for state in self.accounts.values()
+                   if state.pending_scan is not None]
+        if pending:
+            wait(pending, timeout=SCAN_RESPONSE_WAIT_SECONDS)
         for account in account_credentials:
             email = account["email"]
-            key = email.lower()
-            future = self.pending_scans.get(key)
+            state = self.accounts[email.lower()]
+            future = state.pending_scan
             if future is None or not future.done():
                 continue
-            self.pending_scans.pop(key)
+            state.pending_scan = None
             try:
-                self.cached_results_by_account[key] = [dict(item, accountEmail=email) for item in future.result()]
-                self.warnings_by_account.pop(key, None)
+                state.cached_results = [dict(item, accountEmail=email) for item in future.result()]
+                state.warning = None
             except (UserError, imaplib.IMAP4.error, OSError) as exc:
                 # Keep the closed session's credentials so removal or credential
                 # changes still invalidate this failure before the next scan.
-                self.sessions[key].close()
-                self.cached_results_by_account.pop(key, None)
-                self.warnings_by_account[key] = f"{email}: {inbox_error_message(exc)}"
-        warnings = [self.warnings_by_account[account["email"].lower()]
+                state.session.close()
+                state.cached_results = []
+                state.warning = f"{email}: {inbox_error_message(exc)}"
+        warnings = [self.accounts[account["email"].lower()].warning
                     for account in account_credentials
-                    if account["email"].lower() in self.warnings_by_account]
-        if warnings and not self.cached_results_by_account and len(warnings) == len(account_credentials):
+                    if self.accounts[account["email"].lower()].warning is not None]
+        if warnings and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
-        items = [item for results in self.cached_results_by_account.values() for item in results]
+        items = [item for state in self.accounts.values() for item in state.cached_results]
         items.sort(key=lambda item: item["receivedAt"], reverse=True)
-        return {mail_type: items, "warnings": warnings, "scanPending": bool(self.pending_scans)}
+        return {mail_type: items, "warnings": warnings,
+                "scanPending": any(state.pending_scan is not None for state in self.accounts.values())}
