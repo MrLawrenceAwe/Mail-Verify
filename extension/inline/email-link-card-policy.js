@@ -8,12 +8,16 @@ import { isFreshMessage } from "../shared/mail-timing.js";
 
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
 
-export function selectEmailLinks(items, minReceivedAtMs, now) {
+export function isEligibleEmailLink(item, minReceivedAtMs, now) {
+  return (
+    isFreshMessage(item.receivedAt, now, minReceivedAtMs) &&
+    isSupportedEmailLinkUrl(item.url)
+  );
+}
+
+export function selectSuggestedEmailLinks(items, minReceivedAtMs, now) {
   return items
-    .filter((item) => {
-      if (!isFreshMessage(item.receivedAt, now, minReceivedAtMs)) return false;
-      return isSupportedEmailLinkUrl(item.url);
-    })
+    .filter((item) => isEligibleEmailLink(item, minReceivedAtMs, now))
     .sort((a, b) => b.receivedAt - a.receivedAt)
     .slice(0, 5);
 }

@@ -1,5 +1,6 @@
 import {
-  selectEmailLinks,
+  selectSuggestedEmailLinks,
+  isEligibleEmailLink,
   isEmailLinkRequestControl,
   mutationAffectsEmailLinkCard,
 } from "./email-link-card-policy.js";
@@ -101,7 +102,7 @@ export function startEmailLinkCard({
       if (!response?.ok)
         throw new Error(response?.error || "Could not check your inboxes.");
       scanSchedule.recordResponse(response.scanPending);
-      currentLinks = selectEmailLinks(
+      currentLinks = selectSuggestedEmailLinks(
         response[mailType] || [],
         minReceivedAtMs,
         clock.now(),
@@ -201,7 +202,7 @@ export function startEmailLinkCard({
               current.uid === item.uid &&
               current.url === item.url,
           ) ||
-          !selectEmailLinks([item], minReceivedAtMs, clock.now()).length
+          !isEligibleEmailLink(item, minReceivedAtMs, clock.now())
         ) {
           view?.setStatus(
             "This link is no longer current. Request a new email or check again.",

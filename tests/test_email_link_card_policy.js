@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   isEmailLinkRequestControl,
   mutationAffectsEmailLinkCard,
-  selectEmailLinks,
+  selectSuggestedEmailLinks,
 } from "../extension/inline/email-link-card-policy.js";
 
 const item = {
@@ -168,7 +168,7 @@ test("bounded mutation traversal preserves prompts split across nested elements"
 
 test("selects fresh HTTPS links and omits older or unsafe candidates", () => {
   assert.deepEqual(
-    selectEmailLinks(
+    selectSuggestedEmailLinks(
       [
         item,
         { ...item, receivedAt: 1 },

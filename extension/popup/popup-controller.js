@@ -174,7 +174,9 @@ export function createPopupController({
           checkIssue
             ? checkIssue.message
             : results.length
-              ? MAIL_PRESENTATION[mailType].foundStatus
+              ? mailType === "codes" && !targetTab
+                ? "Open an HTTPS page with a verification-code field, then reopen Mail Verify to fill a code."
+                : MAIL_PRESENTATION[mailType].foundStatus
               : scanSchedule.pending
                 ? "Checking your connected inboxes…"
                 : MAIL_PRESENTATION[mailType].popupEmptyStatus,

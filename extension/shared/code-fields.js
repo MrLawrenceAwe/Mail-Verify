@@ -358,8 +358,9 @@ export function detectOrFillCodeFields({
   ) {
     return {
       ok: false,
-      error:
-        "Select the verification-code field and try again. Embedded forms may not be supported.",
+      error: !targetInput
+        ? "Select a verification-code field and try again. Forms inside iframes are unsupported."
+        : "Could not match this code to the selected field or digit group. Check the code length and field selection.",
     };
   }
   const setter = Object.getOwnPropertyDescriptor(
