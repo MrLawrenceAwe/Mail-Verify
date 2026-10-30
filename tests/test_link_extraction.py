@@ -9,6 +9,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 from link_extraction import extract_confirmation_link_details, extract_password_reset_link_details, is_supported_email_link_url
 
 class ConfirmationLinkExtractionTests(unittest.TestCase):
+    def test_email_signin_actions_in_html_and_plain_text(self):
+        for label in ("Sign In to Outlier", "Sign in", "Sign-in", "Log in to Example", "Log in", "Sign in with Example"):
+            for subtype, body in (("html", f'<a href="https://example.com/signin?token=synthetic">{label}</a><a href="https://example.com/privacy">Privacy policy</a>'),
+                                  ("plain", f'{label}:\nhttps://example.com/signin?token=synthetic\nPrivacy policy: https://example.com/privacy')):
+                with self.subTest(label=label, subtype=subtype):
+                    raw = make_raw_email(body, subject="Your link to sign in to Outlier", subtype=subtype)
+                    self.assertEqual(extract_confirmation_link_details(raw)["url"], "https://example.com/signin?token=synthetic")
+                    self.assertIsNone(extract_password_reset_link_details(raw))
+
+    def test_signin_links_retain_purpose_visibility_url_and_ambiguity_rules(self):
+        for body in (
+            '<a href="https://example.com/help">Sign in to support</a>',
+            '<a href="https://example.com/help">How to sign in</a>',
+            '<a href="https://example.com/help">Sign in help</a>',
+            '<a href="https://example.com/news">Sign in to our newsletter</a>',
+            '<a href="https://example.com/reset">Sign in to reset your password</a>',
+            '<a hidden href="https://example.com/signin">Sign in</a>',
+            '<a href="http://example.com/signin">Sign in</a>',
+            '<a href="https://example.com/a">Sign in</a><a href="https://example.com/b">Log in</a>',
+        ):
+            with self.subTest(body=body):
+                self.assertIsNone(extract_confirmation_link_details(make_raw_email(body, subject="Your sign in link", subtype="html")))
+        self.assertIsNone(extract_confirmation_link_details(make_raw_email('<a href="https://example.com/reset">Sign in</a>', subject="Reset your password", subtype="html")))
+
     def test_workday_bare_url_in_html_only_email(self):
         body = ('<div>Click this link to confirm your email address and complete setup '
                 'for your candidate account<br>https://example.com/activate/synthetic?redirect=%2Fhome'

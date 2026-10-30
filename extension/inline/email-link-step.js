@@ -54,6 +54,9 @@ function matchesConfirmationWaitingPrompt(text) {
   const value = text.replace(/\s+/g, " ").trim();
   return (
     /\bcheck\s+(?:your\s+)?(?:e-?mail|inbox)\b/i.test(value) ||
+    /\b(?:click|follow|open)\s+the\s+link\s+(?:(?:that\s+was|we(?:'ve| have)?)\s+)?sent\s+to\s+(?:(?:your\s+)?(?:e-?mail(?:\s+address)?|inbox)\b|[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+\b)/i.test(
+      value,
+    ) ||
     /\be-?mail\s+has\s+been\s+sent\s+to\s+you[.!]?\s+(?:please\s+)?(?:verify|confirm|activate)\s+your\s+(?:account|e-?mail(?:\s+address)?)\b/i.test(
       value,
     ) ||

@@ -7,6 +7,37 @@ function detectedMailType(text) {
   return detectEmailLinkStep({ querySelectorAll: () => [panel] })?.mailType;
 }
 
+test("detects Outlier's delivered sign-in link automatically and tracks its recipient", () => {
+  const panel = {
+    innerText: "Welcome to Outlier\nCompetitive pay, delivered weekly\nSet your own schedule\nImprove pre-release AI models using your existing knowledge and expertise\nTo continue, click the link sent to preview@yahoo.com\nNot seeing the email? Please wait\nand if it doesn't arrive, Send Again.\nBack",
+    getClientRects: () => [{}], checkVisibility: () => true,
+  };
+  const document = { querySelectorAll: () => [], body: panel };
+  const first = detectEmailLinkStep(document);
+  assert.equal(first?.mailType, "confirmationLinks");
+  assert.ok(first.key.endsWith(':["preview@yahoo.com"]'));
+  panel.innerText = panel.innerText.replace("Please wait", "Please wait 15 seconds");
+  assert.deepEqual(detectEmailLinkStep(document), first);
+  panel.innerText = panel.innerText.replace("preview@yahoo.com", "another@yahoo.com");
+  assert.notEqual(detectEmailLinkStep(document).key, first.key);
+});
+
+test("generic delivered links require an email destination and completed delivery", () => {
+  for (const text of [
+    "Click the link sent to your email address",
+    "Follow the link we sent to your inbox",
+    "Open the link that was sent to preview@example.com",
+  ]) assert.equal(detectedMailType(text), "confirmationLinks", text);
+  for (const text of [
+    "Click the link sent to your phone",
+    "Click the link sent to you by SMS",
+    "Click the link sent to our support team",
+    "Click the link we will send to preview@example.com",
+    "Click the link sent to preview@example.com for our newsletter",
+  ]) assert.equal(detectedMailType(text), undefined, text);
+  assert.equal(detectedMailType("Click the link sent to your email to reset your password"), "passwordResetLinks");
+});
+
 test("rendered panel text limits apply before classifying either link purpose", () => {
   for (const [prompt, mailType] of [
     ["Check your email", "confirmationLinks"],

@@ -9,6 +9,18 @@ import {
 
 const emailLinkMessage = makeEmailLinkMessage({ receivedAt: 10_000 });
 
+test("Outlier's waiting prompt starts a check and displays the link without a manual action", async () => {
+  const panel = {
+    innerText: "Welcome to Outlier\nTo continue, click the link sent to preview@yahoo.com\nNot seeing the email? Please wait and if it doesn't arrive, Send Again.",
+    getClientRects: () => [{}], checkVisibility: () => true,
+  };
+  const harness = createEmailLinkCardHarness(panel);
+  await waitForAsyncCallbacks();
+  assert.equal(harness.state.requests, 1);
+  assert.equal(harness.state.views.length, 1);
+  assert.deepEqual(harness.state.views[0].links, [emailLinkMessage]);
+});
+
 test("the same waiting step moves its existing card into and out of a modal", async () => {
   for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
     const harness = createEmailLinkCardHarness(null, mailType);

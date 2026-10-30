@@ -10,7 +10,8 @@ EXCLUDED_ACTIONS_REGEX = r"unsubscribe|delete|cancel|payment|purchase"
 
 CONFIRMATION_LABEL_PATTERN = re.compile(r"\b(?:verify|confirm|activate)\s+(?:(?:your|my|the|this|new)\s+)?(?:e-?mail(?:\s+address)?|account|registration)\b", re.I)
 SIGNUP_LABEL_PATTERN = re.compile(r"^sign(?:\s+|-)up(?:\s+(?:to|for|with)\s+\S.*?)?[\s:!.]*$", re.I)
-SIGNUP_UNRELATED_PATTERN = re.compile(r"\b(?:newsletter|mailing\s+list|subscribe|subscription|help|support|documentation)\b", re.I)
+SIGNIN_LABEL_PATTERN = re.compile(r"^(?:sign(?:\s+|-)in|log(?:\s+|-)in)(?:\s+(?:to|with)\s+\S.*?)?[\s:!.]*$", re.I)
+AUTH_UNRELATED_PATTERN = re.compile(r"\b(?:newsletter|mailing\s+list|subscribe|subscription|help|support|documentation)\b", re.I)
 CONFIRMATION_EXCLUDED_LABEL_PATTERN = re.compile(rf"\b(?:{EXCLUDED_ACTIONS_REGEX}|password|reset)\b", re.I)
 CONFIRMATION_EXCLUDED_SUBJECT_PATTERN = re.compile(
     rf"\b(?:{EXCLUDED_ACTIONS_REGEX})\b|"
@@ -87,7 +88,8 @@ def extract_confirmation_link_details(raw_message):
 
 def is_confirmation_label(label):
     return bool(CONFIRMATION_LABEL_PATTERN.search(label) or (
-        SIGNUP_LABEL_PATTERN.fullmatch(label.strip()) and not SIGNUP_UNRELATED_PATTERN.search(label)
+        (SIGNUP_LABEL_PATTERN.fullmatch(label.strip()) or SIGNIN_LABEL_PATTERN.fullmatch(label.strip()))
+        and not AUTH_UNRELATED_PATTERN.search(label)
     ))
 
 
