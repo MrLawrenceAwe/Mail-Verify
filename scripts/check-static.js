@@ -135,3 +135,7 @@ while (inlineEntries.length) {
     fail(`${name}: missing web-accessible resource declaration`);
   inlineEntries.push(...(dependencies.get(path) || []));
 }
+for (const resource of resources) {
+  if (!visited.has(join(extensionRoot, resource)))
+    fail(`${resource}: unused web-accessible resource declaration`);
+}

@@ -39,19 +39,27 @@ export function registerInlineRequests(chrome, timers = globalThis) {
         });
         if (active?.id !== sender.tab.id)
           throw new Error("Return to this tab to check your inboxes.");
-        if (!session.inFlightRequest) {
+        const collectOnly = message.collectOnly === true;
+        const previous = session.inFlight;
+        if (!previous || (previous.collectOnly && !collectOnly)) {
           timers.clearTimeout(session.idleTimer);
-          session.inFlightRequest = session.client
-            .sendSessionRequest(mailType, message.collectOnly === true)
-            .finally(() => {
-              session.inFlightRequest = undefined;
+          const send = () => session.client.sendSessionRequest(mailType, collectOnly);
+          // A full check must still run after an in-flight collection settles.
+          const request = previous ? previous.response.then(send, send) : send();
+          const next = {
+            collectOnly,
+            response: request.finally(() => {
+              if (session.inFlight !== next) return;
+              session.inFlight = undefined;
               session.idleTimer = timers.setTimeout(
                 () => session.client.closeSession(),
                 15_000,
               );
-            });
+            }),
+          };
+          session.inFlight = next;
         }
-        const response = await session.inFlightRequest;
+        const response = await session.inFlight.response;
         reply({
           ok: true,
           [mailType]: response[mailType],

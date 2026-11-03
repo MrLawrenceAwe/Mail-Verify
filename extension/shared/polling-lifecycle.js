@@ -3,14 +3,10 @@ import { createScanSchedule } from "./scan-schedule.js";
 
 export function createPollingLifecycle({ clock, setTimeout, clearTimeout }) {
   let timer,
-    deadline = 0,
-    generation = 0;
+    deadline = 0;
   return {
     get deadline() {
       return deadline;
-    },
-    get generation() {
-      return generation;
     },
     renewDeadline() {
       deadline = clock.now() + POLL_WINDOW_MS;
@@ -24,12 +20,6 @@ export function createPollingLifecycle({ clock, setTimeout, clearTimeout }) {
     cancelScheduledCheck() {
       clearTimeout(timer);
       timer = undefined;
-    },
-    invalidateResponses() {
-      generation++;
-    },
-    isCurrent(value) {
-      return value === generation;
     },
     hasExpired() {
       return clock.now() >= deadline;

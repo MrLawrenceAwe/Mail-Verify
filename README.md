@@ -10,7 +10,7 @@ Find verification codes and links for account confirmation, sign-in, and passwor
 
 The Chrome extension uses native messaging to request local email checks from a Python companion.
 
-For a preview without an inbox, run `python3 -m http.server 8767 --bind 127.0.0.1` from the project root and open [the local preview](http://127.0.0.1:8767/docs/preview.html). This renders the real suggestion interface with synthetic mail.
+The local preview renders the real code suggestion interface with synthetic mail. Follow the [synthetic preview setup](docs/testing.md#synthetic-previews), then open the [local code preview](http://127.0.0.1:8767/docs/preview.html).
 
 ## Quick setup
 

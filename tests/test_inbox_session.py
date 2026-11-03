@@ -422,7 +422,7 @@ class InboxSessionTests(unittest.TestCase):
         self.assertEqual(connection.body_fetches, 2)
         self.assertNotIn(9, session.pending_body_timestamps_seconds)
 
-    def test_missing_metadata_is_retried_after_discovery_cursor_uid_advances(self):
+    def test_incomplete_metadata_is_retried_after_discovery_cursor_uid_advances(self):
         now = time.time()
 
         class FakeConnection:
@@ -433,8 +433,10 @@ class InboxSessionTests(unittest.TestCase):
                     return "OK", [b"5 6" if self.metadata_fetches == 0 else b""]
                 if "INTERNALDATE" in args[1]:
                     self.metadata_fetches += 1
-                    uids = [6] if self.metadata_fetches == 1 else [5]
-                    return metadata_response(uids, received_at=now - 30)
+                    if self.metadata_fetches == 1:
+                        status, rows = metadata_response([6], received_at=now - 30)
+                        return status, [*rows, b"2 (UID 5 RFC822.SIZE 100)"]
+                    return metadata_response([5], received_at=now - 30)
                 uids = args[0].split(b",")
                 return body_response(
                     (uid, self_message(str(100000 + int(uid)))) for uid in uids

@@ -28,6 +28,7 @@ export function createPopupController({
   let targetTab;
   let mailType = "codes";
   let mailCheckInProgress = false;
+  let checkGeneration = 0;
   let userActionInProgress = false;
   let selectionCompleted = false;
   let checkIssue;
@@ -63,7 +64,7 @@ export function createPopupController({
   function resetMailCheckSession() {
     scanSchedule.clearPending();
     polling.cancelScheduledCheck();
-    polling.invalidateResponses();
+    checkGeneration++;
     mailCheckInProgress = false;
     closeSession();
   }
@@ -153,14 +154,14 @@ export function createPopupController({
     if (mailCheckInProgress) resetMailCheckSession();
     polling.cancelScheduledCheck();
     mailCheckInProgress = true;
-    const requestGeneration = polling.generation;
+    const requestGeneration = checkGeneration;
     const startedAt = clock.now();
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
       const { collectOnly } = scanSchedule.beginCheck();
       const response = await sendSessionRequest(mailType, collectOnly);
-      if (!userActionInProgress && polling.isCurrent(requestGeneration)) {
+      if (!userActionInProgress && requestGeneration === checkGeneration) {
         const results = mailType === "codes"
           ? response[mailType]
           : response[mailType].filter((item) => isSupportedEmailLinkUrl(item.url));
@@ -184,14 +185,14 @@ export function createPopupController({
       }
     } catch (error) {
       failed = true;
-      if (!userActionInProgress && polling.isCurrent(requestGeneration)) {
+      if (!userActionInProgress && requestGeneration === checkGeneration) {
         scanSchedule.clearPending();
         view.clearResults();
         checkIssue = { message: error.message, error: true };
         view.setStatus(error.message, true);
       }
     } finally {
-      if (polling.isCurrent(requestGeneration)) {
+      if (requestGeneration === checkGeneration) {
         mailCheckInProgress = false;
         scheduleCheck(
           failed

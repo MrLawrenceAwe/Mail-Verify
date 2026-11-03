@@ -348,7 +348,6 @@ export function startCodePicker({
       excludeSeenMessages();
       dismissed = false;
       filledStep = false;
-      polling.invalidateResponses();
       view?.clearCodes();
       if (view) {
         view.setStatus("Waiting for your new code…");

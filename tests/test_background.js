@@ -127,6 +127,32 @@ test("background forwards collection mode and pending status across the native b
   ]);
 });
 
+test("a full check queues behind a collection and is shared by other full checks", async () => {
+  for (const collectionSucceeded of [true, false]) {
+    const fullResults = [{ code: "123456", receivedAt: 1000 }];
+    const fixture = setup(({ collectOnly }) =>
+      collectOnly
+        ? { ok: collectionSucceeded, codes: [], error: "Collection failed." }
+        : { ok: true, codes: fullResults, scanPending: false },
+    );
+    const [collection, ...fullChecks] = await Promise.all([
+      fixture.request({}, "codes", true),
+      fixture.request(),
+      fixture.request(),
+    ]);
+    assert.equal(collection.ok, collectionSucceeded);
+    for (const response of fullChecks)
+      assert.deepEqual(response.codes, fullResults);
+    assert.deepEqual(
+      fixture.nativeRequests.map(({ collectOnly }) => collectOnly),
+      [true, false],
+    );
+    assert.equal(fixture.connectionsOpened, 1);
+    await fixture.expire();
+    assert.equal(fixture.closed, 1);
+  }
+});
+
 test("link requests use their own result type and enforce active tab access", async () => {
   const confirmationLinks = [
     { url: "https://example.com/confirm", receivedAt: 1000 },

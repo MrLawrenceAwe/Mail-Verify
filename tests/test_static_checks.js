@@ -113,6 +113,15 @@ test("static checks reject inline dependencies omitted from web-accessible resou
   assert.match(result.stderr, /shared\.js.*web.accessible/i);
 });
 
+test("static checks reject unused web-accessible declarations for existing files", (t) => {
+  const { manifest, saveManifest, run } = fixture(t);
+  manifest.web_accessible_resources[0].resources.push("popup.js");
+  saveManifest();
+  const result = run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /popup\.js: unused web-accessible resource/);
+});
+
 test("static checks resolve external and inline preview modules relative to their HTML", (t) => {
   const { write, run } = fixture(t);
   write("docs/preview.html", `<script type="module" src="./missing-entry.js"></script>

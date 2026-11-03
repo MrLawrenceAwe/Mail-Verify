@@ -36,6 +36,19 @@ def message_uid(metadata):
     return int(match.group(1)) if match else None
 
 
+def parse_candidate_metadata(rows):
+    metadata = {}
+    for row in rows:
+        if not isinstance(row, bytes):
+            continue
+        uid = message_uid(row)
+        date = imaplib.Internaldate2tuple(row)
+        size = re.search(rb"\bRFC822.SIZE (\d+)\b", row)
+        if uid is not None and date and size:
+            metadata[uid] = (time.mktime(date), int(size.group(1)))
+    return metadata
+
+
 class DeadlineIMAPConnection(imaplib.IMAP4_SSL):
     """Apply the current scan budget to each blocking IMAP read."""
 
@@ -143,30 +156,26 @@ class InboxSession:
             # Sequence numbers bound the first scan to the newest messages.
             if not self.message_count:
                 self.discovery_cursor_uid = 0
-                return []
+                return {}
             first = max(1, self.message_count - MAX_CANDIDATE_MESSAGES + 1)
             status, metadata = self.connection.fetch(
                 f"{first}:{self.message_count}", "(UID INTERNALDATE RFC822.SIZE)"
             )
             if status != "OK":
                 raise UserError("Yahoo could not inspect recent messages. Try checking again.")
-            uids = {
-                uid
-                for entry in metadata
-                if isinstance(entry, bytes)
-                if (uid := message_uid(entry)) is not None
-            }
+            candidates = parse_candidate_metadata(metadata)
             # A successful FETCH can still omit a message. Repeat the bounded
             # first scan on the next poll before advancing past its UID.
             # Bodies already processed during those retries must not jump
             # ahead of deferred or missing bodies again.
-            metadata = [entry for entry in metadata
-                        if not isinstance(entry, bytes)
-                        or message_uid(entry) not in self.initial_processed_body_uids]
-            if len(uids) == self.message_count - first + 1:
-                self.discovery_cursor_uid = max(uids)
+            unprocessed = {
+                uid: details for uid, details in candidates.items()
+                if uid not in self.initial_processed_body_uids
+            }
+            if len(candidates) == self.message_count - first + 1:
+                self.discovery_cursor_uid = max(candidates)
                 self.initial_processed_body_uids.clear()
-            return metadata
+            return unprocessed
 
         status, data = self.connection.uid(
             "search", None, "UID", f"{self.discovery_cursor_uid + 1}:*"
@@ -184,36 +193,24 @@ class InboxSession:
         if all_uids:
             self.discovery_cursor_uid = all_uids[-1]
         if not self.pending_metadata_uids:
-            return []
+            return {}
         uids = sorted(self.pending_metadata_uids, reverse=True)
         status, metadata = self.connection.uid(
             "fetch", b",".join(str(uid).encode() for uid in uids), "(UID INTERNALDATE RFC822.SIZE)"
         )
         if status != "OK":
             raise UserError("Yahoo could not inspect recent messages. Try checking again.")
-        returned_uids = {
-            uid
-            for entry in metadata
-            if isinstance(entry, bytes)
-            if (uid := message_uid(entry)) is not None
-        }
-        self.pending_metadata_uids.difference_update(returned_uids)
-        return metadata
+        candidates = parse_candidate_metadata(metadata)
+        self.pending_metadata_uids.difference_update(candidates)
+        return candidates
 
     def _eligible_arrival_times(self, metadata, now):
-        eligible = {}
-        for entry in metadata:
-            if not isinstance(entry, bytes):
-                continue
-            uid = message_uid(entry)
-            date = imaplib.Internaldate2tuple(entry)
-            size = re.search(rb"\bRFC822.SIZE (\d+)\b", entry)
-            if uid is None or not date or not size or int(size.group(1)) > MAX_MESSAGE_BYTES:
-                continue
-            received = time.mktime(date)
-            if -MAX_FUTURE_SKEW_SECONDS <= now - received <= MAX_MESSAGE_AGE_SECONDS:
-                eligible[uid] = min(received, now)
-        return eligible
+        return {
+            uid: min(received, now)
+            for uid, (received, size) in metadata.items()
+            if size <= MAX_MESSAGE_BYTES
+            and -MAX_FUTURE_SKEW_SECONDS <= now - received <= MAX_MESSAGE_AGE_SECONDS
+        }
 
     def _fetch_until_matching_batch(self, candidates):
         # Process every downloaded body before returning a batch's results.

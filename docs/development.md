@@ -35,7 +35,7 @@ Code-picker mounting starts a new checking window, including remounting the same
 - Ending the polling window clears its timer and deadline; invalidating inline checks also invalidates active response bookkeeping. Neither cancels companion workers.
 - A retry during an active check invalidates its response and queues another check. The inline check token controls whether a response can be applied and whether completion starts a queued retry.
 - The inline lifecycle owns its scan schedule: `restart(check)` renews the deadline and runs or queues the check; `invalidateChecks()` also clears pending-scan bookkeeping. Each controller retains its own step and result rules.
-- The [popup controller](../extension/popup/popup-controller.js) closes its native session when resetting a check, separately from the polling deadline.
+- The [popup controller](../extension/popup/popup-controller.js) tracks its own response generation and closes its native session when resetting a check.
 
 Popup account saving, account removal, and result selection share one busy state that disables save, account setup, check, removal, and result controls. Completed selections remain disabled until a manual check or account-list update; code results also stay disabled without an HTTPS target page. Saving cancels scheduled checks and invalidates pending responses so inbox results cannot overwrite connection feedback. Successful saving immediately checks the updated account list; failed saving resumes the previous polling window only if it is still open.
 
@@ -56,7 +56,7 @@ Account failures remain visible through collection polls and pending retries unt
 
 Each worker uses a 25-second scan budget, applying the remaining budget to blocking IMAP reads with a maximum socket timeout of 15 seconds. Session requests have a 35-second companion watchdog; account setup allows 60 seconds for login and Keychain access. A watchdog disconnects the native port, clears the pending request, and allows retry. One-off account operations use their own native port so they can also be disconnected on timeout.
 
-Background sessions close after 15 seconds without a new check; the popup reuses its session while open. Simultaneous requests of the same type share an in-flight native request. Separate sessions per type prevent one request from consuming another type’s results.
+Background sessions close after 15 seconds without a new check. The popup reuses its session while open. Requests of the same mail type share an in-flight native request when it can satisfy both. A full check arriving during a collection-only request queues behind it. Separate sessions per type prevent one request from consuming another type’s results.
 
 ### Inbox scan invariants
 
@@ -64,7 +64,7 @@ Background sessions close after 15 seconds without a new check; the popup reuses
 
 Initial discovery inspects the newest 30 inbox messages; incremental discovery retains up to 30 newly arrived message UIDs at a time. Messages whose reported `RFC822.SIZE` exceeds 1,000,000 bytes are excluded, including messages whose attachments push the total above that limit. These limits can omit otherwise recent verification mail.
 
-Missing metadata and bodies are retried. Initial discovery remembers processed bodies, including messages without results, so retries advance rather than repeatedly downloading the newest batch. Discovery progress and body completion are tracked separately; retry state clears when discovery completes or the connection closes.
+Missing or incomplete metadata rows and missing bodies are retried within the discovery limits. Initial discovery remembers processed bodies, including messages without results, so retries advance rather than repeatedly downloading the newest batch. Discovery progress and body completion are tracked separately; retry state clears when discovery completes or the connection closes.
 
 Each inbox retains the union of its five newest results and the newest result from each of five distinct senders, giving at most nine results. Cached results and queued bodies expire after ten minutes. Each check reloads credentials. Removed or changed accounts lose their cached results immediately, and an in-flight worker closes its connection when it finishes.
 
