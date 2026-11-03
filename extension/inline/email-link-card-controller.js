@@ -28,7 +28,7 @@ export function startEmailLinkCard({
   environment = globalThis,
   detectStep = detectEmailLinkStep,
   page = getPageCoordinator(environment),
-  hasCodeField = () => page.detectCodeField().ok,
+  hasCodePickerAnchor = () => page.detectCodeField().ok,
   createView = createEmailLinkCardView,
 } = {}) {
   const {
@@ -73,7 +73,7 @@ export function startEmailLinkCard({
   async function checkForLinks() {
     polling.cancelScheduledCheck();
     if (!view || document.hidden || checks.busy) return;
-    if (lastURL !== location.href || hasCodeField() || !isCurrentStep()) {
+    if (lastURL !== location.href || hasCodePickerAnchor() || !isCurrentStep()) {
       syncLinkCard();
       return;
     }
@@ -84,7 +84,6 @@ export function startEmailLinkCard({
       return;
     }
     const { mailType } = activeStep;
-    const requestGeneration = polling.generation;
     const checkToken = checks.start();
     try {
       const { collectOnly } = scanSchedule.beginCheck();
@@ -93,9 +92,9 @@ export function startEmailLinkCard({
         mailType,
         collectOnly,
       );
-      if (!polling.isCurrent(requestGeneration) || !view || document.hidden)
+      if (!checks.isCurrent(checkToken) || !view || document.hidden)
         return;
-      if (lastURL !== location.href || hasCodeField() || !isCurrentStep()) {
+      if (lastURL !== location.href || hasCodePickerAnchor() || !isCurrentStep()) {
         syncLinkCard();
         return;
       }
@@ -119,7 +118,7 @@ export function startEmailLinkCard({
             : MAIL_PRESENTATION[mailType].waitingStatus,
       );
     } catch (error) {
-      if (polling.isCurrent(requestGeneration) && view) {
+      if (checks.isCurrent(checkToken) && view) {
         checkIssueMessage = error.message;
         scanSchedule.clearPending();
         currentLinks = [];
@@ -128,10 +127,9 @@ export function startEmailLinkCard({
       }
     } finally {
       const outcome = checks.finish(checkToken);
-      if (outcome === "stale") return;
-      if (outcome === "retry" && view && !document.hidden) checkForLinks();
-      else if (polling.isCurrent(requestGeneration) && view && !document.hidden)
-        polling.schedule(checkForLinks, scanSchedule.pollDelayMs);
+      if (outcome === "stale" || !view || document.hidden) return;
+      if (outcome === "retry") checkForLinks();
+      else polling.schedule(checkForLinks, scanSchedule.pollDelayMs);
     }
   }
   function syncLinkCard() {
@@ -146,7 +144,7 @@ export function startEmailLinkCard({
       unmountCard();
       return;
     }
-    const nextStep = hasCodeField() ? null : detectStep(document);
+    const nextStep = hasCodePickerAnchor() ? null : detectStep(document);
     if (nextStep === null) {
       unmountCard();
       dismissed = false;
@@ -194,7 +192,7 @@ export function startEmailLinkCard({
         if (
           document.hidden ||
           lastURL !== location.href ||
-          hasCodeField() ||
+          hasCodePickerAnchor() ||
           !isCurrentStep() ||
           !currentLinks.some(
             (current) =>

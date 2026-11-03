@@ -29,7 +29,7 @@ export function createEmailLinkCardHarness(
     screenKey: "first signup",
     panel,
     modal,
-    code: false,
+    hasCodePickerAnchor: false,
     requests: 0,
     collectionModes: [],
     stepReads: 0,
@@ -85,7 +85,7 @@ export function createEmailLinkCardHarness(
           : { key: state.screenKey, mailType: state.mailType }
         : null;
     },
-    hasCodeField: () => state.code,
+    hasCodePickerAnchor: () => state.hasCodePickerAnchor,
     createView(_document, callbacks) {
       const attributes = new Map();
       const view = {

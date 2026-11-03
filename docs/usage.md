@@ -5,7 +5,7 @@
 | Email type | On-page suggestion | Selected action | Popup check button |
 | --- | --- | --- | --- |
 | Verification code | Beside a supported code field | **Fill code**, without clicking Submit | **Find verification codes** |
-| Account confirmation | Bottom-right card on a recognised “Check your email” screen | **Open confirmation link** in a new tab; this may immediately confirm the account | **Find confirmation links** |
+| Account confirmation or sign-in | Bottom-right card on a recognised “Check your email” screen | **Open confirmation or sign-in link ↗** in a new tab. Opening it may immediately confirm the account or sign you in. | **Find confirmation or sign-in links** |
 | Password reset | Bottom-right card on a recognised reset-email waiting screen | **Open reset link ↗** to open it in a new tab | **Find password reset links** |
 
 Request the email on the website, then choose its matching result. Review the account, sender, subject, arrival time, and link domain before using it. Results show the arrival time in your local timezone, including seconds to distinguish repeated requests. Code suggestions show the sender and inbox; hover to see the subject. The extension never chooses a result for you; some websites continue automatically after all code digits are filled. Link cards stay out of the way when a code field is recognised.

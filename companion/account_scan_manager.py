@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from errors import UserError, inbox_error_message
-from inbox_session import InboxSession, MAX_MESSAGE_AGE_SECONDS
+from inbox_session import InboxSession, is_fresh_result
 
 SCAN_TIMEOUT_SECONDS = 25
 SCAN_RESPONSE_WAIT_SECONDS = 0.25
@@ -17,15 +17,15 @@ MAX_CONCURRENT_SCANS_PER_HOST = 4
 def scan_with_deadline(session):
     session.deadline = time.monotonic() + SCAN_TIMEOUT_SECONDS
     try:
-        result = session.scan_inbox()
-    except Exception:
-        if time.monotonic() >= session.deadline:
-            raise UserError("Yahoo took too long to respond. Try checking again.") from None
-        raise
-    else:
-        if time.monotonic() >= session.deadline:
-            raise UserError("Yahoo took too long to respond. Try checking again.")
-        return result
+        try:
+            result = session.scan_inbox()
+        except Exception:
+            if time.monotonic() < session.deadline:
+                raise
+        else:
+            if time.monotonic() < session.deadline:
+                return result
+        raise UserError("Yahoo took too long to respond. Try checking again.")
     finally:
         session.deadline = None
         if session.connection is not None:
@@ -69,23 +69,25 @@ class AccountScanManager:
                 self.discard_account_state(email)
             self.mail_type = mail_type
         now = time.time()
-        for state in self.accounts.values():
-            state.cached_results = [item for item in state.cached_results
-                if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS]
-        active = {account["email"].lower() for account in account_credentials}
+        accounts_by_key = [(account["email"].lower(), account) for account in account_credentials]
+        active = {key for key, _ in accounts_by_key}
         for email in list(self.accounts):
             if email not in active:
                 self.discard_account_state(email)
         if not self.executor:
             self.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_SCANS_PER_HOST)
-        for account in account_credentials:
-            key = account["email"].lower()
+        account_states = []
+        for key, account in accounts_by_key:
             state = self.accounts.get(key)
             if state and state.session.credentials != account:
                 self.discard_account_state(key)
                 state = None
             if not state:
                 state = self.accounts[key] = AccountScanState(InboxSession(account, mail_type))
+            state.cached_results = [
+                item for item in state.cached_results if is_fresh_result(item, now)
+            ]
+            account_states.append((account["email"], state))
             # Keep a completed scan until its response has been collected.
             if not collect_only and state.pending_scan is None:
                 state.pending_scan = self.executor.submit(scan_with_deadline, state.session)
@@ -93,9 +95,7 @@ class AccountScanManager:
                    if state.pending_scan is not None]
         if pending:
             wait(pending, timeout=SCAN_RESPONSE_WAIT_SECONDS)
-        for account in account_credentials:
-            email = account["email"]
-            state = self.accounts[email.lower()]
+        for email, state in account_states:
             future = state.pending_scan
             if future is None or not future.done():
                 continue
@@ -109,9 +109,7 @@ class AccountScanManager:
                 state.session.close()
                 state.cached_results = []
                 state.warning = f"{email}: {inbox_error_message(exc)}"
-        warnings = [self.accounts[account["email"].lower()].warning
-                    for account in account_credentials
-                    if self.accounts[account["email"].lower()].warning is not None]
+        warnings = [state.warning for _, state in account_states if state.warning is not None]
         if warnings and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
         items = [item for state in self.accounts.values() for item in state.cached_results]

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Mail Verify",
   "version": "0.5.1",
-  "description": "Find Yahoo email verification codes and links on macOS; fill codes and open confirmation or password reset links.",
+  "description": "Fill verification codes from Yahoo Mail and open confirmation, sign-in, and password reset links on macOS.",
   "permissions": [
     "nativeMessaging",
     "activeTab",

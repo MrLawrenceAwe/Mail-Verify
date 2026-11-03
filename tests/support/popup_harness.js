@@ -62,6 +62,7 @@ export async function createPopupHarness({
       "saveAccountSubmit",
       "password",
       "email",
+      "codeTarget",
       "targetPage",
       "codeContext",
       "codePageHelp",

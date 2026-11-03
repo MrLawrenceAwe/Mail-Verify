@@ -1,20 +1,21 @@
 export const MAIL_PRESENTATION = {
   codes: {
     resultLabel: "codes",
+    actionLabel: "Fill code",
     foundStatus: "Choose the code for this website. Checking for newer codes…",
     popupEmptyStatus:
       "No recent code yet. Request one on the website; keep this popup open.",
   },
   confirmationLinks: {
-    resultLabel: "confirmation links",
-    actionLabel: "Open confirmation link ↗",
-    openedStatus: "Confirmation link opened in a new tab.",
-    foundStatus: "Choose a confirmation link to open.",
+    resultLabel: "confirmation or sign-in links",
+    actionLabel: "Open confirmation or sign-in link ↗",
+    openedStatus: "Link opened in a new tab.",
+    foundStatus: "Choose a confirmation or sign-in link.",
     popupEmptyStatus:
-      "No recent confirmation link yet. Request one and keep this popup open.",
-    waitingStatus: "Waiting for your confirmation email…",
+      "No recent confirmation or sign-in link. Request one and keep this popup open.",
+    waitingStatus: "Waiting for your confirmation or sign-in email…",
     guidance:
-      "Check the sender and link domain. Links may redirect. Opening a link in a new tab may confirm your account.",
+      "Check the sender and link domain. Links may redirect. Opening a link in a new tab may confirm your account or sign you in.",
   },
   passwordResetLinks: {
     resultLabel: "password reset links",

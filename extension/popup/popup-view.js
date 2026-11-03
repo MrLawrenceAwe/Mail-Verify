@@ -39,9 +39,10 @@ export function createPopupView(
   }
 
   function setCodeTargetPage(targetTab) {
+    getElement("codeTarget").hidden = !targetTab;
     getElement("targetPage").textContent = targetTab
       ? new URL(targetTab.url).hostname
-      : "an HTTPS page";
+      : "";
     getElement("codePageHelp").hidden = !!targetTab;
   }
 
@@ -70,11 +71,9 @@ export function createPopupView(
   }
 
   function resetResultLabels(mailType) {
-    const label = mailType === "codes"
-      ? "Fill code"
-      : MAIL_PRESENTATION[mailType].actionLabel;
+    const { actionLabel } = MAIL_PRESENTATION[mailType];
     for (const button of getElement("results").querySelectorAll("button"))
-      button.textContent = label;
+      button.textContent = actionLabel;
   }
 
   function markCodeFilled(button) {
@@ -131,7 +130,7 @@ export function createPopupView(
         card.append(element);
       }
       const button = document.createElement("button");
-      button.textContent = "Fill code";
+      button.textContent = MAIL_PRESENTATION.codes.actionLabel;
       button.disabled = !targetTab;
       button.addEventListener("click", () => onFillCode(item, button));
       card.append(button);

@@ -53,6 +53,9 @@ function createCheckGate() {
       active = {};
       return active;
     },
+    isCurrent(token) {
+      return active === token && !retry;
+    },
     requestRetry() {
       if (!active) return false;
       retry = true;
@@ -81,14 +84,12 @@ export function createInlinePollingLifecycle({ intervalMs, ...options }) {
     scanSchedule,
     invalidateChecks() {
       scanSchedule.clearPending();
-      polling.invalidateResponses();
       checks.invalidate();
       polling.cancelScheduledCheck();
     },
     restart(check) {
       polling.renewDeadline();
-      if (checks.requestRetry()) polling.invalidateResponses();
-      else check();
+      if (!checks.requestRetry()) check();
     },
   });
 }

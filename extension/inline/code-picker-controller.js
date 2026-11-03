@@ -171,7 +171,6 @@ export function startCodePicker({
       return;
     }
     const checkToken = checks.start();
-    const requestGeneration = polling.generation;
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
       const { collectOnly } = scanSchedule.beginCheck();
@@ -184,7 +183,7 @@ export function startCodePicker({
         syncPicker();
         return;
       }
-      if (!polling.isCurrent(requestGeneration) || !view) return;
+      if (!checks.isCurrent(checkToken) || !view) return;
       if (!response?.ok)
         throw new Error(response?.error || "Could not check your inboxes.");
       scanSchedule.recordResponse(response.scanPending);
@@ -210,7 +209,7 @@ export function startCodePicker({
           : "Waiting for an email code…";
       view.setStatus(status);
     } catch (error) {
-      if (polling.isCurrent(requestGeneration) && view) {
+      if (checks.isCurrent(checkToken) && view) {
         checkIssueMessage = error.message;
         scanSchedule.clearPending();
         view.clearCodes();

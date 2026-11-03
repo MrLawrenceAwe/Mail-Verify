@@ -14,7 +14,7 @@
       </span>
       <div>
         <h1>Mail Verify</h1>
-        <p>Email codes, confirmation and reset links.</p>
+        <p>Email codes, confirmation, sign-in and reset links.</p>
       </div>
     </header>
     <main>
@@ -59,7 +59,7 @@
           Add or update Yahoo account
         </button>
         <div id="codeContext">
-          <p class="target-page">
+          <p id="codeTarget" class="target-page" hidden>
             Fill code on:
             <strong id="targetPage"></strong>
           </p>
@@ -75,7 +75,7 @@
         <div id="results"></div>
         <button id="checkCodes">Find verification codes</button>
         <button id="checkConfirmationLinks" class="button-secondary">
-          Find confirmation links
+          Find confirmation or sign-in links
         </button>
         <button id="checkPasswordResetLinks" class="button-secondary">
           Find password reset links

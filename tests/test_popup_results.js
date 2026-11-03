@@ -114,6 +114,9 @@ test("checking again without an HTTPS target keeps code buttons disabled", async
   const { controls, state } = await createPopupHarness({
     tabUrl: "chrome://extensions/",
   });
+  assert.equal(controls.codeTarget.hidden, true);
+  assert.equal(controls.codePageHelp.hidden, false);
+  assert.equal(controls.status.textContent, "Verification codes found.");
   const button = controls.results.querySelectorAll("button")[0];
   assert.equal(button.disabled, true);
   controls.checkCodes.trigger();
@@ -144,7 +147,7 @@ test("finds links only on request and opens only the selected link", async () =>
     ],
   );
   const button = controls.results.querySelectorAll("button")[0];
-  assert.equal(button.textContent, "Open confirmation link ↗");
+  assert.equal(button.textContent, "Open confirmation or sign-in link ↗");
   await button.trigger();
   assert.deepEqual(state.opened, [{ url: emailLinkMessage.url }]);
   assert.equal(timers.length, 0);
@@ -152,7 +155,7 @@ test("finds links only on request and opens only the selected link", async () =>
 
 test("checking again restores unchanged link action labels", async () => {
   for (const [checkControl, fetchResults, actionLabel] of [
-    ["checkConfirmationLinks", "fetchConfirmationLinks", "Open confirmation link ↗"],
+    ["checkConfirmationLinks", "fetchConfirmationLinks", "Open confirmation or sign-in link ↗"],
     ["checkPasswordResetLinks", "fetchPasswordResetLinks", "Open reset link ↗"],
   ]) {
     const { controls, state } = await createPopupHarness();
@@ -213,7 +216,7 @@ test("switching mail types ignores a pending code response", async () => {
   await waitForAsyncCallbacks();
   assert.equal(
     controls.results.querySelectorAll("button")[0].textContent,
-    "Open confirmation link ↗",
+    "Open confirmation or sign-in link ↗",
   );
   state.fetchCodes = async () => [verificationCodeMessage];
   controls.checkCodes.trigger();

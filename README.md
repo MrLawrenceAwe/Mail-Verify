@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/MrLawrenceAwe/Mail-Verify/actions/workflows/ci.yml/badge.svg)](https://github.com/MrLawrenceAwe/Mail-Verify/actions/workflows/ci.yml)
 
-Find email verification codes, account confirmation links, and password reset links in Yahoo inboxes from desktop Chrome on macOS. Click a result to fill a code, open a confirmation link, or open a reset link. No webmail tab is needed. Yahoo is currently the only supported provider.
+Find verification codes and links for account confirmation, sign-in, and password resets in Yahoo inboxes from desktop Chrome on macOS. Select a result to fill the code or open the link. No webmail tab is needed. Yahoo is currently the only supported provider.
 
 ![Mail Verify suggesting a code beside an email verification field](docs/images/code-suggestion.png)
 

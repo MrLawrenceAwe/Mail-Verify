@@ -26,6 +26,10 @@ DISTINCT_SENDER_LIMIT = 5
 MAX_MESSAGE_BYTES = 1_000_000
 
 
+def is_fresh_result(item, now):
+    return 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS
+
+
 def message_uid(metadata):
     """Read the UID from an IMAP metadata line or body-fetch header."""
     match = re.search(rb"\bUID (\d+)\b", metadata)
@@ -289,7 +293,7 @@ class InboxSession:
             self.items_by_uid = {
                 uid: item
                 for uid, item in self.items_by_uid.items()
-                if 0 <= now - item["receivedAt"] / 1000 <= MAX_MESSAGE_AGE_SECONDS
+                if is_fresh_result(item, now)
             }
             self.pending_body_timestamps_seconds.update(self._eligible_arrival_times(metadata, now))
             candidates = self._prune_pending_messages(now)

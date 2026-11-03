@@ -33,7 +33,7 @@ Code-picker mounting starts a new checking window, including remounting the same
 
 - Scheduling requires an explicit delay. Cancelling a timer retains the polling deadline.
 - Ending the polling window clears its timer and deadline; invalidating inline checks also invalidates active response bookkeeping. Neither cancels companion workers.
-- A retry during an active check invalidates its response and queues another check. Check completion distinguishes stale responses, normal completion, and queued retries.
+- A retry during an active check invalidates its response and queues another check. The inline check token controls whether a response can be applied and whether completion starts a queued retry.
 - The inline lifecycle owns its scan schedule: `restart(check)` renews the deadline and runs or queues the check; `invalidateChecks()` also clears pending-scan bookkeeping. Each controller retains its own step and result rules.
 - The [popup controller](../extension/popup/popup-controller.js) closes its native session when resetting a check, separately from the polling deadline.
 
@@ -50,7 +50,7 @@ Code and link extractors share MIME/visible-HTML traversal in `email_content.py`
 `keychain.py` handles credentials, `errors.py` defines user-facing errors, and
 `install.py` installs or removes runtime modules.
 
-Each native-host process has its own thread pool with up to four concurrent account scans. Background sessions for each mail type and the popup use separate native-host processes, so this is not an application-wide limit. Each request waits at most 250 ms for scans, returns completed results and pending status, and retains pending work for later collection polls without overlapping scans for the same session. Collection polls do not rescan accounts that already finished. Cached results expire after ten minutes. Removing an account or changing credentials or mail type discards its results immediately and closes its connection after any active worker finishes.
+Each native-host process has its own thread pool with up to four concurrent account scans. Background sessions for each mail type and the popup use separate native-host processes, so this is not an application-wide limit. The scan manager waits up to 250 ms for worker futures before collecting completed results and reporting pending work. Later polls collect that work without overlapping scans for the same session. Collection polls do not rescan accounts that already finished. Cached results expire after ten minutes. Removing an account or changing credentials or mail type discards its results immediately and closes its connection after any active worker finishes.
 
 Account failures remain visible through collection polls and pending retries until that account completes a successful scan. Removing an account, changing credentials or mail type, or closing the manager clears its retained failure.
 
@@ -66,7 +66,7 @@ Initial discovery inspects the newest 30 inbox messages; incremental discovery r
 
 Missing metadata and bodies are retried. Initial discovery remembers processed bodies, including messages without results, so retries advance rather than repeatedly downloading the newest batch. Discovery progress and body completion are tracked separately; retry state clears when discovery completes or the connection closes.
 
-Each inbox retains the union of its five newest results and the newest result from each of five distinct senders, giving at most nine results. Cached results and queued bodies expire after ten minutes. Each check reloads credentials; removed or changed accounts cannot retain an active connection.
+Each inbox retains the union of its five newest results and the newest result from each of five distinct senders, giving at most nine results. Cached results and queued bodies expire after ten minutes. Each check reloads credentials. Removed or changed accounts lose their cached results immediately, and an in-flight worker closes its connection when it finishes.
 
 ## Detection and freshness rules
 
