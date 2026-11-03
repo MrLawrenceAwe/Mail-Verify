@@ -84,7 +84,7 @@ test("does not start a scheduled check after the deadline", async () => {
 test("popup completion retains mail errors and account warnings at either expiry boundary", async () => {
   for (const [control, fetchResults, label] of [
     ["checkCodes", "fetchCodes", "codes"],
-    ["checkConfirmationLinks", "fetchConfirmationLinks", "confirmation links"],
+    ["checkConfirmationLinks", "fetchConfirmationLinks", "confirmation or sign-in links"],
     ["checkPasswordResetLinks", "fetchPasswordResetLinks", "password reset links"],
   ]) {
     for (const failed of [false, true]) {
@@ -243,7 +243,7 @@ test("waits at least two seconds after successful checks without pending scans",
 
 test("finished link checks name the selected email purpose", async () => {
   for (const [control, label] of [
-    ["checkConfirmationLinks", "confirmation links"],
+    ["checkConfirmationLinks", "confirmation or sign-in links"],
     ["checkPasswordResetLinks", "password reset links"],
   ]) {
     const { controls, state, timers } = await createPopupHarness();

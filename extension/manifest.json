@@ -46,6 +46,7 @@
         "inline/page-coordinator.js",
         "inline/recipient-identity.js",
         "inline/request-controls.js",
+        "inline/start-suggestions.js",
         "inline/suggestion-mount.js",
         "shared/code-fields.js",
         "shared/email-link-details.js",

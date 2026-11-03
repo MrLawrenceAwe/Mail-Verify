@@ -110,9 +110,10 @@ class AccountScanManager:
                 state.cached_results = []
                 state.warning = f"{email}: {inbox_error_message(exc)}"
         warnings = [state.warning for _, state in account_states if state.warning is not None]
-        if warnings and len(warnings) == len(account_credentials):
+        scan_pending = any(state.pending_scan is not None for state in self.accounts.values())
+        if not scan_pending and warnings and len(warnings) == len(account_credentials):
             raise UserError("Could not check connected accounts: " + "; ".join(warnings))
         items = [item for state in self.accounts.values() for item in state.cached_results]
         items.sort(key=lambda item: item["receivedAt"], reverse=True)
         return {mail_type: items, "warnings": warnings,
-                "scanPending": any(state.pending_scan is not None for state in self.accounts.values())}
+                "scanPending": scan_pending}

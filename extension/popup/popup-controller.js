@@ -27,8 +27,7 @@ export function createPopupController({
   const polling = createPollingLifecycle({ clock, setTimeout, clearTimeout });
   let targetTab;
   let mailType = "codes";
-  let mailCheckInProgress = false;
-  let checkGeneration = 0;
+  let activeCheck;
   let userActionInProgress = false;
   let selectionCompleted = false;
   let checkIssue;
@@ -64,8 +63,7 @@ export function createPopupController({
   function resetMailCheckSession() {
     scanSchedule.clearPending();
     polling.cancelScheduledCheck();
-    checkGeneration++;
-    mailCheckInProgress = false;
+    activeCheck = undefined;
     closeSession();
   }
   function setUserActionInProgress(inProgress) {
@@ -151,17 +149,17 @@ export function createPopupController({
       finishPolling();
       return;
     }
-    if (mailCheckInProgress) resetMailCheckSession();
+    if (activeCheck) resetMailCheckSession();
     polling.cancelScheduledCheck();
-    mailCheckInProgress = true;
-    const requestGeneration = checkGeneration;
+    const check = {};
+    activeCheck = check;
     const startedAt = clock.now();
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
       const { collectOnly } = scanSchedule.beginCheck();
       const response = await sendSessionRequest(mailType, collectOnly);
-      if (!userActionInProgress && requestGeneration === checkGeneration) {
+      if (!userActionInProgress && activeCheck === check) {
         const results = mailType === "codes"
           ? response[mailType]
           : response[mailType].filter((item) => isSupportedEmailLinkUrl(item.url));
@@ -185,15 +183,15 @@ export function createPopupController({
       }
     } catch (error) {
       failed = true;
-      if (!userActionInProgress && requestGeneration === checkGeneration) {
+      if (!userActionInProgress && activeCheck === check) {
         scanSchedule.clearPending();
         view.clearResults();
         checkIssue = { message: error.message, error: true };
         view.setStatus(error.message, true);
       }
     } finally {
-      if (requestGeneration === checkGeneration) {
-        mailCheckInProgress = false;
+      if (activeCheck === check) {
+        activeCheck = undefined;
         scheduleCheck(
           failed
             ? DEFAULT_SCAN_INTERVAL_MS
@@ -237,7 +235,7 @@ export function createPopupController({
       view.setStatus(error.message, true);
     } finally {
       setUserActionInProgress(false);
-      if (polling.deadline && !mailCheckInProgress) {
+      if (polling.deadline && !activeCheck) {
         if (polling.hasExpired()) polling.endPollingWindow();
         else scheduleCheck();
       }
@@ -259,7 +257,7 @@ export function createPopupController({
       polling.renewDeadline();
     } finally {
       setUserActionInProgress(false);
-      if (polling.deadline && !mailCheckInProgress) scheduleCheck();
+      if (polling.deadline && !activeCheck) scheduleCheck();
     }
   }
   async function initialize() {

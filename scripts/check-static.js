@@ -89,9 +89,13 @@ for (const directory of ["extension", "tests", "docs", "scripts"])
   inspect(join(root, directory));
 
 const contentScripts = manifest.content_scripts || [];
-const resources = new Set(
-  (manifest.web_accessible_resources || []).flatMap((entry) => entry.resources),
-);
+const resourceScopes = new Map();
+for (const { resources, matches = [] } of manifest.web_accessible_resources || []) {
+  for (const resource of resources) {
+    if (!resourceScopes.has(resource)) resourceScopes.set(resource, new Set());
+    for (const pattern of matches) resourceScopes.get(resource).add(pattern);
+  }
+}
 const entries = [
   manifest.background?.service_worker,
   manifest.action?.default_popup,
@@ -100,21 +104,21 @@ const entries = [
     ? [manifest.action.default_icon]
     : Object.values(manifest.action?.default_icon || {})),
   ...contentScripts.flatMap((entry) => [...(entry.js || []), ...(entry.css || [])]),
-  ...resources,
+  ...resourceScopes.keys(),
 ].filter(Boolean);
 for (const entry of entries)
   requireFile(join(extensionRoot, entry), "extension/manifest.json");
 
 // Content scripts load their module entry points through literal getURL calls.
 // Only these entry points and their imports need web-accessible declarations.
-const inlineEntries = [];
-for (const entry of contentScripts.flatMap((entry) => entry.js || [])) {
+function checkContentModules(entry, matches, used) {
+  const inlineEntries = [];
   const path = join(extensionRoot, entry);
   let source;
   try {
     source = readFileSync(path, "utf8");
   } catch {
-    continue; // Already reported as a missing manifest entry.
+    return; // Already reported as a missing manifest entry.
   }
   const imports = source.matchAll(
     /import\(\s*chrome\.runtime\.getURL\(\s*["']([^"']+)["']\s*\)\s*\)/g,
@@ -124,18 +128,29 @@ for (const entry of contentScripts.flatMap((entry) => entry.js || [])) {
     addDependency(path, target);
     inlineEntries.push(target);
   }
+  const visited = new Set();
+  while (inlineEntries.length) {
+    const path = inlineEntries.pop();
+    if (visited.has(path)) continue;
+    visited.add(path);
+    const name = relative(extensionRoot, path);
+    used.add(path);
+    const scope = resourceScopes.get(name);
+    if (!scope) fail(`${name}: missing web-accessible resource declaration`);
+    else {
+      // This project keeps the same match patterns on scripts and their resources.
+      for (const pattern of matches)
+        if (!scope.has(pattern))
+          fail(`${name}: web-accessible resource is missing match ${pattern} for ${entry}`);
+    }
+    inlineEntries.push(...(dependencies.get(path) || []));
+  }
 }
-const visited = new Set();
-while (inlineEntries.length) {
-  const path = inlineEntries.pop();
-  if (visited.has(path)) continue;
-  visited.add(path);
-  const name = relative(extensionRoot, path);
-  if (!resources.has(name))
-    fail(`${name}: missing web-accessible resource declaration`);
-  inlineEntries.push(...(dependencies.get(path) || []));
-}
-for (const resource of resources) {
-  if (!visited.has(join(extensionRoot, resource)))
+
+const used = new Set();
+for (const { js = [], matches = [] } of contentScripts)
+  for (const entry of js) checkContentModules(entry, matches, used);
+for (const resource of resourceScopes.keys()) {
+  if (!used.has(join(extensionRoot, resource)))
     fail(`${resource}: unused web-accessible resource declaration`);
 }

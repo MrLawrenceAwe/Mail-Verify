@@ -47,6 +47,27 @@ class AccountScanManagerTests(unittest.TestCase):
         self.assertEqual(recovered["warnings"], [])
         self.assertFalse(recovered["scanPending"])
 
+    def test_pending_retry_is_reported_when_every_account_has_a_warning(self):
+        manager = create_scan_manager(self)
+        accounts = [{"email": "failed@yahoo.com", "password": "unused"}]
+        failed, retry = Future(), Future()
+        failed.set_exception(OSError("Offline"))
+        manager.executor = Mock()
+        manager.executor.submit.side_effect = [failed, retry]
+
+        with self.assertRaises(account_scan_manager.UserError):
+            manager.poll_accounts(accounts)
+
+        retrying = manager.poll_accounts(accounts)
+        self.assertTrue(retrying["scanPending"])
+        self.assertIn("failed@yahoo.com", retrying["warnings"][0])
+
+        retry.set_result([])
+        recovered = manager.poll_accounts(accounts, collect_only=True)
+        self.assertFalse(recovered["scanPending"])
+        self.assertEqual(recovered["warnings"], [])
+        self.assertEqual(manager.executor.submit.call_count, 2)
+
     def test_account_state_changes_clear_retained_failures(self):
         for change in ("credentials", "removal", "mail_type", "close"):
             with self.subTest(change=change):

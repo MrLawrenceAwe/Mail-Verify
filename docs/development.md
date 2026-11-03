@@ -35,7 +35,7 @@ Code-picker mounting starts a new checking window, including remounting the same
 - Ending the polling window clears its timer and deadline; invalidating inline checks also invalidates active response bookkeeping. Neither cancels companion workers.
 - A retry during an active check invalidates its response and queues another check. The inline check token controls whether a response can be applied and whether completion starts a queued retry.
 - The inline lifecycle owns its scan schedule: `restart(check)` renews the deadline and runs or queues the check; `invalidateChecks()` also clears pending-scan bookkeeping. Each controller retains its own step and result rules.
-- The [popup controller](../extension/popup/popup-controller.js) tracks its own response generation and closes its native session when resetting a check.
+- The [popup controller](../extension/popup/popup-controller.js) tracks its active request with a token and closes its native session when resetting a check.
 
 Popup account saving, account removal, and result selection share one busy state that disables save, account setup, check, removal, and result controls. Completed selections remain disabled until a manual check or account-list update; code results also stay disabled without an HTTPS target page. Saving cancels scheduled checks and invalidates pending responses so inbox results cannot overwrite connection feedback. Successful saving immediately checks the updated account list; failed saving resumes the previous polling window only if it is still open.
 
@@ -52,7 +52,7 @@ Code and link extractors share MIME/visible-HTML traversal in `email_content.py`
 
 Each native-host process has its own thread pool with up to four concurrent account scans. Background sessions for each mail type and the popup use separate native-host processes, so this is not an application-wide limit. The scan manager waits up to 250 ms for worker futures before collecting completed results and reporting pending work. Later polls collect that work without overlapping scans for the same session. Collection polls do not rescan accounts that already finished. Cached results expire after ten minutes. Removing an account or changing credentials or mail type discards its results immediately and closes its connection after any active worker finishes.
 
-Account failures remain visible through collection polls and pending retries until that account completes a successful scan. Removing an account, changing credentials or mail type, or closing the manager clears its retained failure.
+Account failures remain visible through collection polls and pending retries until that account completes a successful scan. When all accounts have warnings, checks return those warnings while any scan is pending and report an error once all scans settle. Removing an account, changing credentials or mail type, or closing the manager clears its retained failure.
 
 Each worker uses a 25-second scan budget, applying the remaining budget to blocking IMAP reads with a maximum socket timeout of 15 seconds. Session requests have a 35-second companion watchdog; account setup allows 60 seconds for login and Keychain access. A watchdog disconnects the native port, clears the pending request, and allows retry. One-off account operations use their own native port so they can also be disconnected on timeout.
 

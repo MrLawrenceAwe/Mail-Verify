@@ -113,6 +113,19 @@ test("static checks reject inline dependencies omitted from web-accessible resou
   assert.match(result.stderr, /shared\.js.*web.accessible/i);
 });
 
+test("static checks reject inline dependencies declared for the wrong scope", (t) => {
+  const { manifest, saveManifest, run } = fixture(t);
+  manifest.web_accessible_resources[0].resources = ["inline.js"];
+  manifest.web_accessible_resources.push({
+    matches: ["https://example.com/*"],
+    resources: ["shared.js"],
+  });
+  saveManifest();
+  const result = run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /shared\.js: web-accessible resource is missing match/);
+});
+
 test("static checks reject unused web-accessible declarations for existing files", (t) => {
   const { manifest, saveManifest, run } = fixture(t);
   manifest.web_accessible_resources[0].resources.push("popup.js");
