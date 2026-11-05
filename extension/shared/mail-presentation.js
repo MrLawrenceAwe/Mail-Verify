@@ -34,6 +34,11 @@ export function formatAccountCheckWarnings(warnings) {
   return `Some accounts could not be checked: ${warnings.join("; ")}`;
 }
 
+export function formatInlineCheckFinished(issueMessage) {
+  const prefix = issueMessage ? `${issueMessage} ` : "";
+  return `${prefix}Checking finished. Click ↻ to check again.`;
+}
+
 export function formatSenderLabel(sender) {
   return sender?.trim() || "Unknown sender";
 }

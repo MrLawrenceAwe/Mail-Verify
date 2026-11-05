@@ -83,11 +83,12 @@ test("shows installation guidance only for unavailable companions", async () => 
     ),
   ]) {
     const { controls, timers } = await createPopupHarness({ statusError });
+    const unavailable = statusError instanceof CompanionUnavailableError;
+    assert.equal(controls.companionSetup.hidden, !unavailable);
     assert.equal(
-      controls.companionSetup.hidden,
-      !(statusError instanceof CompanionUnavailableError),
+      controls.status.textContent,
+      unavailable ? "Mac companion unavailable." : statusError.message,
     );
-    assert.equal(controls.status.textContent, statusError.message);
     assert.equal(controls.accountSetup.hidden, true);
     assert.equal(controls.connectedAccountsPanel.hidden, true);
     assert.equal(timers.length, 0);

@@ -8,6 +8,7 @@ import { detectEmailLinkStep } from "./email-link-step.js";
 import {
   MAIL_PRESENTATION,
   formatAccountCheckWarnings,
+  formatInlineCheckFinished,
 } from "../shared/mail-presentation.js";
 import { createEmailLinkCardView } from "./email-link-card-view.js";
 import {
@@ -87,9 +88,7 @@ export function startEmailLinkCard({
       return;
     }
     if (polling.hasExpired()) {
-      view.setStatus(
-        `${checkIssueMessage ? `${checkIssueMessage} ` : ""}Checking finished. Click ↻ to check again.`,
-      );
+      view.setStatus(formatInlineCheckFinished(checkIssueMessage));
       return;
     }
     const { mailType } = activeStep;
@@ -192,9 +191,7 @@ export function startEmailLinkCard({
       acceptLinkSelection(item) {
         if (
           document.hidden ||
-          lastURL !== location.href ||
-          hasDetectedCodeField() ||
-          !isCurrentStep() ||
+          pageStepChanged() ||
           !currentLinks.some(
             (current) =>
               current.accountEmail === item.accountEmail &&

@@ -1,4 +1,7 @@
-import { formatAccountCheckWarnings } from "../shared/mail-presentation.js";
+import {
+  formatAccountCheckWarnings,
+  formatInlineCheckFinished,
+} from "../shared/mail-presentation.js";
 import {
   selectSuggestedCodes,
   messageKey,
@@ -231,9 +234,7 @@ export function startCodePicker({
     }
   }
   function announceCheckingFinished() {
-    view.setStatus(
-      `${checkIssueMessage ? `${checkIssueMessage} ` : ""}Checking finished. Click ↻ to check again.`,
-    );
+    view.setStatus(formatInlineCheckFinished(checkIssueMessage));
   }
   function resetAttempt({ newPage = false, advanceCutoff = false } = {}) {
     excludeSeenMessages();

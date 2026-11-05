@@ -43,11 +43,9 @@ export function createPopupController({
     onSaveAccount: saveAccount,
   });
   function applyConnectedAccounts(accountEmails) {
-    resetMailCheckSession();
     view.renderAccounts(accountEmails);
     view.clearResults();
     selectionCompleted = false;
-    setUserActionInProgress(false);
     if (!accountEmails.length) {
       polling.endPollingWindow();
       view.setStatus("No email accounts connected.");
@@ -219,45 +217,33 @@ export function createPopupController({
   }
   async function saveAccount() {
     if (userActionInProgress) return;
-    setUserActionInProgress(true);
-    resetMailCheckSession();
     view.setStatus("Checking your Yahoo connection…");
     const { email, password } = view.readCredentialsAndClearPassword();
-    try {
-      const result = await sendOneOffRequest({
-        action: "saveAccount",
-        email,
-        password,
-      });
-      view.clearAccountEmail();
-      applyConnectedAccounts(result.accountEmails);
-    } catch (error) {
-      view.setStatus(error.message, true);
-    } finally {
-      setUserActionInProgress(false);
-      if (polling.deadline && !activeCheck) {
-        if (polling.hasExpired()) polling.endPollingWindow();
-        else scheduleCheck();
-      }
-    }
+    await updateAccount({ action: "saveAccount", email, password });
   }
   async function removeAccount(email) {
     if (userActionInProgress) return;
-    polling.endPollingWindow();
+    await updateAccount({ action: "removeAccount", email });
+  }
+  async function updateAccount(request) {
     setUserActionInProgress(true);
     resetMailCheckSession();
+    const saving = request.action === "saveAccount";
+    let result;
     try {
-      const result = await sendOneOffRequest({
-        action: "removeAccount",
-        email,
-      });
-      applyConnectedAccounts(result.accountEmails);
+      result = await sendOneOffRequest(request);
     } catch (error) {
       view.setStatus(error.message, true);
-      polling.renewDeadline();
     } finally {
       setUserActionInProgress(false);
-      if (polling.deadline && !activeCheck) scheduleCheck();
+    }
+    if (result) {
+      if (saving) view.clearAccountEmail();
+      applyConnectedAccounts(result.accountEmails);
+    } else {
+      if (!saving) polling.renewDeadline();
+      if (polling.hasExpired()) polling.endPollingWindow();
+      else scheduleCheck();
     }
   }
   async function initialize() {
@@ -277,8 +263,12 @@ export function createPopupController({
         view.setStatus("Connect once. No webmail tab needed.");
       }
     } catch (error) {
-      view.setStatus(error.message, true);
-      if (error instanceof CompanionUnavailableError) view.showCompanionSetup();
+      if (error instanceof CompanionUnavailableError) {
+        view.setStatus("Mac companion unavailable.", true);
+        view.showCompanionSetup();
+      } else {
+        view.setStatus(error.message, true);
+      }
     }
   }
 
