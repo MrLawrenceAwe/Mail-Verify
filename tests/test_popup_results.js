@@ -294,13 +294,13 @@ test("popup guidance follows the selected action and clears when returning to co
   assert.equal(controls.linkGuidance.hidden, false);
   assert.match(
     controls.linkGuidance.textContent,
-    /Opening a link in a new tab/,
+    /may confirm your account or sign you in/,
   );
   controls.checkPasswordResetLinks.trigger();
   await waitForAsyncCallbacks();
   assert.match(
     controls.linkGuidance.textContent,
-    /reset link opens in a new tab/,
+    /Check the sender and link domain/,
   );
   controls.checkCodes.trigger();
   await waitForAsyncCallbacks();

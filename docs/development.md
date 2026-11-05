@@ -72,8 +72,8 @@ Each inbox retains the union of its five newest results and the newest result fr
 
 Freshness cutoffs depend on the verification attempt:
 
-- Initial code and link detection accepts mail from the last ten minutes, matching the popup even when mail arrives before discovery.
-- Subsequent code attempts allow mail delivered up to five seconds before the step appeared.
+- The code picker starts with a ten-minute window in a fresh document. Initial link detection also accepts mail from the last ten minutes.
+- Subsequent code steps, including those after a URL change within the same document, allow mail delivered up to five seconds before the step appeared.
 - Changes to an existing link step’s panel, recipient, or purpose use the next whole second as the cutoff, excluding mail delivered just before or during the change.
 - Resending clears older suggestions. Yahoo arrival timestamps have one-second precision, so on-page suggestions skip emails dated in the same second as the resend click. The popup can show recent emails excluded by that rule.
 

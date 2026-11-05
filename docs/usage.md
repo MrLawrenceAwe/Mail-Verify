@@ -18,11 +18,11 @@ Automatic checking runs in two-minute windows. Hiding a tab stops new on-page ch
 
 Opening the popup with connected accounts automatically checks for verification codes for up to two minutes. Its check buttons switch email type or restart the two-minute checking window. Keep the popup open while checking.
 
-Checks show inbox emails from the last ten minutes. Spam and other folders are excluded. Results from slower accounts may appear later.
+Checks look for matching codes or links in inbox mail from the last ten minutes. Spam and other folders are excluded. Results from slower accounts may appear later.
 
-Initial checks inspect the newest 30 messages in each inbox; later checks discover up to 30 newly arrived messages at a time. Messages larger than 1,000,000 bytes (1 MB), including attachments, are skipped. A recent email can therefore be missed in a busy inbox or if it is too large. If an expected result is absent, check Yahoo directly.
+The first check considers up to 30 of the newest messages per inbox. Later checks consider up to 30 new arrivals at a time. Checks read message bodies in batches and can defer older messages to a later check once a batch yields results. Messages larger than 1,000,000 bytes (1 MB), including attachments, are skipped. A recent email can therefore be missed in a busy inbox or if it is too large. If an expected result is absent, check Yahoo directly.
 
-Initial on-page code and link suggestions accept emails from the last ten minutes, including mail delivered before the page loaded. Later code steps allow emails received up to five seconds before the step appeared. Changing an existing link panel, recipient, or email purpose excludes mail dated before the next whole second. Resending clears older suggestions; an email arriving immediately after the click may also be excluded. Use the popup to choose other recent emails manually.
+When the code picker starts in a fresh document, it accepts emails from the last ten minutes, including mail delivered before the page loaded. Later code steps, including those after a URL change within the same document, allow emails received up to five seconds before the step appeared. Initial link suggestions also accept emails from the last ten minutes. Changing an existing link panel, recipient, or email purpose excludes mail dated before the next whole second. Resending clears older suggestions; an email arriving immediately after the click may also be excluded. Use the popup to choose other recent emails manually.
 
 ## Supported content and limits
 

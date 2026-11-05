@@ -173,7 +173,7 @@ export function startCodePicker({
     const checkToken = checks.start();
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
-      const { collectOnly } = scanSchedule.beginCheck();
+      const collectOnly = scanSchedule.shouldCollectOnly();
       const response = await requestInlineCheck(
         chrome.runtime,
         "codes",

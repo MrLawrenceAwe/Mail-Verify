@@ -11,11 +11,12 @@ export function createScanSchedule({ clock, intervalMs }) {
     get pollDelayMs() {
       return pending ? PENDING_SCAN_POLL_MS : intervalMs;
     },
-    beginCheck() {
+    // Call once per request. A full check advances the next full scan time.
+    shouldCollectOnly() {
       const now = clock.now();
       const collectOnly = pending && now < nextScanAt;
       if (!collectOnly) nextScanAt = now + intervalMs;
-      return { collectOnly };
+      return collectOnly;
     },
     recordResponse(scanPending) {
       pending = scanPending === true;

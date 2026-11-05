@@ -157,7 +157,7 @@ export function createPopupController({
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
-      const { collectOnly } = scanSchedule.beginCheck();
+      const collectOnly = scanSchedule.shouldCollectOnly();
       const response = await sendSessionRequest(mailType, collectOnly);
       if (!userActionInProgress && activeCheck === check) {
         const results = mailType === "codes"

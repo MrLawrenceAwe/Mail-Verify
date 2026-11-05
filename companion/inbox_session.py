@@ -131,7 +131,6 @@ class InboxSession:
         self.credentials = credentials
         self.connection = None
         self.discovery_cursor_uid = None
-        self.message_count = 0
         self.items_by_uid = {}
         self.pending_metadata_uids = set()
         self.pending_body_timestamps_seconds = {}
@@ -140,7 +139,6 @@ class InboxSession:
     def close(self):
         connection, self.connection = self.connection, None
         self.discovery_cursor_uid = None
-        self.message_count = 0
         self.items_by_uid.clear()
         self.pending_metadata_uids.clear()
         self.pending_body_timestamps_seconds.clear()
@@ -151,31 +149,40 @@ class InboxSession:
             except (OSError, imaplib.IMAP4.error):
                 pass
 
+    def _fetch_initial_metadata(self):
+        # Refresh the count on retries: a message may have been deleted
+        # between SELECT and the previous sequence-number FETCH.
+        status, count = self.connection.select("INBOX", readonly=True)
+        if status != "OK":
+            raise UserError("Yahoo could not open your inbox. Try checking again.")
+        message_count = int(count[0])
+        # Sequence numbers bound the first scan to the newest messages.
+        if not message_count:
+            self.discovery_cursor_uid = 0
+            return {}
+        first = max(1, message_count - MAX_CANDIDATE_MESSAGES + 1)
+        status, metadata = self.connection.fetch(
+            f"{first}:{message_count}", "(UID INTERNALDATE RFC822.SIZE)"
+        )
+        if status != "OK":
+            raise UserError("Yahoo could not inspect recent messages. Try checking again.")
+        candidates = parse_candidate_metadata(metadata)
+        # A successful FETCH can still omit a message. Repeat the bounded
+        # first scan on the next poll before advancing past its UID.
+        # Bodies already processed during those retries must not jump
+        # ahead of deferred or missing bodies again.
+        unprocessed = {
+            uid: details for uid, details in candidates.items()
+            if uid not in self.initial_processed_body_uids
+        }
+        if len(candidates) == message_count - first + 1:
+            self.discovery_cursor_uid = max(candidates)
+            self.initial_processed_body_uids.clear()
+        return unprocessed
+
     def _fetch_candidate_metadata(self):
         if self.discovery_cursor_uid is None:
-            # Sequence numbers bound the first scan to the newest messages.
-            if not self.message_count:
-                self.discovery_cursor_uid = 0
-                return {}
-            first = max(1, self.message_count - MAX_CANDIDATE_MESSAGES + 1)
-            status, metadata = self.connection.fetch(
-                f"{first}:{self.message_count}", "(UID INTERNALDATE RFC822.SIZE)"
-            )
-            if status != "OK":
-                raise UserError("Yahoo could not inspect recent messages. Try checking again.")
-            candidates = parse_candidate_metadata(metadata)
-            # A successful FETCH can still omit a message. Repeat the bounded
-            # first scan on the next poll before advancing past its UID.
-            # Bodies already processed during those retries must not jump
-            # ahead of deferred or missing bodies again.
-            unprocessed = {
-                uid: details for uid, details in candidates.items()
-                if uid not in self.initial_processed_body_uids
-            }
-            if len(candidates) == self.message_count - first + 1:
-                self.discovery_cursor_uid = max(candidates)
-                self.initial_processed_body_uids.clear()
-            return unprocessed
+            return self._fetch_initial_metadata()
 
         status, data = self.connection.uid(
             "search", None, "UID", f"{self.discovery_cursor_uid + 1}:*"
@@ -276,13 +283,6 @@ class InboxSession:
             if self.connection is None:
                 self.connection = connect_imap(self.credentials, deadline=self.deadline)
             self.connection.deadline = self.deadline
-            if self.discovery_cursor_uid is None:
-                # Refresh the count on retries: a message may have been deleted
-                # between SELECT and the previous sequence-number FETCH.
-                status, count = self.connection.select("INBOX", readonly=True)
-                if status != "OK":
-                    raise UserError("Yahoo could not open your inbox. Try checking again.")
-                self.message_count = int(count[0])
             metadata = self._fetch_candidate_metadata()
             # Mail can arrive while IMAP is searching or fetching metadata.
             # Judge arrival times against the completed fetch, not scan start.

@@ -2,7 +2,7 @@ export const MAIL_PRESENTATION = {
   codes: {
     resultLabel: "codes",
     actionLabel: "Fill code",
-    foundStatus: "Choose the code for this website. Checking for newer codes…",
+    foundStatus: "Choose the code from the email you requested.",
     popupEmptyStatus:
       "No recent code yet. Request one on the website; keep this popup open.",
   },
@@ -15,7 +15,7 @@ export const MAIL_PRESENTATION = {
       "No recent confirmation or sign-in link. Request one and keep this popup open.",
     waitingStatus: "Waiting for your confirmation or sign-in email…",
     guidance:
-      "Check the sender and link domain. Links may redirect. Opening a link in a new tab may confirm your account or sign you in.",
+      "Check the sender and link domain. Links may redirect. Opening a link may confirm your account or sign you in.",
   },
   passwordResetLinks: {
     resultLabel: "password reset links",
@@ -26,7 +26,7 @@ export const MAIL_PRESENTATION = {
       "No recent password reset link yet. Request one and keep this popup open.",
     waitingStatus: "Waiting for your password reset email…",
     guidance:
-      "Check the sender and link domain. Links may redirect. The reset link opens in a new tab.",
+      "Check the sender and link domain. Links may redirect.",
   },
 };
 

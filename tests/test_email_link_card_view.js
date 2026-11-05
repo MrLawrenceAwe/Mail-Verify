@@ -68,7 +68,7 @@ test("both link-card mail types show email details and their own action and guid
     assert.equal(action.href, item.url);
     assert.equal(action.target, "_blank");
     assert.equal(action.rel, "noopener noreferrer");
-    assert.match(root.innerHTML, /new tab/);
+    assert.match(root.innerHTML, /Check the sender and link domain/);
   }
 });
 

@@ -216,7 +216,7 @@ test("navigation discards a late response and code forms suppress the card", asy
   assert.equal(harness.state.views[0].removed, true);
   assert.equal(harness.state.views[0].links[0].uid, 1);
   harness.state.detected = true;
-  harness.state.hasCodePickerAnchor = true;
+  harness.state.hasDetectedCodeField = true;
   harness.state.mutate(stepMutation());
   await harness.run(250);
   assert.equal(harness.state.views.length, 1);

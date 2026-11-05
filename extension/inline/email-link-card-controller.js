@@ -28,7 +28,7 @@ export function startEmailLinkCard({
   environment = globalThis,
   detectStep = detectEmailLinkStep,
   page = getPageCoordinator(environment),
-  hasCodePickerAnchor = () => page.detectCodeField().ok,
+  hasDetectedCodeField = () => page.detectCodeField().ok,
   createView = createEmailLinkCardView,
 } = {}) {
   const {
@@ -73,7 +73,7 @@ export function startEmailLinkCard({
   async function checkForLinks() {
     polling.cancelScheduledCheck();
     if (!view || document.hidden || checks.busy) return;
-    if (lastURL !== location.href || hasCodePickerAnchor() || !isCurrentStep()) {
+    if (lastURL !== location.href || hasDetectedCodeField() || !isCurrentStep()) {
       syncLinkCard();
       return;
     }
@@ -86,7 +86,7 @@ export function startEmailLinkCard({
     const { mailType } = activeStep;
     const checkToken = checks.start();
     try {
-      const { collectOnly } = scanSchedule.beginCheck();
+      const collectOnly = scanSchedule.shouldCollectOnly();
       const response = await requestInlineCheck(
         chrome.runtime,
         mailType,
@@ -94,7 +94,7 @@ export function startEmailLinkCard({
       );
       if (!checks.isCurrent(checkToken) || !view || document.hidden)
         return;
-      if (lastURL !== location.href || hasCodePickerAnchor() || !isCurrentStep()) {
+      if (lastURL !== location.href || hasDetectedCodeField() || !isCurrentStep()) {
         syncLinkCard();
         return;
       }
@@ -144,7 +144,7 @@ export function startEmailLinkCard({
       unmountCard();
       return;
     }
-    const nextStep = hasCodePickerAnchor() ? null : detectStep(document);
+    const nextStep = hasDetectedCodeField() ? null : detectStep(document);
     if (nextStep === null) {
       unmountCard();
       dismissed = false;
@@ -192,7 +192,7 @@ export function startEmailLinkCard({
         if (
           document.hidden ||
           lastURL !== location.href ||
-          hasCodePickerAnchor() ||
+          hasDetectedCodeField() ||
           !isCurrentStep() ||
           !currentLinks.some(
             (current) =>
