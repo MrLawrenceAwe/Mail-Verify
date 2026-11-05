@@ -6,7 +6,7 @@ import time
 import socket
 import unittest
 from support.email_messages import make_raw_email
-from unittest.mock import patch
+from unittest.mock import Mock, PropertyMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
 import inbox_session
@@ -14,6 +14,24 @@ from support.imap_responses import body_response, metadata_response
 
 
 class InboxSessionTests(unittest.TestCase):
+    def test_scan_sets_deadline_only_on_an_existing_connection(self):
+        session = inbox_session.InboxSession({})
+        connection = Mock()
+        deadline = PropertyMock()
+        type(connection).deadline = deadline
+        with patch.object(inbox_session, "connect_imap", return_value=connection) as connect, patch.object(
+            session, "_fetch_candidate_metadata", return_value={}
+        ):
+            session.deadline = 100
+            session.scan_inbox()
+            connect.assert_called_once_with({}, deadline=100)
+            deadline.assert_not_called()
+
+            session.deadline = 200
+            session.scan_inbox()
+            deadline.assert_called_once_with(200)
+        session.close()
+
     def test_mail_arriving_during_search_retains_its_arrival_time_after_resend(self):
         base = 1_790_000_000
         arrival = base + 1

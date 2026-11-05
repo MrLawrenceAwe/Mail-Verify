@@ -39,6 +39,19 @@ test("collection requests preserve their mode and pending scan status", async ()
   assert.equal((await pending).scanPending, true);
 });
 
+test("inline check rejects failed responses and closes the port", async () => {
+  for (const [response, message] of [
+    [{ ok: false, error: "Connect Yahoo Mail first." }, "Connect Yahoo Mail first."],
+    [undefined, "Could not check your inboxes."],
+  ]) {
+    const chromeRuntime = runtime();
+    const pending = requestInlineCheck(chromeRuntime, "codes");
+    chromeRuntime.respond(response);
+    await assert.rejects(pending, { message });
+    assert.equal(chromeRuntime.closed, true);
+  }
+});
+
 test("inline check reports a disconnected service worker", async () => {
   const chromeRuntime = runtime();
   const pending = requestInlineCheck(chromeRuntime, "confirmationLinks");

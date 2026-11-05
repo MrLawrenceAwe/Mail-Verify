@@ -70,10 +70,19 @@ export function startEmailLinkCard({
     dismissed = true;
     unmountCard();
   }
+  function pageStepChanged() {
+    return lastURL !== location.href || hasDetectedCodeField() || !isCurrentStep();
+  }
+  function canApplyCheck(token) {
+    if (!checks.isCurrent(token) || !view || document.hidden) return false;
+    if (!pageStepChanged()) return true;
+    syncLinkCard();
+    return false;
+  }
   async function checkForLinks() {
     polling.cancelScheduledCheck();
     if (!view || document.hidden || checks.busy) return;
-    if (lastURL !== location.href || hasDetectedCodeField() || !isCurrentStep()) {
+    if (pageStepChanged()) {
       syncLinkCard();
       return;
     }
@@ -92,14 +101,7 @@ export function startEmailLinkCard({
         mailType,
         collectOnly,
       );
-      if (!checks.isCurrent(checkToken) || !view || document.hidden)
-        return;
-      if (lastURL !== location.href || hasDetectedCodeField() || !isCurrentStep()) {
-        syncLinkCard();
-        return;
-      }
-      if (!response?.ok)
-        throw new Error(response?.error || "Could not check your inboxes.");
+      if (!canApplyCheck(checkToken)) return;
       scanSchedule.recordResponse(response.scanPending);
       currentLinks = selectSuggestedEmailLinks(
         response[mailType] || [],
@@ -118,13 +120,12 @@ export function startEmailLinkCard({
             : MAIL_PRESENTATION[mailType].waitingStatus,
       );
     } catch (error) {
-      if (checks.isCurrent(checkToken) && view) {
-        checkIssueMessage = error.message;
-        scanSchedule.clearPending();
-        currentLinks = [];
-        view.renderLinks(currentLinks);
-        view.setStatus(error.message);
-      }
+      if (!canApplyCheck(checkToken)) return;
+      checkIssueMessage = error.message;
+      scanSchedule.clearPending();
+      currentLinks = [];
+      view.renderLinks(currentLinks);
+      view.setStatus(error.message);
     } finally {
       const outcome = checks.finish(checkToken);
       if (outcome === "stale" || !view || document.hidden) return;

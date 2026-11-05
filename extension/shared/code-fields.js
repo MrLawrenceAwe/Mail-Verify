@@ -4,7 +4,53 @@ export function detectOrFillCodeFields({
   candidateCache,
   expectedAnchor,
   trackedAnchor,
+  roots,
+  getStyle,
 } = {}) {
+  // Chrome serializes this function for popup fills, including this traversal.
+  function readVisibleContextText(contextRoots, readStyle = getComputedStyle) {
+    let remainingNodes = 500,
+      remainingText = 10_000;
+    const parts = [];
+    for (const root of contextRoots) {
+      if (parts.length) parts.push(" ");
+      for (let node = root; node; ) {
+        if (--remainingNodes < 0) return null;
+        const explicitlyHidden =
+          node.hidden ||
+          node.getAttribute?.("aria-hidden") === "true" ||
+          /^(SCRIPT|STYLE|TEMPLATE)$/.test(node.tagName);
+        const style =
+          !explicitlyHidden && node.nodeType === 1 ? readStyle(node) : null;
+        const skip =
+          explicitlyHidden ||
+          (style &&
+            (style.display === "none" ||
+              /^(hidden|collapse)$/.test(style.visibility) ||
+              style.opacity === "0"));
+        if (!skip && node.nodeType === 3) {
+          const value = node.data;
+          if (value.length > remainingText) return null;
+          remainingText -= value.length;
+          parts.push(value);
+        } else if (
+          !skip &&
+          /^(P|DIV|FORM|BR|LI|SECTION|H[1-6])$/.test(node.tagName)
+        ) {
+          parts.push(" ");
+        }
+        if (!skip && node.firstChild) {
+          node = node.firstChild;
+          continue;
+        }
+        while (node !== root && !node.nextSibling) node = node.parentNode;
+        node = node === root ? null : node.nextSibling;
+      }
+    }
+    return parts.join("");
+  }
+
+  if (action === "readContextText") return readVisibleContextText(roots, getStyle);
   if (action !== "detect" && action !== "fill")
     return { ok: false, error: "Unsupported code field action." };
   const detectOnly = action === "detect";
@@ -81,42 +127,6 @@ export function detectOrFillCodeFields({
     return { roots, parent: container.parentElement };
   };
   const contextMatches = new Map();
-  // Keep bounded traversal inside the function Chrome serializes for popup fills.
-  const readVisibleContextText = (root) => {
-    let remainingNodes = 500,
-      remainingText = 10_000;
-    const parts = [];
-    for (let node = root; node; ) {
-      if (--remainingNodes < 0) return null;
-      const style = node.nodeType === 1 ? getComputedStyle(node) : null;
-      const skip =
-        node.hidden ||
-        node.getAttribute?.("aria-hidden") === "true" ||
-        /^(SCRIPT|STYLE|TEMPLATE)$/.test(node.tagName) ||
-        (style &&
-          (style.display === "none" ||
-            /^(hidden|collapse)$/.test(style.visibility) ||
-            style.opacity === "0"));
-      if (!skip && node.nodeType === 3) {
-        const value = node.data;
-        if (value.length > remainingText) return null;
-        remainingText -= value.length;
-        parts.push(value);
-      } else if (
-        !skip &&
-        /^(P|DIV|FORM|BR|LI|SECTION|H[1-6])$/.test(node.tagName)
-      ) {
-        parts.push(" ");
-      }
-      if (!skip && node.firstChild) {
-        node = node.firstChild;
-        continue;
-      }
-      while (node !== root && !node.nextSibling) node = node.parentNode;
-      node = node === root ? null : node.nextSibling;
-    }
-    return parts.join("");
-  };
   // A bare "code" may mean a coupon, referral, or product code.
   const hasContextualCodeHint = (input, hints) => {
     const hintText = hints.filter(Boolean).join(" ");
@@ -135,7 +145,7 @@ export function detectOrFillCodeFields({
       if (!contextMatches.has(root))
         contextMatches.set(
           root,
-          verificationText.test(readVisibleContextText(root) || ""),
+          verificationText.test(readVisibleContextText([root]) || ""),
         );
       if (contextMatches.get(root)) return true;
     }

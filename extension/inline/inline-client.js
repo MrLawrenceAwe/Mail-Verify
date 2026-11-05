@@ -5,7 +5,8 @@ export function requestInlineCheck(runtime, mailType, collectOnly = false) {
     port.onMessage.addListener((response) => {
       if (settled) return;
       settled = true;
-      resolve(response);
+      if (response?.ok) resolve(response);
+      else reject(new Error(response?.error || "Could not check your inboxes."));
       port.disconnect();
     });
     port.onDisconnect.addListener(() => {

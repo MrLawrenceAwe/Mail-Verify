@@ -269,7 +269,7 @@ export function createPopupController({
     if (tab?.url?.startsWith("https://")) targetTab = tab;
     view.setCodeTargetPage(targetTab);
     try {
-      const result = await sendSessionRequest("status");
+      const result = await sendOneOffRequest({ action: "status" });
       if (result.accountEmails?.length)
         applyConnectedAccounts(result.accountEmails);
       else {

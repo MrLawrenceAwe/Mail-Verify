@@ -50,17 +50,38 @@ Account-scan and host tests use `tests/support/account_scans.py` to create manag
 
 ## Synthetic previews
 
-Run `python3 -m http.server 8767 --bind 127.0.0.1` from the project root for all previews below.
+Run `python3 -m http.server 8767 --bind 127.0.0.1` from the project root. All previews use synthetic mail. When testing edits, disable caching or use a fresh local port so Chrome reloads imported modules. For fixtures with a replacement delivery button, wait at least one second after resending before delivering the replacement.
 
-Open the [interactive code preview](http://127.0.0.1:8767/docs/preview.html?interactive). The fixture does not access Yahoo. **Resend email** and **Send again** must immediately clear the old suggestion. Wait at least one second after resending, then click **Deliver replacement code** and verify that the replacement suggestion fills `654321`.
+In the [interactive code preview](http://127.0.0.1:8767/docs/preview.html?interactive), **Resend email** and **Send again** must immediately clear the old suggestion. Click **Deliver replacement code** and verify that the new suggestion fills `654321`.
 
-[Modal and link-step preview](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html) supplies synthetic mail for modal and link-step checks. Use [modal-code](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-code) to fill a code in a native modal, [modal-reset](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-reset) to open a reset link from a modal, or [page-reset](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=page-reset) for a password-reset waiting panel outside a modal. Use the [scaled and clipped reset dialog](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-reset&transform=1) to check positioning. **Update connection status** must retain the offered link; **Change recipient** and **Resend email** must clear it. Open [stacked dialogs](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-reset&stacked=1) or [stacked dialogs with the active dialog first in DOM order](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-reset&stacked=reverse). Suggestions must belong to the active dialog and remain usable. These fixtures do not access Yahoo. When testing edits, serve with caching disabled or use a fresh local port so Chrome reloads imported modules.
+### Modal and link-step scenarios
+
+In the reset scenarios, **Update connection status** must retain the offered link. **Change recipient** and **Resend email** must clear it. Start each check with a fresh suggestion.
+
+| Preview | Expected result |
+| --- | --- |
+| [Code in a modal](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-code) | The suggestion fills the verification field in the dialog. |
+| [Reset link in a modal](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-reset) | The suggestion opens the reset link. |
+| [Reset link on the page](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=page-reset) | The waiting panel shows the reset suggestion outside a dialog. |
+| [Scaled and clipped reset dialog](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-reset&transform=1) | The suggestion stays positioned and usable despite the dialog’s transform and clipping. |
+| [Stacked dialogs](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-reset&stacked=1) and [reversed DOM order](http://127.0.0.1:8767/tests/fixtures/modal-suggestions-preview.html?mode=modal-reset&stacked=reverse) | In both variants the suggestion belongs to the active dialog and remains usable. |
+
+### Verification-step scenarios
+
+In each variant, **Resend SMS code** must retain the email result and **Resend verification email** must clear it. Use **Deliver replacement email** after the resend delay.
+
+| Preview | Additional check |
+| --- | --- |
+| [Code](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=codes) | **Replace identical input** retains the unused code. Selecting it fills the replacement input. |
+| [Confirmation link](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=confirmationLinks) | The replacement appears as a confirmation suggestion. |
+| [Password reset link](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=passwordResetLinks) | The replacement appears as a reset suggestion. |
+| [Code with both resend controls in one form](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=codes&sameForm=1) | **Resend SMS code** still retains the email result when both controls share the form. |
+
+### Field and mounting scenarios
 
 [Independent numeric fields preview](http://127.0.0.1:8767/tests/fixtures/inline-numeric-fields-preview.html) checks two independent full-length numeric verification fields in one form. Selecting the email-code suggestion must fill the email field and retain the phone field’s existing value.
 
 [Mixed numeric fields preview](http://127.0.0.1:8767/tests/fixtures/mixed-numeric-code-preview.html) combines six numeric email-code boxes with a full-length numeric phone-code field. The initial suggestion must fill only the phone field. **Test split email fields** focuses an unlabelled email digit; the next suggestion must fill those six boxes and preserve the phone field.
-
-[Verification step preview](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html) checks resend scope and verification-field replacement. Use [codes](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=codes), [confirmationLinks](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=confirmationLinks), or [passwordResetLinks](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=passwordResetLinks). **Resend SMS code** must retain the existing email result; **Resend verification email** must clear it. In code mode, **Replace identical input** must retain the unused code, and selecting it must report a successful fill in the current input. In the [same-form variant](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=codes&sameForm=1), the SMS resend shares the email form and must still retain the email result. After resending, wait at least one second before **Deliver replacement email**.
 
 [Direct code fill preview](http://127.0.0.1:8767/tests/fixtures/direct-code-fill-preview.html) checks direct filling across four independent numeric fields: **Fill selected email code** must report PASS and preserve the other three populated codes.
 

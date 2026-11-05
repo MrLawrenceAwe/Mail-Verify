@@ -65,6 +65,13 @@ test("failed saving after polling expires retains its error without restarting c
   assert.equal(timers.length, 0);
 });
 
+test("checks account status outside the reusable inbox session", async () => {
+  const { controls, state } = await createPopupHarness({ account: null });
+  assert.deepEqual(state.requests, [{ action: "status" }]);
+  assert.deepEqual(state.sessionRequests, []);
+  assert.equal(controls.accountSetup.hidden, false);
+});
+
 test("shows installation guidance only for unavailable companions", async () => {
   for (const statusError of [
     new CompanionUnavailableError(),
@@ -92,8 +99,8 @@ test("removes an account and recovers from errors", async () => {
     const { controls, timers, state } = await createPopupHarness();
     state.failRemove = failRemove;
     await controls.accounts.querySelectorAll("button")[0].trigger();
-    assert.equal(state.requests[0].action, "removeAccount");
-    assert.equal(state.requests[0].email, "test@yahoo.com");
+    assert.equal(state.requests.at(-1).action, "removeAccount");
+    assert.equal(state.requests.at(-1).email, "test@yahoo.com");
     assert.equal(timers.length, failRemove ? 1 : 0);
     assert.equal(controls.connectedAccountsPanel.hidden, !failRemove);
     assert.equal(controls.checkCodes.disabled, false);
@@ -132,8 +139,8 @@ test("does not remove an account while another account is being added", async ()
   const adding = controls.accountForm.trigger("submit");
   assert.equal(controls.accounts.querySelectorAll("button")[0].disabled, true);
   await controls.accounts.querySelectorAll("button")[0].trigger();
-  assert.equal(state.requests.length, 1);
-  assert.equal(state.requests[0].action, "saveAccount");
+  assert.equal(state.requests.length, 2);
+  assert.equal(state.requests.at(-1).action, "saveAccount");
   finishAdd({ accountEmails: ["test@yahoo.com", "two@yahoo.com"] });
   await adding;
   assert.equal(controls.accounts.querySelectorAll("button")[0].disabled, false);
@@ -147,7 +154,7 @@ test("connects an account without retaining the form password", async () => {
   await controls.accountForm.trigger("submit");
   await waitForAsyncCallbacks();
   assert.equal(controls.password.value, "");
-  assert.deepEqual(state.requests[0], {
+  assert.deepEqual(state.requests.at(-1), {
     action: "saveAccount",
     email: "test@yahoo.com",
     password: "app-password",

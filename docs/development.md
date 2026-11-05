@@ -54,7 +54,7 @@ Each native-host process has its own thread pool with up to four concurrent acco
 
 Account failures remain visible through collection polls and pending retries until that account completes a successful scan. When all accounts have warnings, checks return those warnings while any scan is pending and report an error once all scans settle. Removing an account, changing credentials or mail type, or closing the manager clears its retained failure.
 
-Each worker uses a 25-second scan budget, applying the remaining budget to blocking IMAP reads with a maximum socket timeout of 15 seconds. Session requests have a 35-second companion watchdog; account setup allows 60 seconds for login and Keychain access. A watchdog disconnects the native port, clears the pending request, and allows retry. One-off account operations use their own native port so they can also be disconnected on timeout.
+Each worker uses a 25-second scan budget, applying the remaining budget to blocking IMAP reads with a maximum socket timeout of 15 seconds. Session requests have a 35-second companion watchdog; account setup allows 60 seconds for login and Keychain access. A watchdog disconnects the native port, clears the pending request, and allows retry. Account status, saving, and removal each use a one-off native port so they can also be disconnected on timeout.
 
 Background sessions close after 15 seconds without a new check. The popup reuses its session while open. Requests of the same mail type share an in-flight native request when it can satisfy both. A full check arriving during a collection-only request queues behind it. Separate sessions per type prevent one request from consuming another type’s results.
 

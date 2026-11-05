@@ -157,6 +157,13 @@ export function startCodePicker({
     polling.restart(checkForCodes);
     positionPicker(field);
   }
+  function canApplyCheck(token) {
+    if (lastURL !== location.href) {
+      syncPicker();
+      return false;
+    }
+    return checks.isCurrent(token) && !!view;
+  }
   async function checkForCodes() {
     polling.cancelScheduledCheck();
     if (lastURL !== location.href) {
@@ -179,13 +186,7 @@ export function startCodePicker({
         "codes",
         collectOnly,
       );
-      if (lastURL !== location.href) {
-        syncPicker();
-        return;
-      }
-      if (!checks.isCurrent(checkToken) || !view) return;
-      if (!response?.ok)
-        throw new Error(response?.error || "Could not check your inboxes.");
+      if (!canApplyCheck(checkToken)) return;
       scanSchedule.recordResponse(response.scanPending);
       checkIssueMessage = response.warnings?.length
         ? formatAccountCheckWarnings(response.warnings)
@@ -209,12 +210,11 @@ export function startCodePicker({
           : "Waiting for an email code…";
       view.setStatus(status);
     } catch (error) {
-      if (checks.isCurrent(checkToken) && view) {
-        checkIssueMessage = error.message;
-        scanSchedule.clearPending();
-        view.clearCodes();
-        view.setStatus(error.message);
-      }
+      if (!canApplyCheck(checkToken)) return;
+      checkIssueMessage = error.message;
+      scanSchedule.clearPending();
+      view.clearCodes();
+      view.setStatus(error.message);
     } finally {
       const outcome = checks.finish(checkToken);
       if (outcome === "stale") return;

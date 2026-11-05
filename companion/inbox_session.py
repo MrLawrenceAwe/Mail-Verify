@@ -282,7 +282,8 @@ class InboxSession:
         try:
             if self.connection is None:
                 self.connection = connect_imap(self.credentials, deadline=self.deadline)
-            self.connection.deadline = self.deadline
+            else:
+                self.connection.deadline = self.deadline
             metadata = self._fetch_candidate_metadata()
             # Mail can arrive while IMAP is searching or fetching metadata.
             # Judge arrival times against the completed fetch, not scan start.

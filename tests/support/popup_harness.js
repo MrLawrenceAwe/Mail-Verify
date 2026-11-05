@@ -98,10 +98,6 @@ export async function createPopupHarness({
     },
     async sendSessionRequest(action, collectOnly = false) {
       state.sessionRequests.push({ action, collectOnly });
-      if (action === "status") {
-        if (statusError) throw statusError;
-        return { accountEmails: account ? [account] : [] };
-      }
       const fetchResults = mailHandlers.get(action);
       assert.ok(fetchResults, `Unsupported mock session request: ${action}`);
       return {
@@ -112,6 +108,10 @@ export async function createPopupHarness({
     },
     async sendOneOffRequest(request) {
       state.requests.push(request);
+      if (request.action === "status") {
+        if (statusError) throw statusError;
+        return { accountEmails: account ? [account] : [] };
+      }
       if (state.sendOneOff) return state.sendOneOff(request);
       if (state.failRemove) throw Error("Keychain unavailable");
       return {
