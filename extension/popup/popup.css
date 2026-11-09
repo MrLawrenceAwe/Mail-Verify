@@ -201,3 +201,38 @@ footer {
 .error {
   color: #ad304a !important;
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    color: #f0eaf8;
+    background: #18131f;
+  }
+  header, .card, input {
+    background: #282132;
+  }
+  header, footer {
+    border-color: #453a51;
+  }
+  .card, input {
+    border-color: #51435f;
+  }
+  .mark span {
+    border-color: #282132;
+  }
+  header p, #status, .hint, .subject, footer {
+    color: #c2b5ce;
+  }
+  a, .account-email {
+    color: #c8a8ff;
+  }
+  .button-secondary {
+    color: #d5bdf2;
+  }
+  .button-secondary:hover {
+    background: #423151;
+  }
+  .error {
+    color: #ff9eaf !important;
+  }
+}

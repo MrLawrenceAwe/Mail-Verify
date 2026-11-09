@@ -100,6 +100,24 @@ export function createCodePickerView(document, { onClose, onRetry, onFill }) {
       #close:hover {
         background: #0001;
       }
+      @media (prefers-color-scheme: dark) {
+        section {
+          color-scheme: dark;
+          border-color: #555b68;
+          background: #242832;
+          color: #edf0f6;
+          box-shadow: 0 2px 8px #0008;
+        }
+        button:focus-visible {
+          outline-color: #a9c4ff;
+        }
+        #retry, #close {
+          color: #d1d8e5;
+        }
+        #retry:hover, #close:hover {
+          background: #ffffff24;
+        }
+      }
     </style>
     <section aria-label="Mail Verify code suggestions">
       <div id="results"></div>

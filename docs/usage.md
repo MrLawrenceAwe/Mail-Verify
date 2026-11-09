@@ -2,6 +2,8 @@
 
 ## Use
 
+The popup and on-page suggestions follow Chrome’s light or dark colour scheme automatically.
+
 | Email type | On-page suggestion | Selected action | Popup check button |
 | --- | --- | --- | --- |
 | Verification code | Beside a supported code field | **Fill code**, without clicking Submit | **Find verification codes** |

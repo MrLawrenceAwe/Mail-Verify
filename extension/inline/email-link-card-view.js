@@ -84,6 +84,28 @@ export function createEmailLinkCardView(
         border-radius: 7px;
         text-align: center;
       }
+      @media (prefers-color-scheme: dark) {
+        section {
+          color-scheme: dark;
+          border-color: #4c5a70;
+          background: #202a38;
+          color: #edf2fa;
+          box-shadow: 0 6px 28px #0008;
+        }
+        button {
+          background: #36455a;
+          color: #edf2fa;
+        }
+        button:focus-visible, a:focus-visible {
+          outline-color: #a9c4ff;
+        }
+        small {
+          color: #c1cede;
+        }
+        article {
+          border-color: #45546a;
+        }
+      }
     </style>
     <section aria-label="${title}">
       <header>
