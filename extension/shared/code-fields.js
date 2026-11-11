@@ -1,4 +1,4 @@
-export function detectOrFillCodeFields({
+export function runCodeFieldAction({
   action,
   code,
   candidateCache,

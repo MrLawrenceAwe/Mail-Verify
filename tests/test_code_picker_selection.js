@@ -14,7 +14,7 @@ test("picker passes its mounted field to the fill action", async () => {
     receivedAt: 9_000,
   });
   const { results } = createCodePickerHarness({
-    detectOrFillCodeFields: (request) => {
+    runCodeFieldAction: (request) => {
       if (request.action === "fill") {
         fills.push(request);
         return { ok: true };
@@ -51,7 +51,7 @@ test("selection revalidates the verification step before the queued discovery ru
       receivedAt: 9000,
     });
     const { timers, results } = createCodePickerHarness({
-      detectOrFillCodeFields: ({ action }) => {
+      runCodeFieldAction: ({ action }) => {
         if (action === "fill") {
           fills++;
           return { ok: true };
@@ -143,7 +143,7 @@ test("switching CSS-hidden recipients blocks the previous code before discovery 
     const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 20000 };
     let codes = [oldCode];
     const { results, timers } = createCodePickerHarness({
-      detectOrFillCodeFields: ({ action }) => {
+      runCodeFieldAction: ({ action }) => {
         if (action === "fill") {
           fills++;
           return { ok: true };
@@ -201,7 +201,7 @@ test("failed fills retain specific field guidance and use a fallback when absent
   ]) {
     const anchor = {};
     const { results, elements } = createCodePickerHarness({
-      detectOrFillCodeFields: ({ action }) =>
+      runCodeFieldAction: ({ action }) =>
         action === "fill"
           ? { ok: false, error }
           : {
@@ -254,7 +254,7 @@ test("visible code suggestions distinguish senders and inboxes without hovering"
     }),
   ];
   const { results } = createCodePickerHarness({
-    detectOrFillCodeFields: () => ({
+    runCodeFieldAction: () => ({
       ok: true,
       anchor: {},
       rect: { top: 100, bottom: 130, left: 20, right: 200 },

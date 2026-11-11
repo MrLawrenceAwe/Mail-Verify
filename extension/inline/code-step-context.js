@@ -1,10 +1,10 @@
-import { detectOrFillCodeFields } from "../shared/code-fields.js";
+import { runCodeFieldAction } from "../shared/code-fields.js";
 import { recipientKeyFromText } from "./recipient-identity.js";
 
 // Step tracking reads bounded DOM text, never aggregate element textContent.
 // An incomplete context cannot establish that the recipient changed.
 export function readCodeStepContext({ roots, parent }, getStyle) {
-  const text = detectOrFillCodeFields({
+  const text = runCodeFieldAction({
     action: "readContextText",
     roots,
     getStyle,

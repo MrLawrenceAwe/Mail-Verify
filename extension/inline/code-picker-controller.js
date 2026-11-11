@@ -13,7 +13,7 @@ import {
   belongsToVerificationStep,
 } from "./request-controls.js";
 import { readCodeStepContext } from "./code-step-context.js";
-import { detectOrFillCodeFields as defaultDetectOrFillCodeFields } from "../shared/code-fields.js";
+import { runCodeFieldAction as defaultRunCodeFieldAction } from "../shared/code-fields.js";
 import { calculatePickerPosition } from "./code-picker-position.js";
 import { createCodePickerView } from "./code-picker-view.js";
 import {
@@ -30,8 +30,8 @@ import { mountSuggestion, suggestionMountRoot } from "./suggestion-mount.js";
 
 export function startCodePicker({
   environment = globalThis,
-  detectOrFillCodeFields = defaultDetectOrFillCodeFields,
-  page = getPageCoordinator(environment, detectOrFillCodeFields),
+  runCodeFieldAction = defaultRunCodeFieldAction,
+  page = getPageCoordinator(environment, runCodeFieldAction),
 } = {}) {
   const {
     document,
@@ -139,7 +139,7 @@ export function startCodePicker({
           positionPicker();
           return;
         }
-        const result = detectOrFillCodeFields({
+        const result = runCodeFieldAction({
           action: "fill",
           code: item.code,
           expectedAnchor: anchor,
@@ -183,7 +183,7 @@ export function startCodePicker({
     const checkToken = checks.start();
     if (!view.hasCodes()) view.setStatus("Checking your inboxes…");
     try {
-      const collectOnly = scanSchedule.shouldCollectOnly();
+      const collectOnly = scanSchedule.beginRequest();
       const response = await requestInlineCheck(
         chrome.runtime,
         "codes",

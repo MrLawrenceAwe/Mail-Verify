@@ -22,13 +22,13 @@
     </main>
     <p id="feedback" role="status"></p>
     <script type="module">
-      import { detectOrFillCodeFields } from "../../extension/shared/code-fields.js";
+      import { runCodeFieldAction } from "../../extension/shared/code-fields.js";
 
       const inputs = [...document.querySelectorAll("input")];
       const feedback = document.querySelector("#feedback");
       document.querySelector("#fill").onclick = () => {
         inputs[0].focus();
-        const result = detectOrFillCodeFields({ action: "fill", code: "9876" });
+        const result = runCodeFieldAction({ action: "fill", code: "9876" });
         const values = inputs.map((input) => input.value);
         feedback.textContent = result.ok && values.join(",") === "9876,2222,3333,4444"
           ? "PASS: email code filled; all other codes unchanged."

@@ -9,7 +9,7 @@ test("a scheduled code check after expiry makes no request until an explicit ret
   let requests = 0;
   const anchor = {};
   const { timers, elements } = createCodePickerHarness({
-    detectOrFillCodeFields: () => ({
+    runCodeFieldAction: () => ({
       ok: true,
       anchor,
       rect: { top: 100, bottom: 130, left: 20, right: 200 },
@@ -43,7 +43,7 @@ test("checking completion is announced with results, no results, warnings, or er
       receivedAt: 9_000,
     });
     const { timers, results, elements } = createCodePickerHarness({
-      detectOrFillCodeFields: () => ({
+      runCodeFieldAction: () => ({
         ok: true,
         anchor,
         rect: { top: 100, bottom: 130, left: 20, right: 200 },
@@ -88,7 +88,7 @@ test("code picker collects pending scans quickly then resumes normal checks", as
     receivedAt: 9000,
   });
   const { timers, results } = createCodePickerHarness({
-    detectOrFillCodeFields: () => ({
+    runCodeFieldAction: () => ({
       ok: true,
       anchor,
       rect: { top: 100, bottom: 130, left: 20, right: 200 },
@@ -116,7 +116,7 @@ test("a slow account does not suppress normal code scans for healthy accounts", 
   const anchor = {};
   let now = 10000;
   const { timers } = createCodePickerHarness({
-    detectOrFillCodeFields: () => ({
+    runCodeFieldAction: () => ({
       ok: true,
       anchor,
       rect: { top: 100, bottom: 130, left: 20, right: 200 },
@@ -145,7 +145,7 @@ test("a failed inbox check removes previously offered codes", async () => {
   });
   let connected = true;
   const { timers, results, elements } = createCodePickerHarness({
-    detectOrFillCodeFields: () => ({
+    runCodeFieldAction: () => ({
       ok: true,
       anchor: {},
       candidateCache: { contextRoots: [] },
@@ -177,7 +177,7 @@ test("retry during an active check ignores its response and checks again immedia
   });
   const newCode = { ...oldCode, uid: 2, code: "222222", receivedAt: 10_000 };
   const { results, elements } = createCodePickerHarness({
-    detectOrFillCodeFields: () => ({
+    runCodeFieldAction: () => ({
       ok: true,
       anchor: {},
       candidateCache: { contextRoots: [] },
@@ -203,7 +203,7 @@ test("returning to a hidden tab starts a check while the old one is pending", as
   const requests = [];
   const anchor = {};
   const { environment, events, timers, results } = createCodePickerHarness({
-    detectOrFillCodeFields: () => ({
+    runCodeFieldAction: () => ({
       ok: true,
       anchor,
       candidateCache: { contextRoots: [] },

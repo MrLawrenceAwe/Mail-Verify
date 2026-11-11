@@ -94,7 +94,7 @@ export function startEmailLinkCard({
     const { mailType } = activeStep;
     const checkToken = checks.start();
     try {
-      const collectOnly = scanSchedule.shouldCollectOnly();
+      const collectOnly = scanSchedule.beginRequest();
       const response = await requestInlineCheck(
         chrome.runtime,
         mailType,

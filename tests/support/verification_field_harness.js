@@ -1,5 +1,5 @@
 import vm from "node:vm";
-import { detectOrFillCodeFields } from "../../extension/shared/code-fields.js";
+import { runCodeFieldAction } from "../../extension/shared/code-fields.js";
 
 const contextStyle = (node) =>
   node.fakeComputedStyle || {
@@ -68,7 +68,7 @@ export function createVerificationFieldHarness(overrides = {}) {
     ...overrides,
   });
   context.handle = vm.runInContext(
-    `(${detectOrFillCodeFields.toString()})`,
+    `(${runCodeFieldAction.toString()})`,
     context,
   );
   return context;

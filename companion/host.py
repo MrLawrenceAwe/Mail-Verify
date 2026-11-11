@@ -118,7 +118,11 @@ def main():
             except imaplib.IMAP4.error:
                 response = {
                     "ok": False,
-                    "error": "Yahoo rejected the connection. Check your email and app password, then reconnect.",
+                    "error": (
+                        "Yahoo rejected the connection. Use Add or update Yahoo account "
+                        "in the toolbar popup to check your email address and save "
+                        "a Yahoo-generated app password."
+                    ),
                 }
             except OSError:
                 response = {

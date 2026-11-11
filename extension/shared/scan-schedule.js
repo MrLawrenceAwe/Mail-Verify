@@ -12,7 +12,7 @@ export function createScanSchedule({ clock, intervalMs }) {
       return pending ? PENDING_SCAN_POLL_MS : intervalMs;
     },
     // Call once per request. A full check advances the next full scan time.
-    shouldCollectOnly() {
+    beginRequest() {
       const now = clock.now();
       const collectOnly = pending && now < nextScanAt;
       if (!collectOnly) nextScanAt = now + intervalMs;

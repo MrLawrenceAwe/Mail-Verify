@@ -15,7 +15,7 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 | On-page suggestions | `inline/` picker/link controllers, views, policies and positioning |
 | Page coordination | `page-coordinator.js`, modal mounting, mutation inspection and recipient/step detection |
 | Shared rules | `shared/` polling, scan scheduling, timing, link URLs and presentation |
-| Field detection and filling | `shared/code-fields.js`; helpers stay in its serialised entry point for Chrome injection |
+| Field detection and filling | `shared/code-fields.js`; `runCodeFieldAction()` dispatches detection, filling, and context-text reads and stays self-contained for Chrome injection |
 
 ### Request contract
 
@@ -29,7 +29,7 @@ Automatic checking runs in two-minute windows. Code suggestions normally check t
 
 Code-picker mounting starts a new checking window, including remounting the same step after a hidden tab returns or an offscreen field becomes visible. Its freshness cutoff stays unchanged for that step. Link-card remounting retains the existing deadline, including time spent hidden. Explicit retries, resends, and new verification steps start new windows; popup manual checks also renew the window.
 
-[Scan scheduling](../extension/shared/scan-schedule.js) decides between collection and full checks and supplies the next delay. [Polling lifecycle](../extension/shared/polling-lifecycle.js) owns timers, deadlines, response invalidation, and queued retries:
+[Scan scheduling](../extension/shared/scan-schedule.js) decides between collection and full checks and supplies the next delay. Call `beginRequest()` once per request: it returns the `collectOnly` flag and advances the next full-scan time when starting a full check. [Polling lifecycle](../extension/shared/polling-lifecycle.js) owns timers, deadlines, response invalidation, and queued retries:
 
 - Scheduling requires an explicit delay. Cancelling a timer retains the polling deadline.
 - Ending the polling window clears its timer and deadline; invalidating inline checks also invalidates active response bookkeeping. Neither cancels companion workers.

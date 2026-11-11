@@ -4,7 +4,7 @@ import {
   formatAccountCheckWarnings,
 } from "../shared/mail-presentation.js";
 import { isSupportedEmailLinkUrl } from "../shared/email-link-url.js";
-import { detectOrFillCodeFields } from "../shared/code-fields.js";
+import { runCodeFieldAction } from "../shared/code-fields.js";
 import {
   isFreshMessage,
   DEFAULT_SCAN_INTERVAL_MS,
@@ -102,7 +102,7 @@ export function createPopupController({
         );
       const [{ result }] = await chrome.scripting.executeScript({
         target: { tabId: targetTab.id },
-        func: detectOrFillCodeFields,
+        func: runCodeFieldAction,
         args: [{ action: "fill", code: item.code }],
       });
       if (!result?.ok)
@@ -155,7 +155,7 @@ export function createPopupController({
     let failed = false;
     view.setStatus("Checking your connected inboxes…");
     try {
-      const collectOnly = scanSchedule.shouldCollectOnly();
+      const collectOnly = scanSchedule.beginRequest();
       const response = await sendSessionRequest(mailType, collectOnly);
       if (!userActionInProgress && activeCheck === check) {
         const results = mailType === "codes"

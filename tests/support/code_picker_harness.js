@@ -3,7 +3,7 @@ import { createMockInlineRuntime } from "./mock_inline_runtime.js";
 import { createTimerQueue } from "./timer_queue.js";
 
 export function createCodePickerHarness({
-  detectOrFillCodeFields,
+  runCodeFieldAction,
   now = Date.now,
   check,
   activeElement,
@@ -86,12 +86,12 @@ export function createCodePickerHarness({
     clearTimeout: timers.clearTimeout,
     chrome: { runtime: createMockInlineRuntime(check) },
   };
-  const detectOrFill = (request) => {
-    const result = detectOrFillCodeFields(request);
+  const runWithDefaultStepContext = (request) => {
+    const result = runCodeFieldAction(request);
     return request.action === "detect"
       ? { stepContext: { roots: [], parent: undefined }, ...result }
       : result;
   };
-  startCodePicker({ environment, detectOrFillCodeFields: detectOrFill });
+  startCodePicker({ environment, runCodeFieldAction: runWithDefaultStepContext });
   return { environment, events, timers, results, elements };
 }

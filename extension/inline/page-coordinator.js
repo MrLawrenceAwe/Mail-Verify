@@ -1,10 +1,10 @@
-import { detectOrFillCodeFields as defaultDetectOrFillCodeFields } from "../shared/code-fields.js";
+import { runCodeFieldAction as defaultRunCodeFieldAction } from "../shared/code-fields.js";
 
 const coordinators = new WeakMap();
 
 export function getPageCoordinator(
   environment,
-  detectOrFillCodeFields = defaultDetectOrFillCodeFields,
+  runCodeFieldAction = defaultRunCodeFieldAction,
 ) {
   const { document, window, MutationObserver } = environment;
   if (coordinators.has(document)) return coordinators.get(document);
@@ -18,7 +18,7 @@ export function getPageCoordinator(
     },
     detectCodeField({ refresh = false, trackedAnchor } = {}) {
       if (refresh) candidateCache = undefined;
-      const field = detectOrFillCodeFields({
+      const field = runCodeFieldAction({
         action: "detect",
         candidateCache,
         trackedAnchor,
