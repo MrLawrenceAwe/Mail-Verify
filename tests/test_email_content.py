@@ -62,14 +62,14 @@ class VisibleEmailHTMLTests(unittest.TestCase):
             sys.path.insert(0, sys.argv[1])
             from code_extraction import extract_code_details
             from link_extraction import (
-                extract_confirmation_link_details,
+                extract_confirmation_or_signin_link_details,
                 extract_password_reset_link_details,
             )
             from inbox_session import MAX_MESSAGE_BYTES
             prefix = b"<span>" * 60000 + b"</div>" * 60000
             cases = (
                 (extract_code_details, b"Your security code is 123456", "code", "123456"),
-                (extract_confirmation_link_details,
+                (extract_confirmation_or_signin_link_details,
                  b'<a href="https://example.com/verify">Verify your email</a>',
                  "url", "https://example.com/verify"),
                 (extract_password_reset_link_details,

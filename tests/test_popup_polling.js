@@ -84,7 +84,7 @@ test("does not start a scheduled check after the deadline", async () => {
 test("popup completion retains mail errors and account warnings at either expiry boundary", async () => {
   for (const [control, fetchResults, label] of [
     ["checkCodes", "fetchCodes", "codes"],
-    ["checkConfirmationLinks", "fetchConfirmationLinks", "confirmation or sign-in links"],
+    ["checkConfirmationOrSignInLinks", "fetchConfirmationOrSignInLinks", "confirmation or sign-in links"],
     ["checkPasswordResetLinks", "fetchPasswordResetLinks", "password reset links"],
   ]) {
     for (const failed of [false, true]) {
@@ -143,16 +143,16 @@ test("successful automatic checks clear retained issues before popup completion"
 });
 
 test("failed selections after polling finishes retain their specific error", async () => {
-  for (const mailType of ["codes", "confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["codes", "confirmationOrSignInLinks", "passwordResetLinks"]) {
     for (const expired of [false, true]) {
       const { controls, timers, state } = await createPopupHarness();
       const control =
         mailType === "codes"
           ? controls.checkCodes
-          : mailType === "confirmationLinks"
-            ? controls.checkConfirmationLinks
+          : mailType === "confirmationOrSignInLinks"
+            ? controls.checkConfirmationOrSignInLinks
             : controls.checkPasswordResetLinks;
-      state.fetchConfirmationLinks = async () => [emailLinkMessage];
+      state.fetchConfirmationOrSignInLinks = async () => [emailLinkMessage];
       state.fetchPasswordResetLinks = async () => [emailLinkMessage];
       control.trigger();
       await waitForAsyncCallbacks();
@@ -197,14 +197,14 @@ test("retries temporary mail errors", async () => {
 
 test("a failed link check clears earlier confirmation links", async () => {
   const { controls, state } = await createPopupHarness();
-  state.fetchConfirmationLinks = async () => [emailLinkMessage];
-  controls.checkConfirmationLinks.trigger();
+  state.fetchConfirmationOrSignInLinks = async () => [emailLinkMessage];
+  controls.checkConfirmationOrSignInLinks.trigger();
   await waitForAsyncCallbacks();
   assert.equal(controls.results.querySelectorAll("button").length, 1);
-  state.fetchConfirmationLinks = async () => {
+  state.fetchConfirmationOrSignInLinks = async () => {
     throw Error("Temporary mail error");
   };
-  controls.checkConfirmationLinks.trigger();
+  controls.checkConfirmationOrSignInLinks.trigger();
   await waitForAsyncCallbacks();
   assert.equal(controls.results.querySelectorAll("button").length, 0);
 });
@@ -243,7 +243,7 @@ test("waits at least two seconds after successful checks without pending scans",
 
 test("finished link checks name the selected email purpose", async () => {
   for (const [control, label] of [
-    ["checkConfirmationLinks", "confirmation or sign-in links"],
+    ["checkConfirmationOrSignInLinks", "confirmation or sign-in links"],
     ["checkPasswordResetLinks", "password reset links"],
   ]) {
     const { controls, state, timers } = await createPopupHarness();
@@ -261,7 +261,7 @@ test("finished link checks name the selected email purpose", async () => {
 test("partial account failures keep popup results selectable and clear after recovery", async () => {
   for (const [control, fetchResults] of [
     ["checkCodes", "fetchCodes"],
-    ["checkConfirmationLinks", "fetchConfirmationLinks"],
+    ["checkConfirmationOrSignInLinks", "fetchConfirmationOrSignInLinks"],
     ["checkPasswordResetLinks", "fetchPasswordResetLinks"],
   ]) {
     const { controls, state } = await createPopupHarness();

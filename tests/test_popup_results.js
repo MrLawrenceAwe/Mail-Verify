@@ -128,9 +128,9 @@ test("checking again without an HTTPS target keeps code buttons disabled", async
 
 test("finds links only on request and opens only the selected link", async () => {
   const { controls, state, timers } = await createPopupHarness();
-  state.fetchConfirmationLinks = async () => [emailLinkMessage];
+  state.fetchConfirmationOrSignInLinks = async () => [emailLinkMessage];
   assert.deepEqual(state.opened, []);
-  controls.checkConfirmationLinks.trigger();
+  controls.checkConfirmationOrSignInLinks.trigger();
   await waitForAsyncCallbacks();
   assert.equal(controls.codeContext.hidden, true);
   assert.deepEqual(state.opened, []);
@@ -155,7 +155,7 @@ test("finds links only on request and opens only the selected link", async () =>
 
 test("checking again restores unchanged link action labels", async () => {
   for (const [checkControl, fetchResults, actionLabel] of [
-    ["checkConfirmationLinks", "fetchConfirmationLinks", "Open confirmation or sign-in link ↗"],
+    ["checkConfirmationOrSignInLinks", "fetchConfirmationOrSignInLinks", "Open confirmation or sign-in link ↗"],
     ["checkPasswordResetLinks", "fetchPasswordResetLinks", "Open reset link ↗"],
   ]) {
     const { controls, state } = await createPopupHarness();
@@ -190,8 +190,8 @@ test("rejects expired and unsafe links at click time", async () => {
   for (const scenario of ["expired", "unsafe"]) {
     const item = { ...emailLinkMessage };
     const { controls, state } = await createPopupHarness();
-    state.fetchConfirmationLinks = async () => [item];
-    controls.checkConfirmationLinks.trigger();
+    state.fetchConfirmationOrSignInLinks = async () => [item];
+    controls.checkConfirmationOrSignInLinks.trigger();
     await waitForAsyncCallbacks();
     if (scenario === "expired") item.receivedAt = -700000;
     else item.url = "http://example.com/confirm";
@@ -209,8 +209,8 @@ test("switching mail types ignores a pending code response", async () => {
       resolve = done;
     });
   controls.checkCodes.trigger();
-  state.fetchConfirmationLinks = async () => [emailLinkMessage];
-  controls.checkConfirmationLinks.trigger();
+  state.fetchConfirmationOrSignInLinks = async () => [emailLinkMessage];
+  controls.checkConfirmationOrSignInLinks.trigger();
   await waitForAsyncCallbacks();
   resolve([verificationCodeMessage]);
   await waitForAsyncCallbacks();
@@ -289,7 +289,7 @@ test("reset opening prevents duplicate selections while tab creation is pending"
 test("popup guidance follows the selected action and clears when returning to codes", async () => {
   const { controls } = await createPopupHarness();
   assert.equal(controls.linkGuidance.hidden, true);
-  controls.checkConfirmationLinks.trigger();
+  controls.checkConfirmationOrSignInLinks.trigger();
   await waitForAsyncCallbacks();
   assert.equal(controls.linkGuidance.hidden, false);
   assert.match(
@@ -310,7 +310,7 @@ test("popup guidance follows the selected action and clears when returning to co
 
 test("popup link results identify inbox and missing sender without empty subject rows", async () => {
   for (const [control, fetchResults] of [
-    ["checkConfirmationLinks", "fetchConfirmationLinks"],
+    ["checkConfirmationOrSignInLinks", "fetchConfirmationOrSignInLinks"],
     ["checkPasswordResetLinks", "fetchPasswordResetLinks"],
   ]) {
     const { controls, state } = await createPopupHarness();
@@ -333,7 +333,7 @@ test("popup link results identify inbox and missing sender without empty subject
 });
 
 test("unsupported link results cannot prevent valid popup results from rendering", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     for (const valid of [false, true]) {
       const { controls, state } = await createPopupHarness();
       const items = [
@@ -341,11 +341,11 @@ test("unsupported link results cannot prevent valid popup results from rendering
         { ...emailLinkMessage, url: "http://example.com/confirm" },
         ...(valid ? [emailLinkMessage] : []),
       ];
-      const checkButton = mailType === "confirmationLinks"
-        ? controls.checkConfirmationLinks
+      const checkButton = mailType === "confirmationOrSignInLinks"
+        ? controls.checkConfirmationOrSignInLinks
         : controls.checkPasswordResetLinks;
-      if (mailType === "confirmationLinks")
-        state.fetchConfirmationLinks = async () => items;
+      if (mailType === "confirmationOrSignInLinks")
+        state.fetchConfirmationOrSignInLinks = async () => items;
       else state.fetchPasswordResetLinks = async () => items;
       checkButton.trigger();
       await waitForAsyncCallbacks();

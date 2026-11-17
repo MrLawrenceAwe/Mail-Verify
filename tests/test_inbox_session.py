@@ -37,7 +37,7 @@ class InboxSessionTests(unittest.TestCase):
         arrival = base + 1
         for mail_type, body in (
             ("codes", "Your security code is 654321."),
-            ("confirmationLinks", "Confirm your account: https://example.test/confirm"),
+            ("confirmationOrSignInLinks", "Confirm your account: https://example.test/confirm"),
             ("passwordResetLinks", "Reset your password: https://example.test/reset"),
         ):
             with self.subTest(mail_type=mail_type):

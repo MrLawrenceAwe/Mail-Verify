@@ -10,7 +10,7 @@ import {
 const emailLinkMessage = makeEmailLinkMessage({ receivedAt: 10_000 });
 
 test("revealing a pre-existing waiting prompt mounts its link card", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const text =
       mailType === "passwordResetLinks"
         ? "Reset your password. Check your email."

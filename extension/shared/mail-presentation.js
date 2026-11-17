@@ -6,7 +6,7 @@ export const MAIL_PRESENTATION = {
     popupEmptyStatus:
       "No recent code yet. Request one on the website; keep this popup open.",
   },
-  confirmationLinks: {
+  confirmationOrSignInLinks: {
     resultLabel: "confirmation or sign-in links",
     actionLabel: "Open confirmation or sign-in link ↗",
     openedStatus: "Link opened in a new tab.",

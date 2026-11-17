@@ -1,4 +1,4 @@
-"""Extract an unambiguous confirmation or password reset link without visiting it."""
+"""Extract an unambiguous confirmation, sign-in, or password reset link without visiting it."""
 import email
 from email import policy
 import re
@@ -12,8 +12,8 @@ CONFIRMATION_LABEL_PATTERN = re.compile(r"\b(?:verify|confirm|activate)\s+(?:(?:
 SIGNUP_LABEL_PATTERN = re.compile(r"^sign(?:\s+|-)up(?:\s+(?:to|for|with)\s+\S.*?)?[\s:!.]*$", re.I)
 SIGNIN_LABEL_PATTERN = re.compile(r"^(?:sign(?:\s+|-)in|log(?:\s+|-)in)(?:\s+(?:to|with)\s+\S.*?)?[\s:!.]*$", re.I)
 AUTH_UNRELATED_PATTERN = re.compile(r"\b(?:newsletter|mailing\s+list|subscribe|subscription|help|support|documentation)\b", re.I)
-CONFIRMATION_EXCLUDED_LABEL_PATTERN = re.compile(rf"\b(?:{EXCLUDED_ACTIONS_REGEX}|password|reset)\b", re.I)
-CONFIRMATION_EXCLUDED_SUBJECT_PATTERN = re.compile(
+CONFIRMATION_OR_SIGNIN_EXCLUDED_LABEL_PATTERN = re.compile(rf"\b(?:{EXCLUDED_ACTIONS_REGEX}|password|reset)\b", re.I)
+CONFIRMATION_OR_SIGNIN_EXCLUDED_SUBJECT_PATTERN = re.compile(
     rf"\b(?:{EXCLUDED_ACTIONS_REGEX})\b|"
     r"\b(?:reset|forgot|change|update|recover)\b.{0,35}\bpassword\b|"
     r"\bpassword\b.{0,35}\b(?:reset|recovery)\b",
@@ -82,11 +82,16 @@ RESET_UNRELATED_LABEL_PATTERN = re.compile(
 RESET_EXCLUDED_PATTERN = re.compile(rf"\b(?:{EXCLUDED_ACTIONS_REGEX})\b", re.I)
 
 
-def extract_confirmation_link_details(raw_message):
-    return extract_labelled_link(raw_message, is_confirmation_label, CONFIRMATION_EXCLUDED_LABEL_PATTERN, CONFIRMATION_EXCLUDED_SUBJECT_PATTERN)
+def extract_confirmation_or_signin_link_details(raw_message):
+    return extract_labelled_link(
+        raw_message,
+        is_confirmation_or_signin_label,
+        CONFIRMATION_OR_SIGNIN_EXCLUDED_LABEL_PATTERN,
+        CONFIRMATION_OR_SIGNIN_EXCLUDED_SUBJECT_PATTERN,
+    )
 
 
-def is_confirmation_label(label):
+def is_confirmation_or_signin_label(label):
     return bool(CONFIRMATION_LABEL_PATTERN.search(label) or (
         (SIGNUP_LABEL_PATTERN.fullmatch(label.strip()) or SIGNIN_LABEL_PATTERN.fullmatch(label.strip()))
         and not AUTH_UNRELATED_PATTERN.search(label)

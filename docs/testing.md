@@ -73,7 +73,7 @@ In each variant, **Resend SMS code** must retain the email result and **Resend v
 | Preview | Additional check |
 | --- | --- |
 | [Code](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=codes) | **Replace identical input** retains the unused code. Selecting it fills the replacement input. |
-| [Confirmation link](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=confirmationLinks) | The replacement appears as a confirmation suggestion. |
+| [Confirmation link](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=confirmationOrSignInLinks) | The replacement appears as a confirmation suggestion. |
 | [Password reset link](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=passwordResetLinks) | The replacement appears as a reset suggestion. |
 | [Code with both resend controls in one form](http://127.0.0.1:8767/tests/fixtures/verification-step-preview.html?mode=codes&sameForm=1) | **Resend SMS code** still retains the email result when both controls share the form. |
 

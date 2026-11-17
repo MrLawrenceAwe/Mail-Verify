@@ -119,11 +119,11 @@ test("automatic checks pass partial account warnings to the picker", async () =>
 });
 
 test("background forwards collection mode and pending status across the native bridge", async () => {
-  const harness = setup({ ok: true, confirmationLinks: [], scanPending: true });
-  const result = await harness.request({}, "confirmationLinks", true);
+  const harness = setup({ ok: true, confirmationOrSignInLinks: [], scanPending: true });
+  const result = await harness.request({}, "confirmationOrSignInLinks", true);
   assert.equal(result.scanPending, true);
   assert.deepEqual(harness.nativeRequests, [
-    { action: "confirmationLinks", collectOnly: true },
+    { action: "confirmationOrSignInLinks", collectOnly: true },
   ]);
 });
 
@@ -154,18 +154,18 @@ test("a full check queues behind a collection and is shared by other full checks
 });
 
 test("link requests use their own result type and enforce active tab access", async () => {
-  const confirmationLinks = [
+  const confirmationOrSignInLinks = [
     { url: "https://example.com/confirm", receivedAt: 1000 },
   ];
-  const fixture = setup({ ok: true, confirmationLinks, scanPending: false });
-  assert.deepEqual(await fixture.request({}, "confirmationLinks"), {
+  const fixture = setup({ ok: true, confirmationOrSignInLinks, scanPending: false });
+  assert.deepEqual(await fixture.request({}, "confirmationOrSignInLinks"), {
     ok: true,
-    confirmationLinks,
+    confirmationOrSignInLinks,
     warnings: [],
     scanPending: false,
   });
   assert.equal(
-    (await fixture.request({ tab: { id: 2 } }, "confirmationLinks")).ok,
+    (await fixture.request({ tab: { id: 2 } }, "confirmationOrSignInLinks")).ok,
     false,
   );
 });
@@ -190,7 +190,7 @@ test("password reset requests return reset links and enforce active tab access",
 test("concurrent mail types keep native responses and session lifetimes separate", async () => {
   const results = {
     codes: [{ code: "123456", receivedAt: 1000 }],
-    confirmationLinks: [{ url: "https://example.com/confirm", receivedAt: 2000 }],
+    confirmationOrSignInLinks: [{ url: "https://example.com/confirm", receivedAt: 2000 }],
     passwordResetLinks: [{ url: "https://example.com/reset", receivedAt: 3000 }],
   };
   const fixture = setup(({ action }) => ({

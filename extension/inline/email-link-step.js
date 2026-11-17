@@ -49,7 +49,7 @@ function isWithinPanelBudget(panel) {
   return true;
 }
 
-function matchesConfirmationWaitingPrompt(text) {
+function matchesConfirmationOrSignInWaitingPrompt(text) {
   // Generic “Check your email” prompts qualify when no reset purpose is detected.
   const value = text.replace(/\s+/g, " ").trim();
   return (
@@ -134,8 +134,8 @@ export function detectEmailLinkStep(document) {
       continue;
     const mailType = matchesPasswordResetWaitingPrompt(text)
       ? "passwordResetLinks"
-      : matchesConfirmationWaitingPrompt(text)
-        ? "confirmationLinks"
+      : matchesConfirmationOrSignInWaitingPrompt(text)
+        ? "confirmationOrSignInLinks"
         : null;
     if (!mailType) continue;
     if (!emailLinkPanelIds.has(panel))

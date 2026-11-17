@@ -19,7 +19,9 @@ Chrome entry points and `popup.html` stay at the extension root. `popup/` contai
 
 ### Request contract
 
-The inline request field is `mailType`; native requests use `action`. Mail types and result keys are `codes`, `confirmationLinks`, and `passwordResetLinks`. Responses include `scanPending`; requests with `collectOnly: true` collect existing workers and cached results without starting scans. Update the companion and extension together when changing this contract.
+The inline request field is `mailType`; native requests use `action`. Mail types and result keys are `codes`, `confirmationOrSignInLinks`, and `passwordResetLinks`. Responses include `scanPending`; requests with `collectOnly: true` collect existing workers and cached results without starting scans. Update the companion and extension together when changing this contract.
+
+`confirmationOrSignInLinks` includes account/email confirmation, activation, sign-up, and sign-in links. These actions share one category; password reset links remain separate.
 
 Failed native responses include `ok: false` and a display message in `error`. Unsupported requests also include `errorCode: "unsupportedRequest"`; the client uses this identifier to show companion update guidance independently of the message wording.
 

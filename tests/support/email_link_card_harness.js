@@ -17,7 +17,7 @@ export const stepMutation = () => [
 
 export function createEmailLinkCardHarness(
   panel = null,
-  mailType = "confirmationLinks",
+  mailType = "confirmationOrSignInLinks",
   modal = null,
 ) {
   const timers = createTimerQueue(),

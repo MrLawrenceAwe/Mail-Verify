@@ -91,7 +91,7 @@ test("uses the same response errors for one-off and session requests", async () 
   await assert.rejects(unclassified, { message: "Unsupported request." });
 
   for (const request of [
-    () => client.sendSessionRequest("confirmationLinks"),
+    () => client.sendSessionRequest("confirmationOrSignInLinks"),
     () => client.sendOneOffRequest({ action: "saveAccount" }),
   ]) {
     const unsupported = request();

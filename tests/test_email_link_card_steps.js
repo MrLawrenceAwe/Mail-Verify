@@ -22,7 +22,7 @@ test("Outlier's waiting prompt starts a check and displays the link without a ma
 });
 
 test("the same waiting step moves its existing card into and out of a modal", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const harness = createEmailLinkCardHarness(null, mailType);
     await waitForAsyncCallbacks();
     const view = harness.state.views[0];
@@ -49,7 +49,7 @@ test("the same waiting step moves its existing card into and out of a modal", as
 });
 
 test("short-unit countdown ticks retain links and the polling deadline", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     for (const unit of ["s", "m"]) {
       const prompt =
         mailType === "passwordResetLinks"
@@ -88,7 +88,7 @@ test("short-unit countdown ticks retain links and the polling deadline", async (
 });
 
 test("countdown completion retains confirmation and reset links and the deadline", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     for (const countdown of [
       "Resend in 30 seconds",
       "Resend email in 30s",
@@ -137,7 +137,7 @@ test("countdown completion retains confirmation and reset links and the deadline
 });
 
 test("incidental panel status preserves links, selection, dismissal and the polling deadline", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const prompt =
       mailType === "passwordResetLinks"
         ? "Password reset. Check your email."
@@ -171,7 +171,7 @@ test("incidental panel status preserves links, selection, dismissal and the poll
 });
 
 test("a dismissed card returns for a new waiting step after the old step disappears", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const harness = createEmailLinkCardHarness(null, mailType);
     await waitForAsyncCallbacks();
     harness.state.views[0].callbacks.onClose();
@@ -210,7 +210,7 @@ test("navigation discards a late response and code forms suppress the card", asy
   await harness.run(250);
   finish({
     ok: true,
-    confirmationLinks: [{ ...emailLinkMessage, uid: 2 }],
+    confirmationOrSignInLinks: [{ ...emailLinkMessage, uid: 2 }],
   });
   await pending;
   assert.equal(harness.state.views[0].removed, true);
@@ -238,7 +238,7 @@ test("resend clears old links and expiry prevents opening", async () => {
 });
 
 test("input-button resends invalidate old confirmation and reset links", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const prompt =
       mailType === "passwordResetLinks"
         ? "Reset your password. Check your email."
@@ -338,7 +338,7 @@ test("a new confirmation step on the same URL clears links from the previous ste
   harness.state.now = 21_000;
   harness.state.respond = async () => ({
     ok: true,
-    confirmationLinks: [
+    confirmationOrSignInLinks: [
       emailLinkMessage,
       { ...emailLinkMessage, uid: 2, receivedAt: 21_000 },
     ],
@@ -387,7 +387,7 @@ test("a reused confirmation panel resets links when its signup changes", async (
   harness.state.now = 21_000;
   harness.state.respond = async () => ({
     ok: true,
-    confirmationLinks: [
+    confirmationOrSignInLinks: [
       emailLinkMessage,
       { ...emailLinkMessage, uid: 2, receivedAt: 21_000 },
     ],
@@ -408,7 +408,7 @@ test("confirmation instructions select confirmation mail despite unrelated passw
   };
   const harness = createEmailLinkCardHarness(panel);
   await waitForAsyncCallbacks();
-  assert.equal(harness.state.views[0].callbacks.mailType, "confirmationLinks");
+  assert.equal(harness.state.views[0].callbacks.mailType, "confirmationOrSignInLinks");
   assert.deepEqual(harness.state.views[0].links, [emailLinkMessage]);
 });
 
@@ -461,7 +461,7 @@ test("a purpose change with the same step key discards old results and switches 
 });
 
 test("parenthesised countdown ticks retain links without restarting the attempt", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const prompt =
       mailType === "passwordResetLinks"
         ? "Reset your password. Check your email."
@@ -486,7 +486,7 @@ test("parenthesised countdown ticks retain links without restarting the attempt"
 });
 
 test("another form's resend retains links while the waiting form's resend clears them", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const panel = {
       innerText:
         mailType === "passwordResetLinks"

@@ -52,7 +52,7 @@ function setup(mailType, callbacks = {}) {
 }
 
 test("both link-card mail types show email details and their own action and guidance", () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const { card, action, root, item } = setup(mailType);
     assert.deepEqual(
       card.children.slice(0, -1).map((line) => line.textContent),
@@ -73,7 +73,7 @@ test("both link-card mail types show email details and their own action and guid
 });
 
 test("both link types block rejected selections for primary and middle clicks", () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     let approved = false;
     const { action } = setup(mailType, { acceptLinkSelection: () => approved });
     for (const [eventName, button] of [["click", 0], ["auxclick", 1]]) {
@@ -90,7 +90,7 @@ test("both link types block rejected selections for primary and middle clicks", 
 });
 
 test("non-activating auxiliary clicks do not select links or prevent their default action", () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     let selections = 0;
     const { action } = setup(mailType, {
       acceptLinkSelection() {
@@ -108,7 +108,7 @@ test("non-activating auxiliary clicks do not select links or prevent their defau
 });
 
 test("link cards identify inbox and missing sender without empty subject rows", () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const { view, controls, item } = setup(mailType);
     view.renderLinks([{ ...item, sender: "  ", subject: " " }]);
     const card = controls["#results"].children[0];

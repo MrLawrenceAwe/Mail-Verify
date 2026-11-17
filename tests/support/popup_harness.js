@@ -49,7 +49,7 @@ export async function createPopupHarness({
   const controls = Object.fromEntries(
     [
       "checkCodes",
-      "checkConfirmationLinks",
+      "checkConfirmationOrSignInLinks",
       "checkPasswordResetLinks",
       "accounts",
       "showAccountSetup",
@@ -74,7 +74,7 @@ export async function createPopupHarness({
     now: 1000,
     closes: 0,
     fetchCodes: async () => codes,
-    fetchConfirmationLinks: async () => [],
+    fetchConfirmationOrSignInLinks: async () => [],
     fetchPasswordResetLinks: async () => [],
     opened: [],
     failFill: false,
@@ -89,7 +89,7 @@ export async function createPopupHarness({
   const tab = { id: 1, url: tabUrl };
   const mailHandlers = new Map([
     ["codes", () => state.fetchCodes()],
-    ["confirmationLinks", () => state.fetchConfirmationLinks()],
+    ["confirmationOrSignInLinks", () => state.fetchConfirmationOrSignInLinks()],
     ["passwordResetLinks", () => state.fetchPasswordResetLinks()],
   ]);
   const client = {

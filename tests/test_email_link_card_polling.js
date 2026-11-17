@@ -11,13 +11,13 @@ test("link cards collect pending scans quickly then resume normal checks", async
   await waitForAsyncCallbacks();
   harness.state.respond = async () => ({
     ok: true,
-    confirmationLinks: [],
+    confirmationOrSignInLinks: [],
     scanPending: true,
   });
   await harness.run(8000);
   harness.state.respond = async () => ({
     ok: true,
-    confirmationLinks: [emailLinkMessage],
+    confirmationOrSignInLinks: [emailLinkMessage],
     scanPending: false,
   });
   await harness.run(1000);
@@ -32,7 +32,7 @@ test("a slow account does not suppress normal link scans for healthy accounts", 
   await waitForAsyncCallbacks();
   harness.state.respond = async () => ({
     ok: true,
-    confirmationLinks: [],
+    confirmationOrSignInLinks: [],
     scanPending: true,
   });
   harness.state.now += 8000;
@@ -62,7 +62,7 @@ test("a failed inbox check removes previously offered links", async () => {
 });
 
 test("finished link checks retain issues until a successful retry clears them", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     for (const outcome of ["error", "warning"]) {
       const harness = createEmailLinkCardHarness(null, mailType);
       await waitForAsyncCallbacks();
@@ -134,11 +134,11 @@ test("retry during an active check ignores its response and immediately checks a
   );
   harness.state.respond = async () => ({
     ok: true,
-    confirmationLinks: [{ ...emailLinkMessage, uid: 3 }],
+    confirmationOrSignInLinks: [{ ...emailLinkMessage, uid: 3 }],
   });
   finishFirst({
     ok: true,
-    confirmationLinks: [{ ...emailLinkMessage, uid: 2 }],
+    confirmationOrSignInLinks: [{ ...emailLinkMessage, uid: 2 }],
   });
   await pending;
   assert.equal(harness.state.requests, firstCount + 1);
@@ -166,21 +166,21 @@ test("an old check cannot consume a retry queued on a new page", async () => {
     });
   await harness.run(250);
   harness.state.views.at(-1).callbacks.onRetry();
-  finishOld({ ok: true, confirmationLinks: [] });
+  finishOld({ ok: true, confirmationOrSignInLinks: [] });
   await oldPending;
   assert.equal(harness.state.requests, 3);
   harness.state.respond = async () => ({
     ok: true,
-    confirmationLinks: [{ ...emailLinkMessage, uid: 4 }],
+    confirmationOrSignInLinks: [{ ...emailLinkMessage, uid: 4 }],
   });
-  finishNew({ ok: true, confirmationLinks: [] });
+  finishNew({ ok: true, confirmationOrSignInLinks: [] });
   await waitForAsyncCallbacks();
   assert.equal(harness.state.requests, 4);
   assert.equal(harness.state.views.at(-1).links[0].uid, 4);
 });
 
 test("partial account failures retain healthy links and clear after recovery", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const harness = createEmailLinkCardHarness(null, mailType);
     await waitForAsyncCallbacks();
     const view = harness.state.views[0];
@@ -209,7 +209,7 @@ test("partial account failures retain healthy links and clear after recovery", a
 });
 
 test("initial link detection includes recent mail delivered before the card appeared", async () => {
-  for (const mailType of ["confirmationLinks", "passwordResetLinks"]) {
+  for (const mailType of ["confirmationOrSignInLinks", "passwordResetLinks"]) {
     const harness = createEmailLinkCardHarness(null, mailType);
     const recent = { ...emailLinkMessage, receivedAt: -20_000 };
     harness.state.respond = async () => ({ ok: true, [mailType]: [recent,

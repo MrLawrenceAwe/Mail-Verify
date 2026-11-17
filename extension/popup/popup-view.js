@@ -12,7 +12,7 @@ export function createPopupView(
   const getElement = (id) => document.getElementById(id);
   const checkButtonMailTypes = [
     ["checkCodes", "codes"],
-    ["checkConfirmationLinks", "confirmationLinks"],
+    ["checkConfirmationOrSignInLinks", "confirmationOrSignInLinks"],
     ["checkPasswordResetLinks", "passwordResetLinks"],
   ];
   let renderedResultsKey;

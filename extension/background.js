@@ -3,7 +3,7 @@ import { createCompanionClient } from "./shared/companion-client.js";
 export function registerInlineRequests(chrome, timers = globalThis) {
   // Keep a native session per mail type so requests cannot consume another type’s results.
   const sessionsByMailType = Object.fromEntries(
-    ["codes", "confirmationLinks", "passwordResetLinks"].map((mailType) => [
+    ["codes", "confirmationOrSignInLinks", "passwordResetLinks"].map((mailType) => [
       mailType,
       { client: createCompanionClient(chrome.runtime, timers) },
     ]),

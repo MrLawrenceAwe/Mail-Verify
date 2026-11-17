@@ -33,9 +33,9 @@ test("inline check keeps its port open until the response arrives", async () => 
 
 test("collection requests preserve their mode and pending scan status", async () => {
   const chromeRuntime = runtime();
-  const pending = requestInlineCheck(chromeRuntime, "confirmationLinks", true);
-  assert.deepEqual(chromeRuntime.sent, { mailType: "confirmationLinks", collectOnly: true });
-  chromeRuntime.respond({ ok: true, confirmationLinks: [], scanPending: true });
+  const pending = requestInlineCheck(chromeRuntime, "confirmationOrSignInLinks", true);
+  assert.deepEqual(chromeRuntime.sent, { mailType: "confirmationOrSignInLinks", collectOnly: true });
+  chromeRuntime.respond({ ok: true, confirmationOrSignInLinks: [], scanPending: true });
   assert.equal((await pending).scanPending, true);
 });
 
@@ -54,7 +54,7 @@ test("inline check rejects failed responses and closes the port", async () => {
 
 test("inline check reports a disconnected service worker", async () => {
   const chromeRuntime = runtime();
-  const pending = requestInlineCheck(chromeRuntime, "confirmationLinks");
+  const pending = requestInlineCheck(chromeRuntime, "confirmationOrSignInLinks");
   chromeRuntime.drop();
   await assert.rejects(pending, /disconnected.*Reload the extension.*refresh this page/);
 });

@@ -14,7 +14,7 @@ test("detects Outlier's delivered sign-in link automatically and tracks its reci
   };
   const document = { querySelectorAll: () => [], body: panel };
   const first = detectEmailLinkStep(document);
-  assert.equal(first?.mailType, "confirmationLinks");
+  assert.equal(first?.mailType, "confirmationOrSignInLinks");
   assert.ok(first.key.endsWith(':["preview@yahoo.com"]'));
   panel.innerText = panel.innerText.replace("Please wait", "Please wait 15 seconds");
   assert.deepEqual(detectEmailLinkStep(document), first);
@@ -27,7 +27,7 @@ test("generic delivered links require an email destination and completed deliver
     "Click the link sent to your email address",
     "Follow the link we sent to your inbox",
     "Open the link that was sent to preview@example.com",
-  ]) assert.equal(detectedMailType(text), "confirmationLinks", text);
+  ]) assert.equal(detectedMailType(text), "confirmationOrSignInLinks", text);
   for (const text of [
     "Click the link sent to your phone",
     "Click the link sent to you by SMS",
@@ -40,7 +40,7 @@ test("generic delivered links require an email destination and completed deliver
 
 test("rendered panel text limits apply before classifying either link purpose", () => {
   for (const [prompt, mailType] of [
-    ["Check your email", "confirmationLinks"],
+    ["Check your email", "confirmationOrSignInLinks"],
     ["Reset your password. Check your email", "passwordResetLinks"],
   ]) {
     const atLimit = `${prompt}\n${" ".repeat(2500 - prompt.length - 2)}x`;
@@ -53,9 +53,9 @@ test("rendered panel text limits apply before classifying either link purpose", 
 
 test("classifies confirmation prompts without treating resets, newsletters or long pages as confirmation", () => {
   for (const text of ["Check your inbox", "We've sent a verification email", "Follow the link in your email to confirm your account"])
-    assert.equal(detectedMailType(text), "confirmationLinks", text);
+    assert.equal(detectedMailType(text), "confirmationOrSignInLinks", text);
   for (const text of ["Reset your password. Check your email", "Check your email for our newsletter", "Welcome to our website", "x".repeat(2501) + " Check your email"])
-    assert.notEqual(detectedMailType(text), "confirmationLinks", text);
+    assert.notEqual(detectedMailType(text), "confirmationOrSignInLinks", text);
 });
 
 test("detects KeenFace's delivered verification-link instruction and tracks its recipient", () => {
@@ -65,7 +65,7 @@ test("detects KeenFace's delivered verification-link instruction and tracks its 
   };
   const document = { querySelectorAll: () => [panel] };
   const first = detectEmailLinkStep(document);
-  assert.equal(first?.mailType, "confirmationLinks");
+  assert.equal(first?.mailType, "confirmationOrSignInLinks");
   assert.ok(first.key.endsWith(':["preview@yahoo.com"]'));
   panel.innerText = panel.innerText.replace("Resend (17)", "Resend (16)");
   assert.deepEqual(detectEmailLinkStep(document), first);
@@ -78,7 +78,7 @@ test("a verification link must already be sent to email to qualify as a waiting 
     "Use the verification link sent to your email address",
     "Use the confirmation link we sent to your inbox",
     "Follow the activation link that was sent to your email",
-  ]) assert.equal(detectedMailType(text), "confirmationLinks", text);
+  ]) assert.equal(detectedMailType(text), "confirmationOrSignInLinks", text);
   for (const text of [
     "Verify your email. Request a verification link",
     "Send a verification link to your email address",
@@ -113,7 +113,7 @@ test("panel traversal stops at its node budget and still checks a later short pa
     previous = node;
   }
   const small = { nodeType: 1, innerText: "Check your email", getClientRects: () => [{}], checkVisibility: () => true };
-  assert.equal(detectEmailLinkStep({ querySelectorAll: () => [large, small] }).mailType, "confirmationLinks");
+  assert.equal(detectEmailLinkStep({ querySelectorAll: () => [large, small] }).mailType, "confirmationOrSignInLinks");
   assert.ok(inspected < 500);
 });
 
@@ -205,7 +205,7 @@ test("line-separated navigation still cannot select reset mail type", () => {
     "Check your email\nSign in\nReset password",
     "Check your email to confirm your account\nForgot password?",
   ]) {
-    assert.equal(detectedMailType(text), "confirmationLinks", text);
+    assert.equal(detectedMailType(text), "confirmationOrSignInLinks", text);
   }
 });
 
@@ -219,12 +219,12 @@ test("step detection reads each visible panel once and returns its purpose separ
   const step = detectEmailLinkStep({ querySelectorAll: () => [panel] });
   assert.equal(reads, 1);
   assert.equal(step.mailType, "passwordResetLinks");
-  assert.doesNotMatch(step.key, /passwordResetLinks|confirmationLinks/);
+  assert.doesNotMatch(step.key, /passwordResetLinks|confirmationOrSignInLinks/);
   text = "Confirm your account. Check your email.";
   const confirmationStep = detectEmailLinkStep({ querySelectorAll: () => [panel] });
   assert.equal(reads, 2);
   assert.equal(confirmationStep.key, step.key);
-  assert.equal(confirmationStep.mailType, "confirmationLinks");
+  assert.equal(confirmationStep.mailType, "confirmationOrSignInLinks");
 });
 
 test("unrelated password navigation cannot override explicit confirmation instructions", () => {
@@ -233,7 +233,7 @@ test("unrelated password navigation cannot override explicit confirmation instru
     "Check your inbox to verify your email. Forgot password?",
     "We sent an activation email. Sign in. Forgot password?",
   ]) {
-    assert.equal(detectedMailType(text), "confirmationLinks", text);
+    assert.equal(detectedMailType(text), "confirmationOrSignInLinks", text);
   }
 });
 
@@ -268,12 +268,12 @@ test("detects Workday's sent-email notice beside sign-in and password navigation
   const notice = "An email has been sent to you. Please verify your account.";
   const resendNotice = "An email has been sent to you.\nStill can't sign in? Be sure to check your spam folder, your account may need verification\nResend Account Verification";
   for (const text of [notice, resendNotice, `Sign In\n${notice}\nEmail Address\nPassword\nSign In\nCreate Account\nForgot your password?`]) {
-    assert.equal(detectedMailType(text), "confirmationLinks", text);
+    assert.equal(detectedMailType(text), "confirmationOrSignInLinks", text);
   }
   for (const text of [
     "An email has been sent to you.",
     "Please verify your account.",
     "An email will be sent to you. Please verify your account.",
     "An email has been sent to you. Please reset your password.",
-  ]) assert.notEqual(detectedMailType(text), "confirmationLinks", text);
+  ]) assert.notEqual(detectedMailType(text), "confirmationOrSignInLinks", text);
 });

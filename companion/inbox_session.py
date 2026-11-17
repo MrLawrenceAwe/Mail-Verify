@@ -8,12 +8,15 @@ import threading
 import time
 
 from code_extraction import extract_code_details
-from link_extraction import extract_confirmation_link_details, extract_password_reset_link_details
+from link_extraction import (
+    extract_confirmation_or_signin_link_details,
+    extract_password_reset_link_details,
+)
 from errors import UserError
 
 MAIL_EXTRACTORS = {
     "codes": extract_code_details,
-    "confirmationLinks": extract_confirmation_link_details,
+    "confirmationOrSignInLinks": extract_confirmation_or_signin_link_details,
     "passwordResetLinks": extract_password_reset_link_details,
 }
 
